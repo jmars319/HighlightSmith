@@ -1,0 +1,24 @@
+{
+  "name": "@highlightsmith/api",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.2.0",
+    "@highlightsmith/domain": "workspace:*",
+    "@highlightsmith/profiles": "workspace:*",
+    "@highlightsmith/shared-types": "workspace:*",
+    "fastify": "5.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

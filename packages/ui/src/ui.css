@@ -1,0 +1,134 @@
+.hs-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) minmax(280px, 360px);
+  gap: 20px;
+}
+
+.hs-sidebar,
+.hs-content,
+.hs-aside,
+.hs-block,
+.hs-candidate-card {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 12, 17, 0.62);
+}
+
+.hs-sidebar,
+.hs-content,
+.hs-aside {
+  padding: 20px;
+}
+
+.hs-kicker,
+.hs-block-label,
+.hs-meta {
+  display: block;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hs-subtitle,
+.hs-muted,
+.hs-secondary {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.hs-nav {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.hs-nav-item,
+.hs-controls-row button,
+.hs-candidate-card {
+  font: inherit;
+}
+
+.hs-nav-item {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 12px;
+  color: white;
+  background: rgba(255, 255, 255, 0.06);
+  text-align: left;
+}
+
+.hs-nav-item.active {
+  background: rgba(244, 177, 96, 0.2);
+}
+
+.hs-block {
+  padding: 16px;
+}
+
+.hs-candidate-card {
+  width: 100%;
+  padding: 16px;
+  text-align: left;
+  color: inherit;
+}
+
+.hs-candidate-card.selected {
+  border-color: rgba(244, 177, 96, 0.4);
+}
+
+.hs-candidate-row,
+.hs-controls-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.hs-controls-row {
+  margin-top: 12px;
+}
+
+.hs-controls-row button,
+.hs-controls-row input {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+}
+
+.hs-controls-row input {
+  flex: 1;
+}
+
+.hs-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.hs-badge-high {
+  background: rgba(244, 177, 96, 0.18);
+}
+
+.hs-badge-medium {
+  background: rgba(92, 161, 176, 0.2);
+}
+
+.hs-badge-low {
+  background: rgba(189, 208, 110, 0.18);
+}
+
+.hs-badge-experimental {
+  background: rgba(177, 128, 230, 0.18);
+}
+
+@media (max-width: 1180px) {
+  .hs-layout {
+    grid-template-columns: 1fr;
+  }
+}

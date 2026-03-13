@@ -1,0 +1,9 @@
+node_modules
+apps/desktopapp/dist
+apps/webapp/dist
+apps/desktopapp/src-tauri/target
+apps/desktopapp/src-tauri/gen
+apps/desktopapp/src-tauri/icons
+services/api/dist
+.local
+docs/archive

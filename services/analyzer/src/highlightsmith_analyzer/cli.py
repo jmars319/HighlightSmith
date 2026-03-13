@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--profile",
-        default="broad-general",
+        default="generic",
         help="Profile id placeholder for future weighting selection.",
     )
     return parser

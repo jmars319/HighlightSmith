@@ -1,0 +1,57 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  createMockProjectSession,
+  createMockProjectSessions,
+  createMockReviewHistory,
+  projectSessionSchema,
+} from "./index";
+
+describe("shared-types mock data", () => {
+  it("creates a schema-valid mock project session with shaped candidates", () => {
+    const session = createMockProjectSession();
+
+    assert.doesNotThrow(() => projectSessionSchema.parse(session));
+    assert.equal(session.profileId, "generic");
+    assert.equal(session.candidates.length, 4);
+
+    for (const candidate of session.candidates) {
+      assert.ok(
+        candidate.suggestedSegment.startSeconds >=
+          candidate.candidateWindow.startSeconds,
+      );
+      assert.ok(
+        candidate.suggestedSegment.endSeconds <=
+          candidate.candidateWindow.endSeconds,
+      );
+      assert.ok(candidate.reasonCodes.length > 0);
+    }
+  });
+
+  it("creates profile-varied mock sessions that stay unique by id", () => {
+    const sessions = createMockProjectSessions();
+    const ids = new Set(sessions.map((session) => session.id));
+
+    assert.equal(sessions.length, 3);
+    assert.equal(ids.size, sessions.length);
+    assert.deepEqual(
+      sessions.map((session) => session.profileId),
+      ["generic", "stealth", "exploration"],
+    );
+  });
+
+  it("creates review history entries that reference the primary mock session", () => {
+    const session = createMockProjectSession();
+    const candidateIds = new Set(
+      session.candidates.map((candidate) => candidate.id),
+    );
+    const history = createMockReviewHistory();
+
+    assert.notEqual(history.length, 0);
+
+    for (const decision of history) {
+      assert.equal(decision.projectSessionId, session.id);
+      assert.equal(candidateIds.has(decision.candidateId), true);
+    }
+  });
+});

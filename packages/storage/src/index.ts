@@ -1,4 +1,7 @@
-import type { ProjectSession, ReviewDecision } from "@highlightsmith/shared";
+import type {
+  ProjectSession,
+  ReviewDecision,
+} from "@highlightsmith/shared-types";
 
 export const sqliteSchemaVersion = 1;
 
@@ -58,7 +61,9 @@ export interface SessionStorageAdapter {
   saveReviewDecision(decision: ReviewDecision): Promise<void>;
 }
 
-export function serializeSessionSnapshot(session: ProjectSession): Record<string, string> {
+export function serializeSessionSnapshot(
+  session: ProjectSession,
+): Record<string, string> {
   return {
     id: session.id,
     title: session.title,
@@ -93,3 +98,9 @@ export function serializeReviewDecision(
     createdAt: decision.createdAt,
   };
 }
+
+export const migrationPlaceholders = [
+  "001_initial_schema.sql",
+  "002_review_feedback_indexes.sql",
+  "003_profile_preferences.sql",
+] as const;

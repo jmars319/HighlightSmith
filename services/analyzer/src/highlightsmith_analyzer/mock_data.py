@@ -343,7 +343,7 @@ def build_mock_session(settings: Settings) -> ProjectSession:
         title="Raid Night Demo Review",
         status="REVIEWING",
         media_source=build_mock_media_source(),
-        profile_id="broad-general",
+        profile_id="generic",
         settings=settings,
         transcript=build_mock_transcript(),
         speech_regions=build_mock_speech_regions(),

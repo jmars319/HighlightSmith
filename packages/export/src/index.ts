@@ -2,7 +2,7 @@ import type {
   CandidateWindow,
   MediaSource,
   ReviewDecision,
-} from "@highlightsmith/shared";
+} from "@highlightsmith/shared-types";
 
 export function toJsonCandidateExport(
   mediaSource: MediaSource,
@@ -57,4 +57,16 @@ function formatTimecode(totalSeconds: number): string {
   return [hours, minutes, seconds]
     .map((value) => value.toString().padStart(2, "0"))
     .join(":");
+}
+
+export function toEdlPlaceholder(
+  mediaSource: MediaSource,
+  candidates: CandidateWindow[],
+): string {
+  return [
+    "TITLE: HighlightSmith Placeholder EDL",
+    `SOURCE FILE: ${mediaSource.fileName}`,
+    "NOTE: Real EDL generation is intentionally deferred.",
+    `CANDIDATE COUNT: ${candidates.length}`,
+  ].join("\n");
 }

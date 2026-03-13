@@ -1,0 +1,27 @@
+{
+  "name": "@highlightsmith/webapp",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1430",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@highlightsmith/domain": "workspace:*",
+    "@highlightsmith/profiles": "workspace:*",
+    "@highlightsmith/shared-types": "workspace:*",
+    "@highlightsmith/ui": "workspace:*",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.0",
+    "typescript": "5.9.3",
+    "vite": "8.0.0"
+  }
+}

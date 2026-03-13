@@ -4,7 +4,7 @@ import type {
   ContentProfile,
   ReasonCode,
   ScoreContribution,
-} from "@highlightsmith/shared";
+} from "@highlightsmith/shared-types";
 
 const reasonLabels: Record<ReasonCode, string> = {
   LOUDNESS_SPIKE: "Loudness spike",
@@ -66,12 +66,38 @@ export function summarizeCandidate(
     .sort((left, right) => {
       const leftWeight = profile?.signalWeights[left.reasonCode] ?? 1;
       const rightWeight = profile?.signalWeights[right.reasonCode] ?? 1;
-      return (
-        right.contribution * rightWeight - left.contribution * leftWeight
-      );
+      return right.contribution * rightWeight - left.contribution * leftWeight;
     })
     .slice(0, 3)
     .map((item) => item.label);
 
   return topReasons.join(" • ");
 }
+
+export const signalModel = {
+  triggerSignals: [
+    "LOUDNESS_SPIKE",
+    "LAUGHTER_BURST",
+    "OVERLAP_SPIKE",
+    "REACTION_PHRASE",
+    "ACTION_AUDIO_CLUSTER",
+  ],
+  supportingSignals: [
+    "COMMENTARY_DENSITY",
+    "TACTICAL_NARRATION",
+    "PITCH_EXCURSION",
+  ],
+  contextSignals: [
+    "STRUCTURE_SETUP",
+    "STRUCTURE_CONSEQUENCE",
+    "STRUCTURE_RESOLUTION",
+    "SILENCE_BREAK",
+    "ABRUPT_SILENCE_AFTER_INTENSITY",
+  ],
+  negativeSignals: [
+    "MENU_HEAVY",
+    "CLEANUP_HEAVY",
+    "LOW_INFORMATION",
+    "CONTEXT_REQUIRED",
+  ],
+} as const;

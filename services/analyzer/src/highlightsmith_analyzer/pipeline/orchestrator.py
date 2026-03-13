@@ -16,7 +16,7 @@ from .transcript import generate_transcript
 def analyze_media(
     source_path: str | None,
     settings: Settings,
-    profile_id: str = "broad-general",
+    profile_id: str = "generic",
 ) -> ProjectSession:
     if settings.use_mock_data:
         return build_mock_session(settings)

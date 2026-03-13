@@ -14,12 +14,15 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@highlightsmith/shared": ["packages/shared/src/index.ts"],
+      "@highlightsmith/shared-types": ["packages/shared-types/src/index.ts"],
+      "@highlightsmith/domain": ["packages/domain/src/index.ts"],
+      "@highlightsmith/ui": ["packages/ui/src/index.ts"],
       "@highlightsmith/storage": ["packages/storage/src/index.ts"],
       "@highlightsmith/media": ["packages/media/src/index.ts"],
       "@highlightsmith/scoring": ["packages/scoring/src/index.ts"],
       "@highlightsmith/profiles": ["packages/profiles/src/index.ts"],
-      "@highlightsmith/export": ["packages/export/src/index.ts"]
+      "@highlightsmith/export": ["packages/export/src/index.ts"],
+      "@highlightsmith/ai-assist": ["packages/ai-assist/src/index.ts"]
     }
   }
 }

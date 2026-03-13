@@ -2,14 +2,31 @@ node_modules
 dist
 .turbo
 .DS_Store
+.vscode
+.idea
+*.log
+.coverage
+.coverage.*
+coverage
+*.tsbuildinfo
+*.orig
+.env
+.env.local
+.env.*.local
+.envrc
 
-apps/desktop/dist
-apps/desktop/src-tauri/target
-apps/desktop/src-tauri/gen
+apps/desktopapp/dist
+apps/desktopapp/src-tauri/target
+apps/desktopapp/src-tauri/gen
+apps/webapp/dist
+services/api/dist
 
+.venv
 services/analyzer/.venv
 services/analyzer/.mypy_cache
 services/analyzer/.pytest_cache
+services/analyzer/.ruff_cache
+services/analyzer/.hypothesis
 services/analyzer/__pycache__
 services/analyzer/**/*.pyc
 

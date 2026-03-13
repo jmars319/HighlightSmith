@@ -1,9 +1,9 @@
-import type { ContentProfile } from "@highlightsmith/shared";
+import type { ContentProfile } from "@highlightsmith/shared-types";
 
 export const contentProfiles: ContentProfile[] = [
   {
-    id: "broad-general",
-    label: "Broad Mode",
+    id: "generic",
+    label: "Generic",
     description:
       "High-recall surfacing for creator review. Always available regardless of personalization state.",
     mode: "BROAD",
@@ -21,8 +21,8 @@ export const contentProfiles: ContentProfile[] = [
     },
   },
   {
-    id: "stealth-tactical",
-    label: "Stealth / Tactical",
+    id: "stealth",
+    label: "Stealth",
     description:
       "Rewards tension, anticipation, and payoff while suppressing noisy false positives.",
     mode: "CONTEXTUAL",
@@ -38,7 +38,7 @@ export const contentProfiles: ContentProfile[] = [
     },
   },
   {
-    id: "raid-coop",
+    id: "raid_coop",
     label: "Raid / Co-op",
     description:
       "Prioritizes team chatter, overlap spikes, wipes, recoveries, and shared reactions.",
@@ -55,8 +55,8 @@ export const contentProfiles: ContentProfile[] = [
     },
   },
   {
-    id: "exploration-puzzle",
-    label: "Exploration / Puzzle",
+    id: "exploration",
+    label: "Exploration",
     description:
       "Biases toward discovery, realization, and clue-resolution pacing over pure intensity.",
     mode: "CONTEXTUAL",
@@ -73,7 +73,7 @@ export const contentProfiles: ContentProfile[] = [
   },
 ];
 
-export const defaultProfileId = "broad-general";
+export const defaultProfileId = "generic";
 
 export function getProfileById(profileId: string): ContentProfile {
   return (

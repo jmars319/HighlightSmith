@@ -57,3 +57,15 @@ export function buildSilenceDetectionArgs(inputPath: string): string[] {
     "-",
   ];
 }
+
+export function clampSegmentToWindow(
+  segmentStartSeconds: number,
+  segmentEndSeconds: number,
+  windowStartSeconds: number,
+  windowEndSeconds: number,
+) {
+  return {
+    startSeconds: Math.max(windowStartSeconds, segmentStartSeconds),
+    endSeconds: Math.min(windowEndSeconds, segmentEndSeconds),
+  };
+}
