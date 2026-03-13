@@ -1,0 +1,189 @@
+import { z } from "zod";
+
+export const confidenceBandSchema = z.enum([
+  "HIGH",
+  "MEDIUM",
+  "LOW",
+  "EXPERIMENTAL",
+]);
+
+export const reasonCodeSchema = z.enum([
+  "LOUDNESS_SPIKE",
+  "LAUGHTER_BURST",
+  "OVERLAP_SPIKE",
+  "REACTION_PHRASE",
+  "COMMENTARY_DENSITY",
+  "SILENCE_BREAK",
+  "ACTION_AUDIO_CLUSTER",
+  "STRUCTURE_SETUP",
+  "STRUCTURE_CONSEQUENCE",
+  "STRUCTURE_RESOLUTION",
+  "MENU_HEAVY",
+  "CLEANUP_HEAVY",
+  "LOW_INFORMATION",
+  "CONTEXT_REQUIRED",
+  "TACTICAL_NARRATION",
+  "PITCH_EXCURSION",
+  "ABRUPT_SILENCE_AFTER_INTENSITY",
+]);
+
+export const reviewActionSchema = z.enum([
+  "PENDING",
+  "ACCEPT",
+  "REJECT",
+  "RETIME",
+  "RELABEL",
+]);
+
+export const timeRangeSchema = z
+  .object({
+    startSeconds: z.number().nonnegative(),
+    endSeconds: z.number().nonnegative(),
+  })
+  .refine((value) => value.endSeconds > value.startSeconds, {
+    message: "endSeconds must be greater than startSeconds",
+  });
+
+export const mediaSourceSchema = z.object({
+  id: z.string(),
+  path: z.string(),
+  kind: z.enum(["VIDEO", "AUDIO"]),
+  fileName: z.string(),
+  durationSeconds: z.number().positive(),
+  format: z.string(),
+  fileSizeBytes: z.number().int().nonnegative().optional(),
+  frameRate: z.number().positive().optional(),
+  ingestNotes: z.array(z.string()).default([]),
+});
+
+export const transcriptChunkSchema = z.object({
+  id: z.string(),
+  startSeconds: z.number().nonnegative(),
+  endSeconds: z.number().nonnegative(),
+  text: z.string(),
+  confidence: z.number().min(0).max(1).optional(),
+});
+
+export const speechRegionSchema = z.object({
+  id: z.string(),
+  startSeconds: z.number().nonnegative(),
+  endSeconds: z.number().nonnegative(),
+  speechDensity: z.number().min(0).max(1),
+  overlapActivity: z.number().min(0).max(1),
+});
+
+export const featureWindowSchema = z.object({
+  id: z.string(),
+  startSeconds: z.number().nonnegative(),
+  endSeconds: z.number().nonnegative(),
+  rmsLoudness: z.number().min(0).max(1),
+  onsetDensity: z.number().min(0).max(1),
+  spectralContrast: z.number().min(0).max(1),
+  zeroCrossingRate: z.number().min(0).max(1),
+  speechDensity: z.number().min(0).max(1),
+  overlapActivity: z.number().min(0).max(1),
+  laughterLikeBurst: z.number().min(0).max(1),
+  pitchExcursion: z.number().min(0).max(1),
+  abruptSilenceAfterIntensity: z.number().min(0).max(1),
+});
+
+export const scoreContributionSchema = z.object({
+  reasonCode: reasonCodeSchema,
+  label: z.string(),
+  contribution: z.number(),
+  direction: z.enum(["POSITIVE", "NEGATIVE"]),
+});
+
+export const suggestedSegmentSchema = z.object({
+  startSeconds: z.number().nonnegative(),
+  endSeconds: z.number().nonnegative(),
+  setupPaddingSeconds: z.number().nonnegative(),
+  resolutionPaddingSeconds: z.number().nonnegative(),
+  trimDeadAirApplied: z.boolean(),
+});
+
+export const candidateWindowSchema = z.object({
+  id: z.string(),
+  candidateWindow: timeRangeSchema,
+  suggestedSegment: suggestedSegmentSchema,
+  confidenceBand: confidenceBandSchema,
+  scoreEstimate: z.number().min(0).max(1),
+  reasonCodes: z.array(reasonCodeSchema).min(1),
+  transcriptSnippet: z.string(),
+  scoreBreakdown: z.array(scoreContributionSchema).min(1),
+  contextRequired: z.boolean().default(false),
+  editableLabel: z.string(),
+});
+
+export const reviewDecisionSchema = z.object({
+  id: z.string(),
+  projectSessionId: z.string(),
+  candidateId: z.string(),
+  action: reviewActionSchema,
+  label: z.string().optional(),
+  adjustedSegment: timeRangeSchema.optional(),
+  notes: z.string().optional(),
+  createdAt: z.string(),
+});
+
+export const contentProfileSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string(),
+  mode: z.enum(["BROAD", "FOCUSED", "CONTEXTUAL"]),
+  signalWeights: z.record(z.string(), z.number()),
+});
+
+export const settingsSchema = z.object({
+  microWindowSeconds: z.number().positive(),
+  candidateWindowMinSeconds: z.number().positive(),
+  candidateWindowMaxSeconds: z.number().positive(),
+  suggestedSetupPaddingSeconds: z.number().nonnegative(),
+  suggestedResolutionPaddingSeconds: z.number().nonnegative(),
+  experimentalCandidateQuota: z.number().int().nonnegative(),
+  transcriptProvider: z.string(),
+  runOfflineOnly: z.boolean(),
+});
+
+export const projectSessionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.enum(["IDLE", "ANALYZING", "READY", "REVIEWING"]),
+  mediaSource: mediaSourceSchema,
+  profileId: z.string(),
+  settings: settingsSchema,
+  transcript: z.array(transcriptChunkSchema),
+  speechRegions: z.array(speechRegionSchema),
+  featureWindows: z.array(featureWindowSchema),
+  candidates: z.array(candidateWindowSchema),
+  reviewDecisions: z.array(reviewDecisionSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type ConfidenceBand = z.infer<typeof confidenceBandSchema>;
+export type ReasonCode = z.infer<typeof reasonCodeSchema>;
+export type ReviewAction = z.infer<typeof reviewActionSchema>;
+export type TimeRange = z.infer<typeof timeRangeSchema>;
+export type MediaSource = z.infer<typeof mediaSourceSchema>;
+export type TranscriptChunk = z.infer<typeof transcriptChunkSchema>;
+export type SpeechRegion = z.infer<typeof speechRegionSchema>;
+export type FeatureWindow = z.infer<typeof featureWindowSchema>;
+export type ScoreContribution = z.infer<typeof scoreContributionSchema>;
+export type SuggestedSegment = z.infer<typeof suggestedSegmentSchema>;
+export type CandidateWindow = z.infer<typeof candidateWindowSchema>;
+export type ReviewDecision = z.infer<typeof reviewDecisionSchema>;
+export type ContentProfile = z.infer<typeof contentProfileSchema>;
+export type Settings = z.infer<typeof settingsSchema>;
+export type ProjectSession = z.infer<typeof projectSessionSchema>;
+
+export const defaultSettings: Settings = {
+  microWindowSeconds: 2,
+  candidateWindowMinSeconds: 15,
+  candidateWindowMaxSeconds: 45,
+  suggestedSetupPaddingSeconds: 6,
+  suggestedResolutionPaddingSeconds: 8,
+  experimentalCandidateQuota: 2,
+  transcriptProvider: "stub-local",
+  runOfflineOnly: true,
+};

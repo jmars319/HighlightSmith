@@ -1,0 +1,18 @@
+{
+  "name": "highlightsmith",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.32.1"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @highlightsmith/desktop dev:web",
+    "dev:desktop": "pnpm --filter @highlightsmith/desktop tauri:dev",
+    "build:web": "pnpm --filter @highlightsmith/desktop build:web",
+    "typecheck": "pnpm --filter @highlightsmith/desktop exec tsc --noEmit",
+    "analyzer:mock": "PYTHONPATH=services/analyzer/src python3 -m highlightsmith_analyzer.cli --mock",
+    "analyzer:test": "PYTHONPATH=services/analyzer/src python3 -m unittest discover -s services/analyzer/tests -p 'test_*.py'"
+  }
+}
