@@ -13,6 +13,9 @@ This repository is the monorepo foundation for the project. It is structured to 
 - `apps/webapp`
   - complementary browser surface
   - project browsing, candidate history, profile inspection
+- `apps/mobileapp`
+  - Expo + React Native companion surface
+  - project browsing, queue visibility, accepted clip checks
 - `services/analyzer`
   - Python analysis core scaffold
   - CLI and lightweight HTTP entrypoints
@@ -52,6 +55,7 @@ That runs environment checks and installs workspace dependencies.
 ```bash
 pnpm dev:desktop
 pnpm dev:web
+pnpm dev:mobile
 pnpm dev:analyzer
 pnpm dev:api
 pnpm dev:both
@@ -65,6 +69,7 @@ The API bridge currently runs directly from TypeScript with `tsx`.
 ```bash
 pnpm verify:web
 pnpm verify:desktop
+pnpm verify:mobile
 pnpm verify:analyzer
 pnpm verify:api
 pnpm verify:all
@@ -86,6 +91,7 @@ Real now:
 
 - coherent pnpm workspace wiring
 - desktopapp and webapp placeholder surfaces
+- mobileapp companion scaffold with shared mock-derived views
 - shared contracts, profiles, scoring helpers, and UI primitives
 - analyzer CLI, analyzer HTTP server, and SQLite persistence scaffold
 - API bridge with placeholder routes and analyzer health bridge
@@ -99,12 +105,14 @@ Still stubbed on purpose:
 - analyzer job orchestration beyond mock/demo flows
 - packaged production build output for the API bridge
 - persistent desktopapp SQLite adapter
+- API-backed mobile companion data
 - any AI-dependent logic in the core engine
 
 ## Documentation
 
 - `docs/repo-map.md`
 - `docs/architecture.md`
+- `docs/mobileapp.md`
 - `docs/analyzer-pipeline.md`
 - `docs/scoring-model.md`
 - `docs/profiles.md`

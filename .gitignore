@@ -21,6 +21,13 @@ apps/desktopapp/src-tauri/gen
 apps/webapp/dist
 services/api/dist
 
+.expo
+.expo-shared
+apps/mobileapp/.expo
+apps/mobileapp/android
+apps/mobileapp/ios
+apps/mobileapp/web-build
+
 .venv
 services/analyzer/.venv
 services/analyzer/.mypy_cache

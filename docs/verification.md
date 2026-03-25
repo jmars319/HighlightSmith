@@ -12,6 +12,8 @@ Verification should be meaningful without pretending the scaffold is feature-com
   - builds the webapp
 - `verify:desktop`
   - builds desktop UI assets and runs `cargo check`
+- `verify:mobile`
+  - typechecks the Expo companion scaffold
 - `verify:analyzer`
   - runs analyzer tests and mock output flow
 - `verify:api`

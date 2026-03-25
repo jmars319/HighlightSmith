@@ -10,6 +10,8 @@ This repo is organized as a real monorepo, not a single-app prototype.
   - primary local-first desktop shell
 - `apps/webapp`
   - complementary browser surface
+- `apps/mobileapp`
+  - companion management surface
 - `services/analyzer`
   - Python analysis engine scaffold
 - `services/api`

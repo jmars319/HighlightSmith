@@ -17,6 +17,7 @@ Core flow:
 
 - `desktopapp` is the primary V1 surface
 - `webapp` is a companion surface
+- `mobileapp` is a companion surface only
 - `analyzer` is the analysis core
 - `api` is the app-facing bridge
 
@@ -26,4 +27,5 @@ Core flow:
 - offline core
 - human editorial control
 - explainable confidence bands and reason codes
+- mobile does not own ingest, analysis, or heavy editing
 - AI optional, never required for the core engine

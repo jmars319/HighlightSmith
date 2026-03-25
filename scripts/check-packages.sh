@@ -6,6 +6,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 required_paths=(
   "apps/desktopapp/package.json"
   "apps/webapp/package.json"
+  "apps/mobileapp/package.json"
   "services/analyzer/pyproject.toml"
   "services/api/package.json"
   "packages/shared-types/package.json"

@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "HighlightSmith Companion",
+    "slug": "highlightsmith-companion",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.highlightsmith.mobile"
+    },
+    "android": {
+      "package": "com.highlightsmith.mobile",
+      "edgeToEdgeEnabled": true
+    },
+    "experiments": {
+      "autolinkingModuleResolution": true
+    },
+    "extra": {
+      "surfaceRole": "companion-only"
+    }
+  }
+}
