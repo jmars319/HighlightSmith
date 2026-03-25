@@ -40,6 +40,27 @@ class ReviewAction(str, Enum):
     RELABEL = "RELABEL"
 
 
+class ReviewTag(str, Enum):
+    DEAD_AIR_RISK = "DEAD_AIR_RISK"
+    CLEANUP_RISK = "CLEANUP_RISK"
+    MENU_RISK = "MENU_RISK"
+    LOW_INFORMATION_RISK = "LOW_INFORMATION_RISK"
+
+
+class AnalysisCoverageBand(str, Enum):
+    STRONG = "STRONG"
+    PARTIAL = "PARTIAL"
+    THIN = "THIN"
+
+
+class AnalysisCoverageFlag(str, Enum):
+    METADATA_FALLBACK_USED = "METADATA_FALLBACK_USED"
+    SEEDED_TRANSCRIPT = "SEEDED_TRANSCRIPT"
+    TRANSCRIPT_SPARSE = "TRANSCRIPT_SPARSE"
+    LOW_CANDIDATE_COUNT = "LOW_CANDIDATE_COUNT"
+    NO_CANDIDATES = "NO_CANDIDATES"
+
+
 @dataclass
 class TimeRange:
     start_seconds: float
@@ -122,6 +143,14 @@ class CandidateWindow:
     score_breakdown: List[ScoreContribution]
     context_required: bool
     editable_label: str
+    review_tags: List[ReviewTag] = field(default_factory=list)
+
+
+@dataclass
+class AnalysisCoverage:
+    band: AnalysisCoverageBand = AnalysisCoverageBand.PARTIAL
+    note: str = "Coverage note unavailable for this session."
+    flags: List[AnalysisCoverageFlag] = field(default_factory=list)
 
 
 @dataclass
@@ -173,3 +202,4 @@ class ProjectSession:
     review_decisions: List[ReviewDecision]
     created_at: str
     updated_at: str
+    analysis_coverage: AnalysisCoverage = field(default_factory=AnalysisCoverage)

@@ -8,7 +8,7 @@ from typing import Any
 
 from .contracts import Settings
 from .pipeline.orchestrator import analyze_media
-from .storage.session_store import SessionStore
+from .service import analyze_request
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,6 +37,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="generic",
         help="Profile id placeholder for future weighting selection.",
     )
+    parser.add_argument(
+        "--title",
+        default=None,
+        help="Optional session title override.",
+    )
     return parser
 
 
@@ -48,12 +53,32 @@ def main() -> int:
         parser.error("provide a source path or pass --mock")
 
     settings = Settings(use_mock_data=bool(args.mock))
-    session = analyze_media(args.source, settings=settings, profile_id=args.profile)
+    if args.mock:
+        session = analyze_media(
+            args.source,
+            settings=settings,
+            profile_id=args.profile,
+            session_title=args.title,
+        )
+    else:
+        session = analyze_request(
+            args.source,
+            profile_id=args.profile,
+            session_title=args.title,
+            persist=args.persist,
+            database_path=args.database,
+            settings=settings,
+        )
 
-    if args.persist:
-        store = SessionStore(args.database)
-        store.initialize()
-        store.save_session(session)
+    if args.mock and args.persist:
+        session = analyze_request(
+            args.source or "",
+            profile_id=args.profile,
+            session_title=args.title,
+            persist=True,
+            database_path=args.database,
+            settings=settings,
+        )
 
     print(json.dumps(_convert(session), indent=2))
     return 0

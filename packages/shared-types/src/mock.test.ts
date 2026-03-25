@@ -14,6 +14,8 @@ describe("shared-types mock data", () => {
     assert.doesNotThrow(() => projectSessionSchema.parse(session));
     assert.equal(session.profileId, "generic");
     assert.equal(session.candidates.length, 4);
+    assert.equal(session.analysisCoverage.band, "PARTIAL");
+    assert.ok(session.analysisCoverage.note.length > 0);
 
     for (const candidate of session.candidates) {
       assert.ok(
@@ -25,7 +27,10 @@ describe("shared-types mock data", () => {
           candidate.candidateWindow.endSeconds,
       );
       assert.ok(candidate.reasonCodes.length > 0);
+      assert.ok(Array.isArray(candidate.reviewTags));
     }
+
+    assert.deepEqual(session.candidates[3]?.reviewTags, ["LOW_INFORMATION_RISK"]);
   });
 
   it("creates profile-varied mock sessions that stay unique by id", () => {

@@ -3,12 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from .contracts import (
+    AnalysisCoverage,
+    AnalysisCoverageBand,
+    AnalysisCoverageFlag,
     CandidateWindow,
     ConfidenceBand,
     FeatureWindow,
     MediaSource,
     ProjectSession,
     ReasonCode,
+    ReviewTag,
     ScoreContribution,
     Settings,
     SpeechRegion,
@@ -34,8 +38,8 @@ def build_mock_media_source(path: str | None = None) -> MediaSource:
         file_size_bytes=18_723_498_765,
         frame_rate=60.0,
         ingest_notes=[
-            "Mock ingest path used until ffprobe integration lands.",
-            "Offline-only scaffold; no remote dependencies are required.",
+            "Demo ingest fixture used for the mock session path.",
+            "Real local runs use ffprobe when available and stay offline-only.",
         ],
     )
 
@@ -332,6 +336,7 @@ def build_mock_candidates() -> list[CandidateWindow]:
             ],
             context_required=True,
             editable_label="Puzzle tension setup",
+            review_tags=[ReviewTag.LOW_INFORMATION_RISK],
         ),
     ]
 
@@ -352,4 +357,12 @@ def build_mock_session(settings: Settings) -> ProjectSession:
         review_decisions=[],
         created_at=now,
         updated_at=now,
+        analysis_coverage=AnalysisCoverage(
+            band=AnalysisCoverageBand.PARTIAL,
+            note=(
+                "Partial coverage: demo data is curated, but transcript anchors still "
+                "represent the current heuristic pipeline rather than real STT coverage."
+            ),
+            flags=[AnalysisCoverageFlag.SEEDED_TRANSCRIPT],
+        ),
     )

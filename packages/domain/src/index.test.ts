@@ -6,9 +6,19 @@ import {
 } from "@highlightsmith/shared-types";
 import {
   acceptedCandidates,
+  analysisCoverageTone,
+  buildCandidateTranscriptContext,
   buildProjectSummary,
+  defaultReviewQueueMode,
+  deriveSessionReviewState,
   filterCandidates,
+  filterCandidatesByReviewMode,
+  formatAnalysisCoverageBand,
+  formatAnalysisCoverageFlag,
+  findNextPendingSessionSummary,
+  isCandidatePending,
   makeReviewDecision,
+  reviewedCandidateCount,
   resolveCandidateLabel,
 } from "./index";
 
@@ -28,14 +38,51 @@ describe("domain helpers", () => {
     const summary = buildProjectSummary(session);
 
     assert.deepEqual(summary, {
-      id: session.id,
-      title: session.title,
+      sessionId: session.id,
+      sessionTitle: session.title,
+      sourcePath: session.mediaSource.path,
+      sourceName: session.mediaSource.fileName,
+      status: session.status,
+      analysisCoverage: session.analysisCoverage,
       profileId: "generic",
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
       candidateCount: session.candidates.length,
       acceptedCount: 1,
-      mediaPath: session.mediaSource.path,
-      updatedAt: session.updatedAt,
+      rejectedCount: 0,
+      pendingCount: session.candidates.length - 1,
     });
+  });
+
+  it("derives backlog review state from a session summary", () => {
+    const session = createMockProjectSession();
+    let summary = buildProjectSummary(session);
+
+    assert.equal(reviewedCandidateCount(summary), 0);
+    assert.equal(deriveSessionReviewState(summary), "PENDING");
+
+    session.reviewDecisions = [
+      {
+        id: "accept_candidate_001",
+        projectSessionId: session.id,
+        candidateId: session.candidates[0].id,
+        action: "ACCEPT",
+        createdAt: "2026-03-25T16:10:00.000Z",
+      },
+    ];
+    summary = buildProjectSummary(session);
+    assert.equal(reviewedCandidateCount(summary), 1);
+    assert.equal(deriveSessionReviewState(summary), "IN_PROGRESS");
+
+    session.reviewDecisions = session.candidates.map((candidate, index) => ({
+      id: `decision_${candidate.id}`,
+      projectSessionId: session.id,
+      candidateId: candidate.id,
+      action: index % 2 === 0 ? ("ACCEPT" as const) : ("REJECT" as const),
+      createdAt: "2026-03-25T16:12:00.000Z",
+    }));
+    summary = buildProjectSummary(session);
+    assert.equal(deriveSessionReviewState(summary), "REVIEWED");
   });
 
   it("filters by relabeled text and confidence band", () => {
@@ -93,6 +140,140 @@ describe("domain helpers", () => {
     assert.deepEqual(
       acceptedOnly.map((candidate) => candidate.id),
       [session.candidates[0].id],
+    );
+  });
+
+  it("builds a small transcript context peek around a candidate window", () => {
+    const session = createMockProjectSession();
+    const context = buildCandidateTranscriptContext(
+      session.transcript,
+      session.candidates[2],
+    );
+
+    assert.deepEqual(
+      context.before.map((chunk) => chunk.id),
+      ["chunk_001", "chunk_002"],
+    );
+    assert.deepEqual(
+      context.inside.map((chunk) => chunk.id),
+      ["chunk_003"],
+    );
+    assert.deepEqual(
+      context.after.map((chunk) => chunk.id),
+      ["chunk_004"],
+    );
+  });
+
+  it("finds the next useful pending session from persisted summaries", () => {
+    const baseSession = createMockProjectSession();
+    const reviewingSummary = buildProjectSummary({
+      ...baseSession,
+      id: "session_reviewing",
+      title: "Reviewing",
+      reviewDecisions: [
+        {
+          id: "decision_accept",
+          projectSessionId: "session_reviewing",
+          candidateId: baseSession.candidates[0].id,
+          action: "ACCEPT",
+          createdAt: "2026-03-25T18:10:00.000Z",
+        },
+      ],
+    });
+    const pendingSummary = buildProjectSummary({
+      ...baseSession,
+      id: "session_pending",
+      title: "Pending",
+      reviewDecisions: [],
+    });
+    const reviewedSummary = buildProjectSummary({
+      ...baseSession,
+      id: "session_reviewed",
+      title: "Reviewed",
+      reviewDecisions: baseSession.candidates.map((candidate, index) => ({
+        id: `decision_${candidate.id}`,
+        projectSessionId: "session_reviewed",
+        candidateId: candidate.id,
+        action: index % 2 === 0 ? ("ACCEPT" as const) : ("REJECT" as const),
+        createdAt: "2026-03-25T18:12:00.000Z",
+      })),
+    });
+
+    const summaries = [reviewedSummary, reviewingSummary, pendingSummary];
+
+    assert.equal(
+      findNextPendingSessionSummary(summaries)?.sessionId,
+      "session_reviewing",
+    );
+    assert.equal(
+      findNextPendingSessionSummary(summaries, {
+        excludeSessionIds: ["session_reviewing"],
+      })?.sessionId,
+      "session_pending",
+    );
+    assert.equal(
+      findNextPendingSessionSummary(summaries, {
+        excludeSessionIds: ["session_reviewing", "session_pending"],
+      }),
+      null,
+    );
+  });
+
+  it("defaults partially reviewed sessions to pending mode and filters accordingly", () => {
+    const session = createMockProjectSession();
+    session.reviewDecisions = [
+      {
+        id: "accept_candidate_001",
+        projectSessionId: session.id,
+        candidateId: session.candidates[0].id,
+        action: "ACCEPT",
+        createdAt: "2026-03-25T18:20:00.000Z",
+      },
+      {
+        id: "reject_candidate_002",
+        projectSessionId: session.id,
+        candidateId: session.candidates[1].id,
+        action: "REJECT",
+        createdAt: "2026-03-25T18:22:00.000Z",
+      },
+    ];
+
+    assert.equal(isCandidatePending(session, session.candidates[0].id), false);
+    assert.equal(isCandidatePending(session, session.candidates[2].id), true);
+    assert.equal(defaultReviewQueueMode(session), "ONLY_PENDING");
+    assert.deepEqual(
+      filterCandidatesByReviewMode(
+        session.candidates,
+        session,
+        defaultReviewQueueMode(session),
+      ).map((candidate) => candidate.id),
+      [session.candidates[2].id, session.candidates[3].id],
+    );
+
+    session.reviewDecisions = session.candidates.map((candidate, index) => ({
+      id: `decision_${candidate.id}`,
+      projectSessionId: session.id,
+      candidateId: candidate.id,
+      action: index % 2 === 0 ? ("ACCEPT" as const) : ("REJECT" as const),
+      createdAt: "2026-03-25T18:25:00.000Z",
+    }));
+
+    assert.equal(defaultReviewQueueMode(session), "ALL");
+  });
+
+  it("formats analysis coverage bands for desktop display", () => {
+    assert.equal(formatAnalysisCoverageBand("STRONG"), "Strong");
+    assert.equal(formatAnalysisCoverageBand("PARTIAL"), "Partial");
+    assert.equal(formatAnalysisCoverageBand("THIN"), "Thin");
+    assert.equal(
+      formatAnalysisCoverageFlag("METADATA_FALLBACK_USED"),
+      "Metadata fallback",
+    );
+    assert.equal(
+      analysisCoverageTone({
+        band: "THIN",
+      }),
+      "thin",
     );
   });
 });

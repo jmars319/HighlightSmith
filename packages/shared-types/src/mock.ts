@@ -20,9 +20,14 @@ export function createMockProjectSession(): ProjectSession {
       fileSizeBytes: 18723498765,
       frameRate: 60,
       ingestNotes: [
-        "Mock session is loaded in the UI until the analyzer is wired in.",
-        "FFmpeg ingest and transcript provider hooks are scaffolded but still TODO.",
+        "Demo session fixture used for the mock review path.",
+        "Real local runs use ffprobe when available and stay offline-only.",
       ],
+    },
+    analysisCoverage: {
+      band: "PARTIAL",
+      note: "Partial coverage: local metadata is available, but transcript anchors are still seeded heuristics.",
+      flags: ["SEEDED_TRANSCRIPT"],
     },
     profileId: "generic",
     settings: defaultSettings,
@@ -188,6 +193,7 @@ export function createMockProjectSession(): ProjectSession {
         ],
         contextRequired: false,
         editableLabel: "Clutch escape payoff",
+        reviewTags: [],
       },
       {
         id: "candidate_002",
@@ -232,6 +238,7 @@ export function createMockProjectSession(): ProjectSession {
         ],
         contextRequired: false,
         editableLabel: "Push call before engagement",
+        reviewTags: [],
       },
       {
         id: "candidate_003",
@@ -276,6 +283,7 @@ export function createMockProjectSession(): ProjectSession {
         ],
         contextRequired: false,
         editableLabel: "Near-wipe recovery",
+        reviewTags: [],
       },
       {
         id: "candidate_004",
@@ -317,6 +325,7 @@ export function createMockProjectSession(): ProjectSession {
         ],
         contextRequired: true,
         editableLabel: "Puzzle tension setup",
+        reviewTags: ["LOW_INFORMATION_RISK"],
       },
     ],
     reviewDecisions: [],
@@ -344,6 +353,11 @@ export function createMockProjectSessions(): ProjectSession[] {
         format: "mp4",
         durationSeconds: 6420,
       },
+      analysisCoverage: {
+        band: "THIN",
+        note: "Thin coverage: transcript anchors are sparse and only a few candidates were produced.",
+        flags: ["SEEDED_TRANSCRIPT", "TRANSCRIPT_SPARSE", "LOW_CANDIDATE_COUNT"],
+      },
       candidates: primary.candidates.slice(0, 2).map((candidate, index) => ({
         ...candidate,
         id: `stealth_candidate_${index + 1}`,
@@ -368,6 +382,11 @@ export function createMockProjectSessions(): ProjectSession[] {
         fileName: "puzzle-sweep-2026-03-10.mov",
         format: "mov",
         durationSeconds: 4890,
+      },
+      analysisCoverage: {
+        band: "PARTIAL",
+        note: "Partial coverage: seeded transcript anchors are still driving this exploratory pass.",
+        flags: ["SEEDED_TRANSCRIPT"],
       },
       candidates: primary.candidates.slice(1, 4).map((candidate, index) => ({
         ...candidate,

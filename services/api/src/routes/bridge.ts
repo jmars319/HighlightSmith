@@ -1,8 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-
-function getAnalyzerUrl() {
-  return process.env.HIGHLIGHTSMITH_ANALYZER_URL ?? "http://127.0.0.1:9010";
-}
+import { getAnalyzerUrl } from "../lib/analyzer.js";
 
 export const bridgeRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/api/bridge/analyzer", async () => {

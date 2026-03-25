@@ -1,11 +1,25 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 from ..contracts import MediaSource
 from ..mock_data import build_mock_media_source
 
 SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mov", ".wav", ".mp3", ".m4a"}
+DEFAULT_VIDEO_DURATION_SECONDS = 1800.0
+DEFAULT_AUDIO_DURATION_SECONDS = 900.0
+INGEST_NOTE_METADATA_PROBED = "Metadata probed with local ffprobe."
+INGEST_NOTE_METADATA_FALLBACK = (
+    "ffprobe metadata unavailable; using provisional local duration heuristics."
+)
+INGEST_NOTE_SEEDED_TRANSCRIPT = (
+    "Transcript chunks still use seeded local anchors until offline STT and richer signal extraction land."
+)
 
 
 def inspect_media(source_path: str | None, use_mock_data: bool) -> MediaSource:
@@ -19,18 +33,116 @@ def inspect_media(source_path: str | None, use_mock_data: bool) -> MediaSource:
     if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"Unsupported media extension: {path.suffix}")
 
-    # TODO: Replace duration/frame-rate placeholders with ffprobe integration.
+    metadata = _probe_media(path)
+    file_size_bytes = path.stat().st_size
+    kind = "AUDIO" if path.suffix.lower() in {".wav", ".mp3", ".m4a"} else "VIDEO"
+    duration_seconds = _fallback_duration_seconds(kind, file_size_bytes)
+    frame_rate = None
+    ingest_notes: list[str] = []
+
+    if metadata:
+        probed_duration = _parse_duration_seconds(metadata)
+        if probed_duration is not None:
+            duration_seconds = probed_duration
+        frame_rate = _parse_frame_rate(metadata)
+        ingest_notes.append(INGEST_NOTE_METADATA_PROBED)
+    else:
+        ingest_notes.append(INGEST_NOTE_METADATA_FALLBACK)
+
+    ingest_notes.append(INGEST_NOTE_SEEDED_TRANSCRIPT)
+
     return MediaSource(
-        id=f"media_{path.stem}",
+        id=_build_media_id(path),
         path=str(path),
-        kind="AUDIO" if path.suffix.lower() in {".wav", ".mp3", ".m4a"} else "VIDEO",
+        kind=kind,
         file_name=path.name,
-        duration_seconds=3600.0,
+        duration_seconds=duration_seconds,
         format=path.suffix.lower().lstrip("."),
-        file_size_bytes=path.stat().st_size,
-        frame_rate=None,
-        ingest_notes=[
-            "Metadata probing is currently stubbed.",
-            "FFmpeg/ffprobe wrapper belongs in packages/media and a future Rust bridge.",
-        ],
+        file_size_bytes=file_size_bytes,
+        frame_rate=frame_rate,
+        ingest_notes=ingest_notes,
     )
+
+
+def _build_media_id(path: Path) -> str:
+    normalized_path = str(path.resolve())
+    digest = hashlib.sha1(normalized_path.encode("utf-8")).hexdigest()[:8]
+    stem_slug = re.sub(r"[^a-zA-Z0-9]+", "-", path.stem).strip("-").lower() or "source"
+    return f"media_{stem_slug}_{digest}"
+
+
+def _probe_media(path: Path) -> dict | None:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return None
+
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration,size:stream=codec_type,avg_frame_rate",
+            "-of",
+            "json",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def _parse_duration_seconds(metadata: dict) -> float | None:
+    raw_duration = metadata.get("format", {}).get("duration")
+    if raw_duration in (None, ""):
+        return None
+
+    try:
+        duration_seconds = float(raw_duration)
+    except (TypeError, ValueError):
+        return None
+
+    return duration_seconds if duration_seconds > 0 else None
+
+
+def _parse_frame_rate(metadata: dict) -> float | None:
+    for stream in metadata.get("streams", []):
+        if stream.get("codec_type") != "video":
+            continue
+
+        raw_frame_rate = stream.get("avg_frame_rate")
+        if not raw_frame_rate or raw_frame_rate == "0/0":
+            return None
+
+        numerator, _, denominator = raw_frame_rate.partition("/")
+        try:
+            top = float(numerator)
+            bottom = float(denominator or "1")
+        except ValueError:
+            return None
+
+        if bottom == 0:
+            return None
+
+        frame_rate = top / bottom
+        return frame_rate if frame_rate > 0 else None
+
+    return None
+
+
+def _fallback_duration_seconds(kind: str, file_size_bytes: int) -> float:
+    if file_size_bytes <= 0:
+        return DEFAULT_AUDIO_DURATION_SECONDS if kind == "AUDIO" else DEFAULT_VIDEO_DURATION_SECONDS
+
+    bytes_per_second = 24_000 if kind == "AUDIO" else 900_000
+    estimated_duration_seconds = file_size_bytes / bytes_per_second
+    baseline = DEFAULT_AUDIO_DURATION_SECONDS if kind == "AUDIO" else DEFAULT_VIDEO_DURATION_SECONDS
+    return max(60.0, min(21_600.0, max(estimated_duration_seconds, baseline * 0.5)))

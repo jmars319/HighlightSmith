@@ -35,6 +35,39 @@ export const reviewActionSchema = z.enum([
   "RELABEL",
 ]);
 
+export const reviewTagSchema = z.enum([
+  "DEAD_AIR_RISK",
+  "CLEANUP_RISK",
+  "MENU_RISK",
+  "LOW_INFORMATION_RISK",
+]);
+
+export const analysisCoverageBandSchema = z.enum([
+  "STRONG",
+  "PARTIAL",
+  "THIN",
+]);
+
+export const analysisCoverageFlagSchema = z.enum([
+  "METADATA_FALLBACK_USED",
+  "SEEDED_TRANSCRIPT",
+  "TRANSCRIPT_SPARSE",
+  "LOW_CANDIDATE_COUNT",
+  "NO_CANDIDATES",
+]);
+
+export const analysisCoverageSchema = z.object({
+  band: analysisCoverageBandSchema,
+  note: z.string(),
+  flags: z.array(analysisCoverageFlagSchema).default([]),
+});
+
+export const defaultAnalysisCoverage = {
+  band: "PARTIAL",
+  note: "Coverage note unavailable for this session.",
+  flags: [],
+} satisfies z.input<typeof analysisCoverageSchema>;
+
 export const timeRangeSchema = z
   .object({
     startSeconds: z.number().nonnegative(),
@@ -113,6 +146,7 @@ export const candidateWindowSchema = z.object({
   scoreBreakdown: z.array(scoreContributionSchema).min(1),
   contextRequired: z.boolean().default(false),
   editableLabel: z.string(),
+  reviewTags: z.array(reviewTagSchema).default([]),
 });
 
 export const reviewDecisionSchema = z.object({
@@ -150,6 +184,7 @@ export const projectSessionSchema = z.object({
   title: z.string(),
   status: z.enum(["IDLE", "ANALYZING", "READY", "REVIEWING"]),
   mediaSource: mediaSourceSchema,
+  analysisCoverage: analysisCoverageSchema.default(defaultAnalysisCoverage),
   profileId: z.string(),
   settings: settingsSchema,
   transcript: z.array(transcriptChunkSchema),
@@ -161,9 +196,29 @@ export const projectSessionSchema = z.object({
   updatedAt: z.string(),
 });
 
+export const projectSessionSummarySchema = z.object({
+  sessionId: z.string(),
+  sessionTitle: z.string(),
+  sourcePath: z.string(),
+  sourceName: z.string(),
+  status: z.enum(["IDLE", "ANALYZING", "READY", "REVIEWING"]),
+  analysisCoverage: analysisCoverageSchema.default(defaultAnalysisCoverage),
+  profileId: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  candidateCount: z.number().int().nonnegative(),
+  acceptedCount: z.number().int().nonnegative(),
+  rejectedCount: z.number().int().nonnegative(),
+  pendingCount: z.number().int().nonnegative(),
+});
+
 export type ConfidenceBand = z.infer<typeof confidenceBandSchema>;
 export type ReasonCode = z.infer<typeof reasonCodeSchema>;
 export type ReviewAction = z.infer<typeof reviewActionSchema>;
+export type ReviewTag = z.infer<typeof reviewTagSchema>;
+export type AnalysisCoverageBand = z.infer<typeof analysisCoverageBandSchema>;
+export type AnalysisCoverageFlag = z.infer<typeof analysisCoverageFlagSchema>;
+export type AnalysisCoverage = z.infer<typeof analysisCoverageSchema>;
 export type TimeRange = z.infer<typeof timeRangeSchema>;
 export type MediaSource = z.infer<typeof mediaSourceSchema>;
 export type TranscriptChunk = z.infer<typeof transcriptChunkSchema>;
@@ -176,6 +231,7 @@ export type ReviewDecision = z.infer<typeof reviewDecisionSchema>;
 export type ContentProfile = z.infer<typeof contentProfileSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
 export type ProjectSession = z.infer<typeof projectSessionSchema>;
+export type ProjectSessionSummary = z.infer<typeof projectSessionSummarySchema>;
 
 export type CandidateDecisionMap = Record<string, ReviewDecision | undefined>;
 
