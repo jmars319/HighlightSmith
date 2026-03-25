@@ -1,8 +1,24 @@
-import { startTransition, useDeferredValue, useMemo, useState } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   acceptedCandidates,
+  analysisCoverageTone,
   buildProjectSummary,
+  defaultReviewQueueMode,
+  deriveSessionReviewState,
   filterCandidates,
+  filterCandidatesByReviewMode,
+  findNextPendingSessionSummary,
+  formatAnalysisCoverageBand,
+  formatAnalysisCoverageFlag,
+  isCandidatePending,
+  reviewedCandidateCount,
+  type ReviewQueueMode,
 } from "@highlightsmith/domain";
 import {
   toJsonCandidateExport,
@@ -12,19 +28,34 @@ import {
   isSupportedInput,
   supportedInputExtensions,
 } from "@highlightsmith/media";
-import { contentProfiles, getProfileById } from "@highlightsmith/profiles";
 import {
-  createMockProjectSessions,
+  contentProfiles,
+  defaultProfileId,
+  getProfileById,
+} from "@highlightsmith/profiles";
+import {
+  analyzeProjectRequestSchema,
   createMockProjectSession,
+  projectSessionSchema,
+  projectSessionSummarySchema,
+  type AnalyzeProjectRequest,
   type ConfidenceBand,
+  type ProjectSession,
+  type ProjectSessionSummary,
 } from "@highlightsmith/shared-types";
 import { sqliteSchemaVersion, sqliteTables } from "@highlightsmith/storage";
 import { LayoutShell, TranscriptSnippetBlock } from "@highlightsmith/ui";
 import { CandidateDetail } from "./components/CandidateDetail";
 import { CandidateQueue } from "./components/CandidateQueue";
+import { SessionOverview } from "./components/SessionOverview";
+import { CandidateTimeline } from "./components/CandidateTimeline";
 import { ShellHeader } from "./components/ShellHeader";
 import { useReviewState } from "./hooks/useReviewState";
-import { formatLongTime } from "./lib/format";
+import {
+  loadSessionResumeState,
+  resolveSessionResumeState,
+  saveSessionResumeState,
+} from "./lib/resumeState";
 
 type FilterValue = ConfidenceBand | "ALL";
 type DesktopPage =
@@ -33,8 +64,16 @@ type DesktopPage =
   | "candidate-review"
   | "candidate-detail"
   | "settings";
+type AnalysisReadiness = {
+  canAnalyze: boolean;
+  statusLabel: string;
+  headline: string;
+  detail: string;
+  tone: "ready" | "blocked";
+};
 
 const mockSessionFactory = () => createMockProjectSession();
+const lastSessionIdStorageKey = "highlightsmith.desktop.last-session-id";
 const desktopPages: Array<{ id: DesktopPage; label: string }> = [
   { id: "projects", label: "Projects" },
   { id: "new-analysis", label: "New Analysis" },
@@ -44,69 +83,281 @@ const desktopPages: Array<{ id: DesktopPage; label: string }> = [
 ];
 
 export default function App() {
-  const [activePage, setActivePage] = useState<DesktopPage>("candidate-review");
-  const [projectSession, setProjectSession] = useState(mockSessionFactory);
+  const [activePage, setActivePage] = useState<DesktopPage>("new-analysis");
+  const [projectSession, setProjectSession] = useState<ProjectSession | null>(
+    null,
+  );
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(
-    projectSession.candidates[0]?.id ?? null,
+    null,
   );
   const [searchValue, setSearchValue] = useState("");
   const [bandFilter, setBandFilter] = useState<FilterValue>("ALL");
-  const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      projectSession.candidates.map((candidate) => [
-        candidate.id,
-        candidate.editableLabel,
-      ]),
-    ),
+  const [reviewQueueMode, setReviewQueueMode] = useState<ReviewQueueMode>("ALL");
+  const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>({});
+  const [selectedMediaPath, setSelectedMediaPath] = useState("");
+  const [analysisProfileId, setAnalysisProfileId] = useState(defaultProfileId);
+  const [analysisTitle, setAnalysisTitle] = useState("");
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [projectSummaries, setProjectSummaries] = useState<ProjectSessionSummary[]>(
+    [],
   );
-  const [selectedMediaPath, setSelectedMediaPath] = useState(
-    projectSession.mediaSource.path,
-  );
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
 
   const deferredSearchValue = useDeferredValue(searchValue);
-  const currentProfile = getProfileById(projectSession.profileId);
-  const { decisionsByCandidateId, upsertDecision, clearAll } = useReviewState(
-    projectSession.id,
+  const apiBaseUrl =
+    import.meta.env.VITE_HIGHLIGHTSMITH_API_BASE_URL ?? "http://127.0.0.1:4010";
+  const sessionCandidates = projectSession?.candidates ?? [];
+  const normalizedSelectedMediaPath = selectedMediaPath.trim();
+  const selectedDraftProfile = getProfileById(analysisProfileId);
+  const currentProfile = getProfileById(
+    projectSession?.profileId ?? analysisProfileId,
   );
+  const analysisLaunchState = buildAnalysisLaunchState(
+    normalizedSelectedMediaPath,
+  );
+  const analysisSourceName = normalizedSelectedMediaPath
+    ? extractSourceName(normalizedSelectedMediaPath)
+    : null;
+  const analysisTitlePreview = analysisTitle.trim()
+    ? analysisTitle.trim()
+    : normalizedSelectedMediaPath
+      ? buildSuggestedSessionTitle(normalizedSelectedMediaPath)
+      : "Use the source file name";
+  const {
+    decisionsByCandidateId,
+    upsertDecision,
+    reviewError,
+    isSavingReview,
+    clearError,
+  } = useReviewState({
+    apiBaseUrl,
+    projectSession,
+    onProjectSessionChange: (nextSession, context) => {
+      const shouldAutoAdvance =
+        context.action === "ACCEPT" || context.action === "REJECT";
+      const preferredCandidateId = shouldAutoAdvance
+        ? findNextPendingCandidateId(nextSession, context.candidateId) ??
+          findFirstPendingCandidateId(nextSession) ??
+          context.candidateId
+        : context.candidateId;
 
-  const filteredCandidates = useMemo(() => {
+      applyProjectSession(nextSession, {
+        preferredCandidateId,
+        preserveSelection: !shouldAutoAdvance,
+        preserveFilters: true,
+        rememberRealSession: true,
+      });
+      setProjectSummaries((current) =>
+        upsertProjectSummary(current, buildProjectSummary(nextSession)),
+      );
+    },
+  });
+
+  const searchFilteredCandidates = useMemo(() => {
     return filterCandidates(
-      projectSession.candidates,
+      sessionCandidates,
       deferredSearchValue,
       bandFilter,
       decisionsByCandidateId,
     );
-  }, [bandFilter, deferredSearchValue, labelDrafts, projectSession.candidates]);
+  }, [
+    bandFilter,
+    decisionsByCandidateId,
+    deferredSearchValue,
+    labelDrafts,
+    sessionCandidates,
+  ]);
+  const queueCandidates = useMemo(() => {
+    if (!projectSession) {
+      return searchFilteredCandidates;
+    }
+
+    return filterCandidatesByReviewMode(
+      searchFilteredCandidates,
+      projectSession,
+      reviewQueueMode,
+    );
+  }, [projectSession, reviewQueueMode, searchFilteredCandidates]);
 
   const selectedCandidate =
-    filteredCandidates.find(
+    queueCandidates.find(
       (candidate) => candidate.id === selectedCandidateId,
     ) ??
-    projectSession.candidates.find(
+    searchFilteredCandidates.find(
       (candidate) => candidate.id === selectedCandidateId,
     ) ??
-    filteredCandidates[0] ??
+    sessionCandidates.find((candidate) => candidate.id === selectedCandidateId) ??
+    queueCandidates[0] ??
+    (reviewQueueMode === "ALL" ? searchFilteredCandidates[0] : null) ??
     null;
+  const selectedCandidateIndex = selectedCandidate
+    ? sessionCandidates.findIndex((candidate) => candidate.id === selectedCandidate.id)
+    : -1;
 
   const selectedDecision = selectedCandidate
     ? decisionsByCandidateId[selectedCandidate.id]
     : undefined;
+  const selectedCandidateVisibleInQueue = selectedCandidate
+    ? queueCandidates.some((candidate) => candidate.id === selectedCandidate.id)
+    : true;
 
   const acceptedCount = acceptedCandidates(
-    projectSession.candidates,
+    sessionCandidates,
     decisionsByCandidateId,
   ).length;
+  const rejectedCount = sessionCandidates.filter(
+    (candidate) => decisionsByCandidateId[candidate.id]?.action === "REJECT",
+  ).length;
+  const reviewedCount = acceptedCount + rejectedCount;
+  const pendingReviewCount = Math.max(sessionCandidates.length - reviewedCount, 0);
+  const activeSessionSummary = projectSession
+    ? buildProjectSummary(projectSession)
+    : null;
+  const activeSessionReviewState = activeSessionSummary
+    ? deriveSessionReviewState(activeSessionSummary)
+    : null;
+  const activeSessionReviewStateLabel = activeSessionReviewState
+    ? formatSessionReviewState(activeSessionReviewState)
+    : null;
+  const pendingSessionCount = projectSummaries.filter(
+    (summary) => summary.pendingCount > 0,
+  ).length;
+  const nextPendingSession =
+    findNextPendingSessionSummary(projectSummaries, {
+      excludeSessionIds: projectSession ? [projectSession.id] : [],
+    }) ?? findNextPendingSessionSummary(projectSummaries);
 
-  const timestampPreview = toTimestampExport(
-    projectSession.candidates,
-    Object.values(decisionsByCandidateId),
-  );
+  const timestampPreview = projectSession
+    ? toTimestampExport(sessionCandidates, Object.values(decisionsByCandidateId))
+    : "";
 
-  const jsonPreview = toJsonCandidateExport(
-    projectSession.mediaSource,
-    projectSession.candidates,
-    Object.values(decisionsByCandidateId),
-  );
+  const jsonPreview = projectSession
+    ? toJsonCandidateExport(
+        projectSession.mediaSource,
+        sessionCandidates,
+        Object.values(decisionsByCandidateId),
+      )
+    : "";
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadProjectSummaries() {
+      setIsLoadingProjects(true);
+      try {
+        const summaries = await fetchProjectSummaries(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setProjectSummaries(summaries);
+        setProjectsError(null);
+        setActivePage((current) => {
+          if (current !== "new-analysis") {
+            return current;
+          }
+
+          if (window.localStorage.getItem(lastSessionIdStorageKey)) {
+            return current;
+          }
+
+          return summaries.length > 0 ? "projects" : current;
+        });
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProjectsError(
+          error instanceof Error
+            ? `Unable to load persisted sessions: ${error.message}`
+            : "Unable to load persisted sessions",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingProjects(false);
+        }
+      }
+    }
+
+    void loadProjectSummaries();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    if (!projectSession) {
+      return;
+    }
+
+    const queueIndex = selectedCandidate
+      ? queueCandidates.findIndex((candidate) => candidate.id === selectedCandidate.id)
+      : -1;
+
+    saveSessionResumeState(projectSession.id, {
+      selectedCandidateId: selectedCandidate?.id ?? null,
+      reviewQueueMode,
+      queueIndex: queueIndex >= 0 ? queueIndex : null,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [
+    projectSession,
+    queueCandidates,
+    reviewQueueMode,
+    selectedCandidate?.id,
+  ]);
+
+  useEffect(() => {
+    const lastSessionId = window.localStorage.getItem(lastSessionIdStorageKey);
+    if (!lastSessionId) {
+      return;
+    }
+    const sessionIdToRestore = lastSessionId;
+
+    let isCancelled = false;
+
+    async function restoreLastSession() {
+      try {
+        const nextSession = await fetchProjectSession(
+          apiBaseUrl,
+          sessionIdToRestore,
+        );
+        if (isCancelled) {
+          return;
+        }
+
+        applyProjectSession(nextSession, {
+          restoreResumeState: true,
+          rememberRealSession: true,
+        });
+        setProjectSummaries((current) =>
+          upsertProjectSummary(current, buildProjectSummary(nextSession)),
+        );
+        setAnalysisError(null);
+        setActivePage("candidate-review");
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setAnalysisError(
+          error instanceof Error
+            ? `Unable to restore the last local session: ${error.message}`
+            : "Unable to restore the last local session",
+        );
+      }
+    }
+
+    void restoreLastSession();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
 
   async function handlePickMedia() {
     try {
@@ -126,39 +377,46 @@ export default function App() {
 
       if (typeof selection === "string" && isSupportedInput(selection)) {
         setSelectedMediaPath(selection);
+        setAnalysisError(null);
+        if (!analysisTitle.trim()) {
+          setAnalysisTitle(buildSuggestedSessionTitle(selection));
+        }
+        setActivePage("new-analysis");
         return;
       }
 
       if (typeof selection === "string") {
-        setSelectedMediaPath(`${selection} (unsupported extension)`);
+        setSelectedMediaPath(selection);
+        setAnalysisError(
+          `Unsupported media extension. Supported inputs: ${supportedInputExtensions.join(", ")}`,
+        );
+        setActivePage("new-analysis");
         return;
       }
     } catch {
-      setSelectedMediaPath(
-        `${projectSession.mediaSource.path} (Tauri dialog becomes active in desktop mode)`,
+      setAnalysisError(
+        "Desktop file picking is available in the Tauri app. You can also paste a full local file path below.",
       );
     }
   }
 
   function handleReloadMock() {
     const nextSession = mockSessionFactory();
-    setProjectSession(nextSession);
-    setSelectedCandidateId(nextSession.candidates[0]?.id ?? null);
-    setLabelDrafts(
-      Object.fromEntries(
-        nextSession.candidates.map((candidate) => [
-          candidate.id,
-          candidate.editableLabel,
-        ]),
-      ),
-    );
-    setSelectedMediaPath(nextSession.mediaSource.path);
-    clearAll();
+    window.localStorage.removeItem(lastSessionIdStorageKey);
+    applyProjectSession(nextSession);
+    setAnalysisError(null);
+    setActivePage("candidate-review");
   }
 
   function handleSearchChange(nextValue: string) {
     startTransition(() => {
       setSearchValue(nextValue);
+    });
+  }
+
+  function handleReviewQueueModeChange(nextMode: ReviewQueueMode) {
+    startTransition(() => {
+      setReviewQueueMode(nextMode);
     });
   }
 
@@ -173,6 +431,7 @@ export default function App() {
       return;
     }
 
+    clearError();
     setLabelDrafts((current) => ({
       ...current,
       [selectedCandidate.id]: nextValue,
@@ -184,7 +443,7 @@ export default function App() {
       return;
     }
 
-    upsertDecision(selectedCandidate, "RELABEL", {
+    void upsertDecision(selectedCandidate, "RELABEL", {
       label: labelDrafts[selectedCandidate.id],
     });
   }
@@ -194,7 +453,7 @@ export default function App() {
       return;
     }
 
-    upsertDecision(selectedCandidate, "ACCEPT", {
+    void upsertDecision(selectedCandidate, "ACCEPT", {
       label: labelDrafts[selectedCandidate.id],
     });
   }
@@ -204,7 +463,7 @@ export default function App() {
       return;
     }
 
-    upsertDecision(selectedCandidate, "REJECT", {
+    void upsertDecision(selectedCandidate, "REJECT", {
       label: labelDrafts[selectedCandidate.id],
     });
   }
@@ -218,7 +477,7 @@ export default function App() {
       decisionsByCandidateId[selectedCandidate.id]?.adjustedSegment ??
       selectedCandidate.suggestedSegment;
 
-    upsertDecision(selectedCandidate, "RETIME", {
+    void upsertDecision(selectedCandidate, "RETIME", {
       adjustedSegment: {
         startSeconds: Math.max(0, currentSegment.startSeconds - 2),
         endSeconds: currentSegment.endSeconds,
@@ -228,7 +487,7 @@ export default function App() {
   }
 
   function handleExpandResolution() {
-    if (!selectedCandidate) {
+    if (!selectedCandidate || !projectSession) {
       return;
     }
 
@@ -236,7 +495,7 @@ export default function App() {
       decisionsByCandidateId[selectedCandidate.id]?.adjustedSegment ??
       selectedCandidate.suggestedSegment;
 
-    upsertDecision(selectedCandidate, "RETIME", {
+    void upsertDecision(selectedCandidate, "RETIME", {
       adjustedSegment: {
         startSeconds: currentSegment.startSeconds,
         endSeconds: Math.min(
@@ -248,22 +507,371 @@ export default function App() {
     });
   }
 
+  function applyProjectSession(
+    nextSession: ProjectSession,
+    options: {
+      preferredCandidateId?: string | null;
+      preserveSelection?: boolean;
+      preserveFilters?: boolean;
+      rememberRealSession?: boolean;
+      restoreResumeState?: boolean;
+    } = {},
+  ) {
+    const restoredResumeState = options.restoreResumeState
+      ? resolveSessionResumeState(
+          nextSession,
+          loadSessionResumeState(nextSession.id),
+        )
+      : null;
+    const nextDefaultReviewQueueMode =
+      restoredResumeState?.reviewQueueMode ?? defaultReviewQueueMode(nextSession);
+    const preferredCandidateId =
+      options.preferredCandidateId &&
+      nextSession.candidates.some(
+        (candidate) => candidate.id === options.preferredCandidateId,
+      )
+        ? options.preferredCandidateId
+        : null;
+    const restoredCandidateId =
+      restoredResumeState?.selectedCandidateId &&
+      nextSession.candidates.some(
+        (candidate) => candidate.id === restoredResumeState.selectedCandidateId,
+      )
+        ? restoredResumeState.selectedCandidateId
+        : null;
+    const preservedSelectedCandidateId =
+      options.preserveSelection &&
+      selectedCandidateId &&
+      nextSession.candidates.some((candidate) => candidate.id === selectedCandidateId)
+        ? selectedCandidateId
+        : null;
+    const nextSelectedCandidateId =
+      preferredCandidateId ??
+      preservedSelectedCandidateId ??
+      restoredCandidateId ??
+      (nextDefaultReviewQueueMode === "ONLY_PENDING"
+        ? findFirstPendingCandidateId(nextSession)
+        : null) ??
+      nextSession.candidates[0]?.id ??
+      null;
+    const nextReviewQueueMode =
+      options.restoreResumeState
+        ? nextDefaultReviewQueueMode
+        : projectSession?.id === nextSession.id
+        ? nextDefaultReviewQueueMode === "ALL" &&
+          reviewQueueMode === "ONLY_PENDING"
+          ? "ALL"
+          : reviewQueueMode
+        : nextDefaultReviewQueueMode;
+
+    setProjectSession(nextSession);
+    setReviewQueueMode(nextReviewQueueMode);
+    setSelectedCandidateId(nextSelectedCandidateId);
+    setLabelDrafts(buildLabelDrafts(nextSession));
+    setSelectedMediaPath(nextSession.mediaSource.path);
+    setAnalysisProfileId(nextSession.profileId);
+    setAnalysisTitle(nextSession.title);
+    if (!options.preserveFilters) {
+      setSearchValue("");
+      setBandFilter("ALL");
+    }
+    if (options.rememberRealSession) {
+      window.localStorage.setItem(lastSessionIdStorageKey, nextSession.id);
+    }
+  }
+
+  async function handleAnalyze() {
+    if (!analysisLaunchState.canAnalyze) {
+      setAnalysisError(analysisLaunchState.detail);
+      return;
+    }
+
+    const normalizedSourcePath = normalizedSelectedMediaPath;
+
+    const request = analyzeProjectRequestSchema.parse({
+      sourcePath: normalizedSourcePath,
+      profileId: analysisProfileId,
+      sessionTitle: analysisTitle.trim() || undefined,
+    }) satisfies AnalyzeProjectRequest;
+
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+
+    try {
+      const response = await fetchWithLocalApiMessage(
+        `${apiBaseUrl}/api/projects/analyze`,
+        apiBaseUrl,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(request),
+        },
+        "Unable to start local analysis.",
+      );
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            message?: string;
+          }
+        | ProjectSession
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload && "message" in payload && payload.message
+            ? payload.message
+            : "Analysis request failed",
+        );
+      }
+
+      const nextSession = projectSessionSchema.parse(payload);
+      applyProjectSession(nextSession, {
+        rememberRealSession: true,
+      });
+      setSelectedMediaPath(normalizedSourcePath);
+      setProjectSummaries((current) =>
+        upsertProjectSummary(current, buildProjectSummary(nextSession)),
+      );
+      setProjectsError(null);
+      setActivePage("candidate-review");
+    } catch (error) {
+      setAnalysisError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected analysis failure while contacting the local API",
+      );
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function handleOpenProject(sessionId: string) {
+    setProjectsError(null);
+
+    try {
+      const nextSession = await fetchProjectSession(apiBaseUrl, sessionId);
+      applyProjectSession(nextSession, {
+        restoreResumeState: true,
+        rememberRealSession: true,
+      });
+      setProjectSummaries((current) =>
+        upsertProjectSummary(current, buildProjectSummary(nextSession)),
+      );
+      setActivePage("candidate-review");
+    } catch (error) {
+      setProjectsError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected session load failure while contacting the local API",
+      );
+    }
+  }
+
+  function handleSelectNextPending() {
+    if (!projectSession) {
+      return;
+    }
+
+    const nextPendingCandidateId =
+      findNextPendingCandidateId(projectSession, selectedCandidateId) ??
+      findFirstPendingCandidateId(projectSession);
+
+    if (!nextPendingCandidateId) {
+      return;
+    }
+
+    setSelectedCandidateId(nextPendingCandidateId);
+  }
+
+  function handleSelectPreviousVisible() {
+    const previousCandidateId = findAdjacentVisibleCandidateId(
+      queueCandidates,
+      selectedCandidateId,
+      -1,
+    );
+
+    if (!previousCandidateId) {
+      return;
+    }
+
+    setSelectedCandidateId(previousCandidateId);
+  }
+
+  function handleSelectNextVisible() {
+    const nextCandidateId = findAdjacentVisibleCandidateId(
+      queueCandidates,
+      selectedCandidateId,
+      1,
+    );
+
+    if (!nextCandidateId) {
+      return;
+    }
+
+    setSelectedCandidateId(nextCandidateId);
+  }
+
+  function handleReturnToProjects() {
+    setActivePage("projects");
+  }
+
+  async function handleOpenNextPendingSession() {
+    if (!nextPendingSession) {
+      setProjectsError(null);
+      setActivePage("projects");
+      return;
+    }
+
+    await handleOpenProject(nextPendingSession.sessionId);
+  }
+
   function renderDesktopPage() {
     if (activePage === "projects") {
       return (
         <section className="desktop-placeholder-grid">
-          {createMockProjectSessions().map((session) => {
-            const summary = buildProjectSummary(session);
+          {isLoadingProjects ? (
+            <article className="utility-block">
+              <span className="detail-label">Project sessions</span>
+              <h2>Loading persisted backlog sessions...</h2>
+            </article>
+          ) : null}
+          {projectsError ? (
+            <article className="utility-block">
+              <span className="detail-label">Project sessions</span>
+              <p className="analysis-error">{projectsError}</p>
+            </article>
+          ) : null}
+          {!isLoadingProjects && !projectsError && projectSummaries.length === 0 ? (
+            <article className="utility-block">
+              <span className="detail-label">Project sessions</span>
+              <h2>No persisted sessions yet</h2>
+              <p>
+                Run a local analysis to create the first real backlog session in
+                SQLite.
+              </p>
+            </article>
+          ) : null}
+          {!isLoadingProjects && !projectsError && projectSummaries.length > 0 ? (
+            <article className="utility-block backlog-shortcut-card">
+              <div className="panel-header">
+                <div>
+                  <span className="detail-label">Backlog throughput</span>
+                  <h2>
+                    {nextPendingSession
+                      ? "Resume the next useful incomplete session"
+                      : "Backlog review is currently clear"}
+                  </h2>
+                  <p>
+                    {nextPendingSession
+                      ? `${pendingSessionCount} sessions still have pending candidates.`
+                      : "Every persisted session currently has decisions for all candidates."}
+                  </p>
+                </div>
+                <span className="queue-count">
+                  {pendingSessionCount} pending sessions
+                </span>
+              </div>
+              <div className="action-row">
+                {nextPendingSession ? (
+                  <button
+                    className="button-primary"
+                    onClick={() => {
+                      void handleOpenNextPendingSession();
+                    }}
+                    type="button"
+                  >
+                    Open next pending session
+                  </button>
+                ) : (
+                  <button
+                    className="button-secondary"
+                    onClick={() => setActivePage("new-analysis")}
+                    type="button"
+                  >
+                    Analyze another local VOD
+                  </button>
+                )}
+              </div>
+              <p className="project-summary-cta">
+                {nextPendingSession
+                  ? `${nextPendingSession.sessionTitle} • ${nextPendingSession.pendingCount} pending • updated ${formatSummaryTimestamp(nextPendingSession.updatedAt)}`
+                  : "Use New Analysis to add the next backlog session."}
+              </p>
+            </article>
+          ) : null}
+          {projectSummaries.map((summary) => {
+            const profile = getProfileById(summary.profileId);
+            const sessionReviewState = deriveSessionReviewState(summary);
+            const isActiveSession = summary.sessionId === projectSession?.id;
+            const isNextPendingSession = summary.sessionId === nextPendingSession?.sessionId;
             return (
-              <article className="utility-block" key={session.id}>
-                <span className="detail-label">Project session</span>
-                <h2>{summary.title}</h2>
-                <p>{summary.mediaPath}</p>
+              <button
+                className={
+                  isActiveSession
+                    ? "project-summary-card utility-block active"
+                    : "project-summary-card utility-block"
+                }
+                key={summary.sessionId}
+                onClick={() => {
+                  void handleOpenProject(summary.sessionId);
+                }}
+                type="button"
+              >
+                <div className="project-summary-top">
+                  <span className="detail-label">Project session</span>
+                  <div className="project-summary-badges">
+                    <span
+                      className={`session-state-pill ${sessionReviewState.toLowerCase().replace("_", "-")}`}
+                    >
+                      {formatSessionReviewState(sessionReviewState)}
+                    </span>
+                    {isNextPendingSession ? (
+                      <span className="session-state-pill next-target">Next up</span>
+                    ) : null}
+                    {isActiveSession ? (
+                      <span className="session-state-pill active-session">
+                        Loaded
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <h2>{summary.sessionTitle}</h2>
+                <p>{summary.sourceName}</p>
+                <p>{summary.sourcePath}</p>
+                <div className="project-summary-progress">
+                  <div className="project-summary-meter">
+                    <div
+                      className="project-summary-fill"
+                      style={{
+                        width: `${formatSessionCompletion(summary)}%`,
+                      }}
+                    />
+                  </div>
+                  <p>
+                    {reviewedCandidateCount(summary)} of {summary.candidateCount}{" "}
+                    reviewed
+                  </p>
+                </div>
                 <p>
                   {summary.candidateCount} candidates • {summary.acceptedCount}{" "}
-                  accepted • updated {summary.updatedAt}
+                  accepted • {summary.rejectedCount} rejected •{" "}
+                  {summary.pendingCount} pending
                 </p>
-              </article>
+                <p
+                  className={`project-summary-coverage ${analysisCoverageTone(summary.analysisCoverage)}`}
+                >
+                  {buildProjectCoverageCopy(summary)}
+                </p>
+                <p>
+                  Profile {profile.label} • updated{" "}
+                  {formatSummaryTimestamp(summary.updatedAt)}
+                </p>
+                <p className="project-summary-cta">
+                  {buildSessionOpenLabel(summary)}
+                </p>
+              </button>
             );
           })}
         </section>
@@ -275,22 +883,165 @@ export default function App() {
         <section className="desktop-placeholder-grid">
           <article className="utility-block">
             <span className="detail-label">Analysis launch control</span>
-            <h2>Local ingest first</h2>
+            <h2>Analyze a local backlog VOD</h2>
             <p>
-              Desktopapp owns local media selection, project/session creation,
-              and analysis launch orchestration. FFmpeg and analyzer handoff
-              stay stubbed until the next pass.
+              Pick one local recording, confirm the source path and profile, and
+              HighlightSmith will create one persisted review session for it.
             </p>
-            <p>Supported targets: {supportedInputExtensions.join(", ")}</p>
+            <article
+              className={`analysis-readiness-card ${analysisLaunchState.tone}`}
+            >
+              <div className="analysis-readiness-header">
+                <div>
+                  <span className="detail-label">Launch readiness</span>
+                  <strong>{analysisLaunchState.headline}</strong>
+                  <p className="analysis-readiness-copy">
+                    {analysisLaunchState.detail}
+                  </p>
+                </div>
+                <span
+                  className={`analysis-readiness-pill ${analysisLaunchState.tone}`}
+                >
+                  {analysisLaunchState.statusLabel}
+                </span>
+              </div>
+              <div className="analysis-summary-grid">
+                <article className="analysis-summary-card">
+                  <span className="detail-label">Selected source</span>
+                  <strong>{analysisSourceName ?? "No local recording staged"}</strong>
+                  <p className="analysis-summary-path">
+                    {normalizedSelectedMediaPath ||
+                      "Choose a supported local VOD path or use the file picker."}
+                  </p>
+                </article>
+                <article className="analysis-summary-card">
+                  <span className="detail-label">Profile</span>
+                  <strong>{selectedDraftProfile.label}</strong>
+                  <p>{selectedDraftProfile.description}</p>
+                </article>
+                <article className="analysis-summary-card">
+                  <span className="detail-label">Session title</span>
+                  <strong>{analysisTitlePreview}</strong>
+                  <p>
+                    {analysisTitle.trim()
+                      ? "Using the custom title you entered."
+                      : "Blank title fields fall back to the source file name."}
+                  </p>
+                </article>
+              </div>
+            </article>
+            <div className="analysis-form">
+              <label className="search-block">
+                <span className="input-label">Local media path</span>
+                <input
+                  className="search-input"
+                  disabled={isAnalyzing}
+                  onChange={(event) => {
+                    setSelectedMediaPath(event.target.value);
+                    setAnalysisError(null);
+                  }}
+                  placeholder="/Users/you/VODs/session-2026-03-25.mkv"
+                  type="text"
+                  value={selectedMediaPath}
+                />
+                <small
+                  className={
+                    analysisLaunchState.canAnalyze
+                      ? "analysis-field-note ready"
+                      : "analysis-field-note"
+                  }
+                >
+                  {normalizedSelectedMediaPath
+                    ? isSupportedInput(normalizedSelectedMediaPath)
+                      ? `Detected ${analysisSourceName} • supported input`
+                      : `Unsupported file type. Use one of: ${supportedInputExtensions.join(", ")}`
+                    : `Supported inputs: ${supportedInputExtensions.join(", ")}`}
+                </small>
+              </label>
+
+              <label className="search-block">
+                <span className="input-label">Profile</span>
+                <select
+                  className="search-input"
+                  disabled={isAnalyzing}
+                  onChange={(event) => {
+                    setAnalysisProfileId(event.target.value);
+                    setAnalysisError(null);
+                  }}
+                  value={analysisProfileId}
+                >
+                  {contentProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="search-block">
+                <span className="input-label">Session title</span>
+                <input
+                  className="search-input"
+                  disabled={isAnalyzing}
+                  onChange={(event) => {
+                    setAnalysisTitle(event.target.value);
+                    setAnalysisError(null);
+                  }}
+                  placeholder="Optional: Backlog pass 01"
+                  type="text"
+                  value={analysisTitle}
+                />
+                <small className="analysis-field-note">
+                  Leave blank to reuse the source file name as the session title.
+                </small>
+              </label>
+
+              <div className="hero-actions">
+                <button
+                  className="button-primary"
+                  disabled={isAnalyzing || !analysisLaunchState.canAnalyze}
+                  onClick={() => {
+                    void handleAnalyze();
+                  }}
+                  type="button"
+                >
+                  {isAnalyzing ? "Analyzing local VOD..." : "Run Local Analysis"}
+                </button>
+                <button
+                  className="button-secondary"
+                  disabled={isAnalyzing}
+                  onClick={() => {
+                    void handlePickMedia();
+                  }}
+                  type="button"
+                >
+                  Choose Local Recording
+                </button>
+              </div>
+
+              {analysisError ? (
+                <p className="analysis-error">{analysisError}</p>
+              ) : null}
+            </div>
           </article>
           <article className="utility-block">
-            <span className="detail-label">Planned sequence</span>
+            <span className="detail-label">What happens next</span>
             <ol className="plain-list ordered">
-              <li>Select a local recording.</li>
-              <li>Create a project session.</li>
-              <li>Dispatch analyzer orchestration.</li>
-              <li>Open candidate review on completion.</li>
+              <li>Desktop sends the local file path to the API bridge.</li>
+              <li>The analyzer inspects the file and persists one session in SQLite.</li>
+              <li>The returned session opens directly into timeline, queue, and detail review.</li>
             </ol>
+            <p>Supported inputs: {supportedInputExtensions.join(", ")}</p>
+            <p>Local API target: {apiBaseUrl}/api/projects/analyze</p>
+            {projectSession ? (
+              <p>
+                Loaded session: {projectSession.title} •{" "}
+                {projectSession.candidates.length} candidates •{" "}
+                {activeSessionReviewStateLabel ?? "Pending"}
+              </p>
+            ) : (
+              <p>No analyzer-backed session loaded yet.</p>
+            )}
           </article>
         </section>
       );
@@ -298,21 +1049,59 @@ export default function App() {
 
     if (activePage === "candidate-detail") {
       return (
-        <CandidateDetail
-          candidate={selectedCandidate}
-          decision={selectedDecision}
-          exportPreview={timestampPreview}
-          labelDraft={
-            selectedCandidate ? (labelDrafts[selectedCandidate.id] ?? "") : ""
-          }
-          onAccept={handleAccept}
-          onExpandResolution={handleExpandResolution}
-          onExpandSetup={handleExpandSetup}
-          onLabelChange={handleLabelChange}
-          onReject={handleReject}
-          onSaveLabel={handleSaveLabel}
-          profile={currentProfile}
-        />
+        <section className="desktop-review-stack">
+          {projectSession && activeSessionReviewState ? (
+            <SessionOverview
+              acceptedCount={acceptedCount}
+              pendingCount={pendingReviewCount}
+              profile={currentProfile}
+              rejectedCount={rejectedCount}
+              reviewStateLabel={activeSessionReviewStateLabel ?? "Pending"}
+              reviewStateTone={activeSessionReviewState}
+              selectedCandidateIndex={selectedCandidateIndex}
+              session={projectSession}
+            />
+          ) : null}
+          <CandidateTimeline
+            candidates={sessionCandidates}
+            decisionsByCandidateId={decisionsByCandidateId}
+            durationSeconds={projectSession?.mediaSource.durationSeconds ?? 0}
+            onSelectCandidate={handleSelectCandidate}
+            selectedCandidateId={selectedCandidate?.id ?? null}
+          />
+          <CandidateDetail
+            candidate={selectedCandidate}
+            candidateCount={sessionCandidates.length}
+            candidateIndex={Math.max(selectedCandidateIndex, 0)}
+            decision={selectedDecision}
+            exportPreview={timestampPreview}
+            reviewQueueMode={reviewQueueMode}
+            selectedCandidateVisibleInQueue={selectedCandidateVisibleInQueue}
+            transcript={projectSession?.transcript ?? []}
+            pendingCount={pendingReviewCount}
+            nextPendingSession={nextPendingSession}
+            labelDraft={
+              selectedCandidate ? (labelDrafts[selectedCandidate.id] ?? "") : ""
+            }
+            onAccept={handleAccept}
+            onExpandResolution={handleExpandResolution}
+            onExpandSetup={handleExpandSetup}
+            isSavingReview={isSavingReview}
+            onLabelChange={handleLabelChange}
+            onOpenNextPendingSession={() => {
+              void handleOpenNextPendingSession();
+            }}
+            onSelectNextVisible={handleSelectNextVisible}
+            onSelectPreviousVisible={handleSelectPreviousVisible}
+            onReject={handleReject}
+            onSaveLabel={handleSaveLabel}
+            onSelectNextPending={handleSelectNextPending}
+            onReturnToProjects={handleReturnToProjects}
+            profile={currentProfile}
+            reviewError={reviewError}
+            visibleCandidateCount={queueCandidates.length}
+          />
+        </section>
       );
     }
 
@@ -322,19 +1111,20 @@ export default function App() {
           <article className="utility-block">
             <span className="detail-label">Current analyzer defaults</span>
             <p>
-              Offline only: {String(projectSession.settings.runOfflineOnly)} •
-              micro window {projectSession.settings.microWindowSeconds}s •
+              Offline only:{" "}
+              {String(projectSession?.settings.runOfflineOnly ?? true)} • micro
+              window {projectSession?.settings.microWindowSeconds ?? 2}s •
               candidate window{" "}
-              {projectSession.settings.candidateWindowMinSeconds}-
-              {projectSession.settings.candidateWindowMaxSeconds}s
+              {projectSession?.settings.candidateWindowMinSeconds ?? 15}-
+              {projectSession?.settings.candidateWindowMaxSeconds ?? 45}s
             </p>
           </article>
           <article className="utility-block">
             <span className="detail-label">Storage direction</span>
             <p>
               SQLite schema v{sqliteSchemaVersion} with {sqliteTables.length}{" "}
-              planned tables. Desktop review actions still fall back to local
-              browser state in the scaffold.
+              planned tables. Desktop review actions now persist through the
+              local analyzer-backed SQLite session store.
             </p>
           </article>
         </section>
@@ -342,35 +1132,81 @@ export default function App() {
     }
 
     return (
-      <section className="desktop-review-grid">
-        <CandidateQueue
-          bandFilter={bandFilter}
-          candidates={filteredCandidates}
+      <section className="desktop-review-stack">
+        {projectSession && activeSessionReviewState ? (
+          <SessionOverview
+            acceptedCount={acceptedCount}
+            pendingCount={pendingReviewCount}
+            profile={currentProfile}
+            rejectedCount={rejectedCount}
+            reviewStateLabel={activeSessionReviewStateLabel ?? "Pending"}
+            reviewStateTone={activeSessionReviewState}
+            selectedCandidateIndex={selectedCandidateIndex}
+            session={projectSession}
+          />
+        ) : null}
+        <CandidateTimeline
+          candidates={sessionCandidates}
           decisionsByCandidateId={decisionsByCandidateId}
-          deferredSearchValue={deferredSearchValue}
-          onBandFilterChange={setBandFilter}
-          onSearchChange={handleSearchChange}
+          durationSeconds={projectSession?.mediaSource.durationSeconds ?? 0}
           onSelectCandidate={handleSelectCandidate}
-          profile={currentProfile}
-          searchValue={searchValue}
           selectedCandidateId={selectedCandidate?.id ?? null}
         />
+        <div className="desktop-review-grid">
+          <CandidateQueue
+            bandFilter={bandFilter}
+            candidates={queueCandidates}
+            decisionsByCandidateId={decisionsByCandidateId}
+            deferredSearchValue={deferredSearchValue}
+            matchingCandidateCount={searchFilteredCandidates.length}
+            onSelectNextPending={handleSelectNextPending}
+            onBandFilterChange={setBandFilter}
+            onReviewQueueModeChange={handleReviewQueueModeChange}
+            onSearchChange={handleSearchChange}
+            onSelectCandidate={handleSelectCandidate}
+            pendingCount={pendingReviewCount}
+            profile={currentProfile}
+            reviewQueueMode={reviewQueueMode}
+            reviewedCount={reviewedCount}
+            searchValue={searchValue}
+            selectedCandidateVisibleInQueue={selectedCandidateVisibleInQueue}
+            selectedCandidateId={selectedCandidate?.id ?? null}
+            totalCandidateCount={sessionCandidates.length}
+          />
 
-        <CandidateDetail
-          candidate={selectedCandidate}
-          decision={selectedDecision}
-          exportPreview={timestampPreview}
-          labelDraft={
-            selectedCandidate ? (labelDrafts[selectedCandidate.id] ?? "") : ""
-          }
-          onAccept={handleAccept}
-          onExpandResolution={handleExpandResolution}
-          onExpandSetup={handleExpandSetup}
-          onLabelChange={handleLabelChange}
-          onReject={handleReject}
-          onSaveLabel={handleSaveLabel}
-          profile={currentProfile}
-        />
+          <CandidateDetail
+            candidate={selectedCandidate}
+            candidateCount={sessionCandidates.length}
+            candidateIndex={Math.max(selectedCandidateIndex, 0)}
+            decision={selectedDecision}
+            exportPreview={timestampPreview}
+            reviewQueueMode={reviewQueueMode}
+            selectedCandidateVisibleInQueue={selectedCandidateVisibleInQueue}
+            transcript={projectSession?.transcript ?? []}
+            pendingCount={pendingReviewCount}
+            nextPendingSession={nextPendingSession}
+            labelDraft={
+              selectedCandidate ? (labelDrafts[selectedCandidate.id] ?? "") : ""
+            }
+            onAccept={handleAccept}
+            onExpandResolution={handleExpandResolution}
+            onExpandSetup={handleExpandSetup}
+            isSavingReview={isSavingReview}
+            onLabelChange={handleLabelChange}
+            onOpenNextPendingSession={() => {
+              void handleOpenNextPendingSession();
+            }}
+            onSelectNextVisible={handleSelectNextVisible}
+            onSelectPreviousVisible={handleSelectPreviousVisible}
+            onReject={handleReject}
+            onSaveLabel={handleSaveLabel}
+            onSelectNextPending={handleSelectNextPending}
+            onReturnToProjects={handleReturnToProjects}
+            profile={currentProfile}
+            reviewError={reviewError}
+            visibleCandidateCount={queueCandidates.length}
+          />
+        </div>
       </section>
     );
   }
@@ -382,15 +1218,14 @@ export default function App() {
 
       <LayoutShell
         activeId={activePage}
-        appName="Desktopapp"
+        appName="Desktop"
         aside={
           <div className="desktop-aside-stack">
             <article className="utility-block">
               <span className="detail-label">Current source</span>
-              <p>{selectedMediaPath}</p>
+              <p>{selectedMediaPath || "No local recording selected yet."}</p>
               <p>
-                {projectSession.candidates.length} candidates • {acceptedCount}{" "}
-                accepted
+                {sessionCandidates.length} candidates • {acceptedCount} accepted
               </p>
             </article>
             <TranscriptSnippetBlock
@@ -404,11 +1239,11 @@ export default function App() {
               <span className="detail-label">Export preview</span>
               <details>
                 <summary>Timestamp export</summary>
-                <pre>{timestampPreview}</pre>
+                <pre>{timestampPreview || "Run an analysis to generate export data."}</pre>
               </details>
               <details>
                 <summary>JSON candidate export</summary>
-                <pre>{jsonPreview}</pre>
+                <pre>{jsonPreview || "Run an analysis to generate export data."}</pre>
               </details>
             </article>
           </div>
@@ -419,15 +1254,292 @@ export default function App() {
         title="HighlightSmith Desktop"
       >
         <ShellHeader
+          activeSessionStateLabel={
+            activeSessionReviewStateLabel
+              ? activeSessionReviewStateLabel
+              : normalizedSelectedMediaPath
+                ? "Local VOD staged for analysis"
+                : "Choose a local file or reopen a backlog session."
+          }
           acceptedCount={acceptedCount}
           currentProfileLabel={currentProfile.label}
+          currentSessionLabel={projectSession?.title ?? "No session loaded"}
           onPickMedia={handlePickMedia}
           onReloadMock={handleReloadMock}
-          selectedMediaPath={selectedMediaPath}
-          totalCount={projectSession.candidates.length}
+          pendingCount={pendingReviewCount}
+          rejectedCount={rejectedCount}
+          selectedMediaPath={selectedMediaPath || "No local recording selected yet."}
+          totalCount={sessionCandidates.length}
         />
         {renderDesktopPage()}
       </LayoutShell>
     </div>
   );
+}
+
+function buildSuggestedSessionTitle(sourcePath: string): string {
+  return extractSourceName(sourcePath).replace(/\.[^.]+$/, "");
+}
+
+function extractSourceName(sourcePath: string): string {
+  return sourcePath.split(/[\\/]/).pop() ?? sourcePath;
+}
+
+function buildAnalysisLaunchState(sourcePath: string): AnalysisReadiness {
+  if (!sourcePath) {
+    return {
+      canAnalyze: false,
+      detail: "Choose a supported local recording before starting analysis.",
+      headline: "Select a local recording",
+      statusLabel: "Needs source",
+      tone: "blocked",
+    };
+  }
+
+  if (!isSupportedInput(sourcePath)) {
+    return {
+      canAnalyze: false,
+      detail: `Unsupported media extension. Use one of: ${supportedInputExtensions.join(", ")}`,
+      headline: "Unsupported input type",
+      statusLabel: "Fix input",
+      tone: "blocked",
+    };
+  }
+
+  return {
+    canAnalyze: true,
+    detail:
+      "Desktop will send this local file path to the API bridge, then open the persisted analyzer session directly into review.",
+    headline: "Ready to analyze locally",
+    statusLabel: "Ready",
+    tone: "ready",
+  };
+}
+
+function buildLabelDrafts(session: ProjectSession): Record<string, string> {
+  const decisionLabelsByCandidateId = Object.fromEntries(
+    session.reviewDecisions
+      .filter((decision) => Boolean(decision.label))
+      .map((decision) => [decision.candidateId, decision.label as string]),
+  );
+
+  return Object.fromEntries(
+    session.candidates.map((candidate) => [
+      candidate.id,
+      decisionLabelsByCandidateId[candidate.id] ?? candidate.editableLabel,
+    ]),
+  );
+}
+
+async function fetchProjectSession(
+  apiBaseUrl: string,
+  sessionId: string,
+): Promise<ProjectSession> {
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/projects/${encodeURIComponent(sessionId)}`,
+    apiBaseUrl,
+    undefined,
+    "Unable to load the local session.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | ProjectSession
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Session load failed",
+    );
+  }
+
+  return projectSessionSchema.parse(payload);
+}
+
+async function fetchProjectSummaries(
+  apiBaseUrl: string,
+): Promise<ProjectSessionSummary[]> {
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/projects`,
+    apiBaseUrl,
+    undefined,
+    "Unable to load persisted sessions.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | ProjectSessionSummary[]
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Project list load failed",
+    );
+  }
+
+  return projectSessionSummarySchema.array().parse(payload);
+}
+
+function upsertProjectSummary(
+  current: ProjectSessionSummary[],
+  nextSummary: ProjectSessionSummary,
+): ProjectSessionSummary[] {
+  const merged = [
+    nextSummary,
+    ...current.filter((summary) => summary.sessionId !== nextSummary.sessionId),
+  ];
+
+  return merged.sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
+}
+
+async function fetchWithLocalApiMessage(
+  input: string,
+  apiBaseUrl: string,
+  init: RequestInit | undefined,
+  failurePrefix: string,
+): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new Error(
+      `${failurePrefix} Unable to reach the local API at ${apiBaseUrl}. Start the API bridge and analyzer, then try again.`,
+    );
+  }
+}
+
+function formatSessionReviewState(
+  sessionReviewState: ReturnType<typeof deriveSessionReviewState>,
+): string {
+  if (sessionReviewState === "REVIEWED") {
+    return "Reviewed";
+  }
+
+  if (sessionReviewState === "IN_PROGRESS") {
+    return "In progress";
+  }
+
+  return "Pending";
+}
+
+function buildSessionOpenLabel(summary: ProjectSessionSummary): string {
+  const sessionReviewState = deriveSessionReviewState(summary);
+  if (sessionReviewState === "REVIEWED") {
+    return "Open reviewed session";
+  }
+
+  if (sessionReviewState === "IN_PROGRESS") {
+    return "Resume review";
+  }
+
+  return "Start review";
+}
+
+function formatSessionCompletion(summary: ProjectSessionSummary): number {
+  if (summary.candidateCount === 0) {
+    return 0;
+  }
+
+  return Math.round(
+    (reviewedCandidateCount(summary) / summary.candidateCount) * 100,
+  );
+}
+
+function buildProjectCoverageCopy(summary: ProjectSessionSummary): string {
+  const flagLabels = summary.analysisCoverage.flags
+    .slice(0, 2)
+    .map((flag) => formatAnalysisCoverageFlag(flag));
+  const conciseReason = flagLabels.length > 0 ? flagLabels.join(" • ") : "No major coverage warnings";
+
+  return `Coverage ${formatAnalysisCoverageBand(summary.analysisCoverage.band)} • ${conciseReason}`;
+}
+
+function findFirstPendingCandidateId(session: ProjectSession): string | null {
+  return (
+    session.candidates.find((candidate) =>
+      isCandidatePending(session, candidate.id),
+    )?.id ?? null
+  );
+}
+
+function findNextPendingCandidateId(
+  session: ProjectSession,
+  currentCandidateId: string | null,
+): string | null {
+  return findNextCandidateId(session, currentCandidateId, (candidateId) =>
+    isCandidatePending(session, candidateId),
+  );
+}
+
+function findNextCandidateId(
+  session: ProjectSession,
+  currentCandidateId: string | null,
+  predicate?: (candidateId: string) => boolean,
+): string | null {
+  if (session.candidates.length === 0) {
+    return null;
+  }
+
+  const startIndex = currentCandidateId
+    ? session.candidates.findIndex((candidate) => candidate.id === currentCandidateId)
+    : -1;
+
+  for (let offset = 1; offset <= session.candidates.length; offset += 1) {
+    const candidate =
+      session.candidates[
+        (Math.max(startIndex, -1) + offset) % session.candidates.length
+      ];
+    if (!predicate || predicate(candidate.id)) {
+      return candidate.id;
+    }
+  }
+
+  return null;
+}
+
+function findAdjacentVisibleCandidateId(
+  candidates: Array<{
+    id: string;
+  }>,
+  currentCandidateId: string | null,
+  direction: -1 | 1,
+): string | null {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const currentIndex = currentCandidateId
+    ? candidates.findIndex((candidate) => candidate.id === currentCandidateId)
+    : -1;
+
+  if (currentIndex === -1) {
+    return direction === 1
+      ? candidates[0]?.id ?? null
+      : candidates[candidates.length - 1]?.id ?? null;
+  }
+
+  const nextIndex =
+    (currentIndex + direction + candidates.length) % candidates.length;
+  return candidates[nextIndex]?.id ?? null;
+}
+
+function formatSummaryTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }

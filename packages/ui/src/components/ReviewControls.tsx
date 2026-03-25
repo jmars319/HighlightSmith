@@ -5,6 +5,7 @@ type ReviewControlsProps = {
   onReject?: () => void;
   onRetime?: () => void;
   onRelabel?: () => void;
+  disabled?: boolean;
 };
 
 export function ReviewControls({
@@ -14,28 +15,30 @@ export function ReviewControls({
   onReject,
   onRetime,
   onRelabel,
+  disabled = false,
 }: ReviewControlsProps) {
   return (
     <section className="hs-block">
       <span className="hs-block-label">Review controls</span>
       <div className="hs-controls-row">
-        <button onClick={onAccept} type="button">
+        <button disabled={disabled} onClick={onAccept} type="button">
           Accept
         </button>
-        <button onClick={onReject} type="button">
+        <button disabled={disabled} onClick={onReject} type="button">
           Reject
         </button>
-        <button onClick={onRetime} type="button">
+        <button disabled={disabled} onClick={onRetime} type="button">
           Adjust
         </button>
       </div>
       <div className="hs-controls-row">
         <input
+          disabled={disabled}
           onChange={(event) => onLabelChange(event.target.value)}
           type="text"
           value={labelDraft}
         />
-        <button onClick={onRelabel} type="button">
+        <button disabled={disabled} onClick={onRelabel} type="button">
           Save label
         </button>
       </div>

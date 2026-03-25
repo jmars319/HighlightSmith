@@ -1,66 +1,120 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   CandidateWindow,
-  ReviewDecision,
+  ProjectSession,
   ReviewAction,
+  ReviewDecision,
+} from "@highlightsmith/shared-types";
+import {
+  projectSessionSchema,
+  reviewUpdateRequestSchema,
 } from "@highlightsmith/shared-types";
 
-const storageKeyPrefix = "highlightsmith.review.decisions";
+type ReviewDecisionOverrides = Pick<
+  ReviewDecision,
+  "label" | "adjustedSegment" | "notes"
+>;
 
-function buildDecisionId(candidateId: string, action: ReviewAction): string {
-  return `${candidateId}:${action}:${Date.now()}`;
-}
+type UseReviewStateOptions = {
+  apiBaseUrl: string;
+  projectSession: ProjectSession | null;
+  onProjectSessionChange: (
+    nextSession: ProjectSession,
+    context: {
+      action: ReviewAction;
+      candidateId: string;
+    },
+  ) => void;
+};
 
-export function useReviewState(projectSessionId: string) {
-  const storageKey = `${storageKeyPrefix}.${projectSessionId}`;
+export function useReviewState({
+  apiBaseUrl,
+  projectSession,
+  onProjectSessionChange,
+}: UseReviewStateOptions) {
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [isSavingReview, setIsSavingReview] = useState(false);
 
-  const [decisionsByCandidateId, setDecisionsByCandidateId] = useState<
-    Record<string, ReviewDecision>
-  >(() => {
-    const rawValue = window.localStorage.getItem(storageKey);
-    if (!rawValue) {
-      return {};
-    }
-
-    try {
-      return JSON.parse(rawValue) as Record<string, ReviewDecision>;
-    } catch {
-      return {};
-    }
-  });
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify(decisionsByCandidateId),
+  const decisionsByCandidateId = useMemo<Record<string, ReviewDecision>>(() => {
+    return Object.fromEntries(
+      (projectSession?.reviewDecisions ?? []).map((decision) => [
+        decision.candidateId,
+        decision,
+      ]),
     );
-  }, [decisionsByCandidateId, storageKey]);
+  }, [projectSession]);
 
-  function upsertDecision(
+  async function upsertDecision(
     candidate: CandidateWindow,
     action: ReviewAction,
-    overrides: Partial<ReviewDecision> = {},
+    overrides: ReviewDecisionOverrides = {},
   ) {
-    setDecisionsByCandidateId((current) => ({
-      ...current,
-      [candidate.id]: {
-        id: buildDecisionId(candidate.id, action),
-        projectSessionId,
-        candidateId: candidate.id,
+    if (!projectSession || action === "PENDING") {
+      return;
+    }
+
+    const request = reviewUpdateRequestSchema.parse({
+      sessionId: projectSession.id,
+      candidateId: candidate.id,
+      action,
+      label: overrides.label,
+      adjustedSegment: overrides.adjustedSegment,
+      notes: overrides.notes,
+      timestamp: new Date().toISOString(),
+    });
+
+    setIsSavingReview(true);
+    setReviewError(null);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/projects/review`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(request),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            message?: string;
+          }
+        | ProjectSession
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload && "message" in payload && payload.message
+            ? payload.message
+            : "Review update failed",
+        );
+      }
+
+      const nextSession = projectSessionSchema.parse(payload);
+      onProjectSessionChange(nextSession, {
         action,
-        createdAt: new Date().toISOString(),
-        ...overrides,
-      },
-    }));
+        candidateId: candidate.id,
+      });
+    } catch (error) {
+      setReviewError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected review persistence failure while contacting the local API",
+      );
+    } finally {
+      setIsSavingReview(false);
+    }
   }
 
-  function clearAll() {
-    setDecisionsByCandidateId({});
+  function clearError() {
+    setReviewError(null);
   }
 
   return {
     decisionsByCandidateId,
     upsertDecision,
-    clearAll,
+    reviewError,
+    isSavingReview,
+    clearError,
   };
 }

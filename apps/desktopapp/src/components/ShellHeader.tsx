@@ -1,17 +1,25 @@
 type ShellHeaderProps = {
   currentProfileLabel: string;
+  currentSessionLabel: string;
   selectedMediaPath: string;
   acceptedCount: number;
+  rejectedCount: number;
+  pendingCount: number;
   totalCount: number;
+  activeSessionStateLabel: string;
   onPickMedia: () => Promise<void> | void;
   onReloadMock: () => void;
 };
 
 export function ShellHeader({
   currentProfileLabel,
+  currentSessionLabel,
   selectedMediaPath,
   acceptedCount,
+  rejectedCount,
+  pendingCount,
   totalCount,
+  activeSessionStateLabel,
   onPickMedia,
   onReloadMock,
 }: ShellHeaderProps) {
@@ -33,10 +41,20 @@ export function ShellHeader({
           <strong>{currentProfileLabel}</strong>
         </div>
         <div className="stat-card">
-          <span className="stat-label">Reviewed</span>
+          <span className="stat-label">Session</span>
           <strong>
-            {acceptedCount}/{totalCount} accepted
+            {currentSessionLabel}
           </strong>
+          <p>{activeSessionStateLabel}</p>
+        </div>
+        <div className="stat-card">
+          <span className="stat-label">Review progress</span>
+          <strong>
+            {totalCount === 0 ? "No queue loaded" : `${totalCount - pendingCount}/${totalCount} reviewed`}
+          </strong>
+          <p>
+            {acceptedCount} accepted • {rejectedCount} rejected • {pendingCount} pending
+          </p>
         </div>
         <div className="stat-card path-card">
           <span className="stat-label">Current source</span>
@@ -55,7 +73,7 @@ export function ShellHeader({
             onClick={onReloadMock}
             type="button"
           >
-            Reload Mock Session
+            Load Demo Session
           </button>
         </div>
       </div>
