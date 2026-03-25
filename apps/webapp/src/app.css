@@ -45,6 +45,13 @@ body {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.web-panel-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
 .web-label {
   display: block;
   font-size: 0.76rem;
@@ -60,4 +67,53 @@ body {
 .web-panel p {
   margin: 8px 0 0;
   color: rgba(255, 255, 255, 0.74);
+}
+
+.web-summary-card {
+  display: grid;
+  gap: 8px;
+}
+
+.web-summary-progress {
+  margin-top: 6px;
+}
+
+.web-summary-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.web-summary-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f2a75e, #ffd4a5);
+}
+
+.web-state-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 90px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.web-state-pill.pending {
+  background: rgba(91, 149, 161, 0.22);
+  color: #c5ecf2;
+}
+
+.web-state-pill.in-progress {
+  background: rgba(242, 167, 94, 0.18);
+  color: #ffd6a8;
+}
+
+.web-state-pill.reviewed {
+  background: rgba(198, 214, 121, 0.18);
+  color: #eef7b7;
 }
