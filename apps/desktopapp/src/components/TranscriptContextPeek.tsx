@@ -94,7 +94,7 @@ export function TranscriptContextPeek({
                         {formatLongTime(chunk.startSeconds)} to{" "}
                         {formatLongTime(chunk.endSeconds)}
                       </span>
-                      {chunk.confidence !== undefined ? (
+                      {chunk.confidence !== undefined && chunk.confidence > 0.05 ? (
                         <span>{percentage(chunk.confidence)}</span>
                       ) : null}
                     </div>

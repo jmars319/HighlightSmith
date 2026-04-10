@@ -66,6 +66,15 @@ class AnalyzerScaffoldTests(unittest.TestCase):
                     for note in session.media_source.ingest_notes
                 )
             )
+            self.assertTrue(
+                all(
+                    candidate.transcript_snippet.startswith("Seeded local anchor near")
+                    for candidate in session.candidates
+                )
+            )
+            self.assertTrue(
+                all("near" in candidate.editable_label.lower() for candidate in session.candidates)
+            )
             self.assertEqual(session.analysis_coverage.band.value, "PARTIAL")
             self.assertIn(
                 "SEEDED_TRANSCRIPT",

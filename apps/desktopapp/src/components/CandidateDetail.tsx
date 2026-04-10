@@ -150,7 +150,7 @@ export function CandidateDetail({
           </p>
         </article>
 
-        <article className="detail-card">
+        <article className="detail-card narrative-card">
           <span className="detail-label">Narrative summary</span>
           <strong>{summarizeCandidate(candidate, profile)}</strong>
           <p>

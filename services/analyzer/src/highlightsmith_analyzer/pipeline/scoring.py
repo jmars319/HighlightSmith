@@ -82,7 +82,6 @@ def generate_candidate_seeds(
         ]
 
         contributions: list[ScoreContribution] = []
-        label = "Potential highlight"
         context_required = False
 
         if "wait wait" in lowered or "no way" in lowered:
@@ -94,8 +93,6 @@ def generate_candidate_seeds(
                     direction="POSITIVE",
                 )
             )
-            label = "Clutch escape payoff"
-
         if "here we go" in lowered or "push now" in lowered:
             contributions.append(
                 ScoreContribution(
@@ -113,8 +110,6 @@ def generate_candidate_seeds(
                     direction="POSITIVE",
                 )
             )
-            label = "Push call before engagement"
-
         if "we survived" in lowered:
             contributions.append(
                 ScoreContribution(
@@ -132,8 +127,6 @@ def generate_candidate_seeds(
                     direction="POSITIVE",
                 )
             )
-            label = "Near-wipe recovery"
-
         if "this might be bad" in lowered:
             contributions.append(
                 ScoreContribution(
@@ -159,7 +152,6 @@ def generate_candidate_seeds(
                     direction="NEGATIVE",
                 )
             )
-            label = "Puzzle tension setup"
             context_required = True
 
         if overlapping_features:
@@ -216,7 +208,11 @@ def generate_candidate_seeds(
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
                 transcript_snippet=chunk.text,
-                editable_label=label,
+                editable_label=_derive_candidate_label(
+                    chunk,
+                    contributions,
+                    context_required,
+                ),
                 score_breakdown=_deduplicate_contributions(contributions),
                 context_required=context_required,
             )
@@ -475,3 +471,49 @@ def _average(values: list[float], *, fallback: float) -> float:
         return fallback
 
     return sum(values) / len(values)
+
+
+def _derive_candidate_label(
+    chunk: TranscriptChunk,
+    contributions: list[ScoreContribution],
+    context_required: bool,
+) -> str:
+    reason_codes = [contribution.reason_code for contribution in contributions]
+
+    if context_required or ReasonCode.CONTEXT_REQUIRED in reason_codes:
+        cue = "Context-heavy window"
+    elif (
+        ReasonCode.STRUCTURE_RESOLUTION in reason_codes
+        or ReasonCode.STRUCTURE_CONSEQUENCE in reason_codes
+    ) and (
+        ReasonCode.OVERLAP_SPIKE in reason_codes
+        or ReasonCode.LAUGHTER_BURST in reason_codes
+        or ReasonCode.LOUDNESS_SPIKE in reason_codes
+    ):
+        cue = "Payoff spike"
+    elif (
+        ReasonCode.STRUCTURE_SETUP in reason_codes
+        and ReasonCode.TACTICAL_NARRATION in reason_codes
+    ):
+        cue = "Setup cue"
+    elif ReasonCode.REACTION_PHRASE in reason_codes:
+        cue = "Reaction cue"
+    elif ReasonCode.OVERLAP_SPIKE in reason_codes:
+        cue = "Overlap spike"
+    elif ReasonCode.LAUGHTER_BURST in reason_codes:
+        cue = "Laughter burst"
+    elif ReasonCode.LOUDNESS_SPIKE in reason_codes:
+        cue = "Loudness spike"
+    elif ReasonCode.COMMENTARY_DENSITY in reason_codes:
+        cue = "Commentary cluster"
+    else:
+        cue = "Exploratory marker"
+
+    return f"{cue} near {_format_short_time(chunk.start_seconds)}"
+
+
+def _format_short_time(seconds: float) -> str:
+    whole_seconds = max(0, int(round(seconds)))
+    hours, remainder = divmod(whole_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"

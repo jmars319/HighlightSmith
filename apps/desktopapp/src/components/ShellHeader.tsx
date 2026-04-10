@@ -26,12 +26,11 @@ export function ShellHeader({
   return (
     <header className="hero-panel">
       <div>
-        <p className="eyebrow">Local-first highlight scouting</p>
-        <h1>HighlightSmith</h1>
+        <p className="eyebrow">Desktop backlog workstation</p>
+        <h1 className="hero-title">Review long-form recordings locally</h1>
         <p className="hero-copy">
-          Signal-driven review assistant for long-form recordings. Candidates
-          are surfaced with explainable reason codes. Final editorial control
-          stays with the creator.
+          Run one local VOD through analysis, inspect suggested moments, and
+          keep final editorial control while working through a backlog.
         </p>
       </div>
 

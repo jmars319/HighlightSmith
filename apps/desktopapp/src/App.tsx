@@ -880,56 +880,29 @@ export default function App() {
 
     if (activePage === "new-analysis") {
       return (
-        <section className="desktop-placeholder-grid">
-          <article className="utility-block">
-            <span className="detail-label">Analysis launch control</span>
-            <h2>Analyze a local backlog VOD</h2>
-            <p>
-              Pick one local recording, confirm the source path and profile, and
-              HighlightSmith will create one persisted review session for it.
-            </p>
-            <article
-              className={`analysis-readiness-card ${analysisLaunchState.tone}`}
-            >
-              <div className="analysis-readiness-header">
-                <div>
-                  <span className="detail-label">Launch readiness</span>
-                  <strong>{analysisLaunchState.headline}</strong>
-                  <p className="analysis-readiness-copy">
-                    {analysisLaunchState.detail}
-                  </p>
-                </div>
-                <span
-                  className={`analysis-readiness-pill ${analysisLaunchState.tone}`}
-                >
-                  {analysisLaunchState.statusLabel}
-                </span>
+        <section className="analysis-launch-layout">
+          <article className="utility-block analysis-primary-card">
+            <div className="panel-header analysis-primary-header">
+              <div>
+                <span className="detail-label">Analysis launch</span>
+                <h2>Analyze a local backlog VOD</h2>
+                <p>
+                  Stage one local recording, confirm the profile and session
+                  title, then open the returned session directly into review.
+                </p>
               </div>
-              <div className="analysis-summary-grid">
-                <article className="analysis-summary-card">
-                  <span className="detail-label">Selected source</span>
-                  <strong>{analysisSourceName ?? "No local recording staged"}</strong>
-                  <p className="analysis-summary-path">
-                    {normalizedSelectedMediaPath ||
-                      "Choose a supported local VOD path or use the file picker."}
-                  </p>
-                </article>
-                <article className="analysis-summary-card">
-                  <span className="detail-label">Profile</span>
-                  <strong>{selectedDraftProfile.label}</strong>
-                  <p>{selectedDraftProfile.description}</p>
-                </article>
-                <article className="analysis-summary-card">
-                  <span className="detail-label">Session title</span>
-                  <strong>{analysisTitlePreview}</strong>
-                  <p>
-                    {analysisTitle.trim()
-                      ? "Using the custom title you entered."
-                      : "Blank title fields fall back to the source file name."}
-                  </p>
-                </article>
-              </div>
-            </article>
+              <button
+                className="button-secondary"
+                disabled={isAnalyzing}
+                onClick={() => {
+                  void handlePickMedia();
+                }}
+                type="button"
+              >
+                Choose Local Recording
+              </button>
+            </div>
+
             <div className="analysis-form">
               <label className="search-block">
                 <span className="input-label">Local media path</span>
@@ -959,44 +932,72 @@ export default function App() {
                 </small>
               </label>
 
-              <label className="search-block">
-                <span className="input-label">Profile</span>
-                <select
-                  className="search-input"
-                  disabled={isAnalyzing}
-                  onChange={(event) => {
-                    setAnalysisProfileId(event.target.value);
-                    setAnalysisError(null);
-                  }}
-                  value={analysisProfileId}
-                >
-                  {contentProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="analysis-inline-grid">
+                <label className="search-block">
+                  <span className="input-label">Profile</span>
+                  <select
+                    className="search-input"
+                    disabled={isAnalyzing}
+                    onChange={(event) => {
+                      setAnalysisProfileId(event.target.value);
+                      setAnalysisError(null);
+                    }}
+                    value={analysisProfileId}
+                  >
+                    {contentProfiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label className="search-block">
-                <span className="input-label">Session title</span>
-                <input
-                  className="search-input"
-                  disabled={isAnalyzing}
-                  onChange={(event) => {
-                    setAnalysisTitle(event.target.value);
-                    setAnalysisError(null);
-                  }}
-                  placeholder="Optional: Backlog pass 01"
-                  type="text"
-                  value={analysisTitle}
-                />
-                <small className="analysis-field-note">
-                  Leave blank to reuse the source file name as the session title.
-                </small>
-              </label>
+                <label className="search-block">
+                  <span className="input-label">Session title</span>
+                  <input
+                    className="search-input"
+                    disabled={isAnalyzing}
+                    onChange={(event) => {
+                      setAnalysisTitle(event.target.value);
+                      setAnalysisError(null);
+                    }}
+                    placeholder="Optional: Backlog pass 01"
+                    type="text"
+                    value={analysisTitle}
+                  />
+                  <small className="analysis-field-note">
+                    Leave blank to reuse the source file name as the session
+                    title.
+                  </small>
+                </label>
+              </div>
 
-              <div className="hero-actions">
+              <div className="analysis-summary-grid analysis-summary-grid-compact">
+                <article className="analysis-summary-card">
+                  <span className="detail-label">Selected source</span>
+                  <strong>{analysisSourceName ?? "No local recording staged"}</strong>
+                  <p className="analysis-summary-path">
+                    {normalizedSelectedMediaPath ||
+                      "Choose a supported local VOD path or use the file picker."}
+                  </p>
+                </article>
+                <article className="analysis-summary-card">
+                  <span className="detail-label">Profile</span>
+                  <strong>{selectedDraftProfile.label}</strong>
+                  <p>{selectedDraftProfile.description}</p>
+                </article>
+                <article className="analysis-summary-card">
+                  <span className="detail-label">Session title</span>
+                  <strong>{analysisTitlePreview}</strong>
+                  <p>
+                    {analysisTitle.trim()
+                      ? "Using your custom session title."
+                      : "Blank titles fall back to the source file name."}
+                  </p>
+                </article>
+              </div>
+
+              <div className="analysis-primary-actions">
                 <button
                   className="button-primary"
                   disabled={isAnalyzing || !analysisLaunchState.canAnalyze}
@@ -1007,16 +1008,10 @@ export default function App() {
                 >
                   {isAnalyzing ? "Analyzing local VOD..." : "Run Local Analysis"}
                 </button>
-                <button
-                  className="button-secondary"
-                  disabled={isAnalyzing}
-                  onClick={() => {
-                    void handlePickMedia();
-                  }}
-                  type="button"
-                >
-                  Choose Local Recording
-                </button>
+                <p className="analysis-support-copy">
+                  HighlightSmith will create one persisted session and open it
+                  directly into timeline, queue, and detail review.
+                </p>
               </div>
 
               {analysisError ? (
@@ -1024,25 +1019,52 @@ export default function App() {
               ) : null}
             </div>
           </article>
-          <article className="utility-block">
-            <span className="detail-label">What happens next</span>
-            <ol className="plain-list ordered">
-              <li>Desktop sends the local file path to the API bridge.</li>
-              <li>The analyzer inspects the file and persists one session in SQLite.</li>
-              <li>The returned session opens directly into timeline, queue, and detail review.</li>
-            </ol>
-            <p>Supported inputs: {supportedInputExtensions.join(", ")}</p>
-            <p>Local API target: {apiBaseUrl}/api/projects/analyze</p>
-            {projectSession ? (
-              <p>
-                Loaded session: {projectSession.title} •{" "}
-                {projectSession.candidates.length} candidates •{" "}
-                {activeSessionReviewStateLabel ?? "Pending"}
-              </p>
-            ) : (
-              <p>No analyzer-backed session loaded yet.</p>
-            )}
-          </article>
+
+          <div className="analysis-secondary-stack">
+            <article
+              className={`analysis-readiness-card ${analysisLaunchState.tone}`}
+            >
+              <div className="analysis-readiness-header">
+                <div>
+                  <span className="detail-label">Launch readiness</span>
+                  <strong>{analysisLaunchState.headline}</strong>
+                  <p className="analysis-readiness-copy">
+                    {analysisLaunchState.detail}
+                  </p>
+                </div>
+                <span
+                  className={`analysis-readiness-pill ${analysisLaunchState.tone}`}
+                >
+                  {analysisLaunchState.statusLabel}
+                </span>
+              </div>
+            </article>
+
+            <article className="utility-block">
+              <span className="detail-label">What happens next</span>
+              <ol className="plain-list ordered">
+                <li>Desktop sends the local file path to the API bridge.</li>
+                <li>
+                  The analyzer inspects the file and persists one session in
+                  SQLite.
+                </li>
+                <li>
+                  The returned session opens directly into timeline, queue, and
+                  detail review.
+                </li>
+              </ol>
+              <p>Local API target: {apiBaseUrl}/api/projects/analyze</p>
+              {projectSession ? (
+                <p>
+                  Loaded session: {projectSession.title} •{" "}
+                  {projectSession.candidates.length} candidates •{" "}
+                  {activeSessionReviewStateLabel ?? "Pending"}
+                </p>
+              ) : (
+                <p>No analyzer-backed session loaded yet.</p>
+              )}
+            </article>
+          </div>
         </section>
       );
     }
@@ -1218,7 +1240,7 @@ export default function App() {
 
       <LayoutShell
         activeId={activePage}
-        appName="Desktop"
+        appName="HighlightSmith"
         aside={
           <div className="desktop-aside-stack">
             <article className="utility-block">
@@ -1250,8 +1272,8 @@ export default function App() {
         }
         navItems={desktopPages}
         onSelect={(pageId) => setActivePage(pageId as DesktopPage)}
-        subtitle="Primary local-first surface for project creation, analysis launch, and candidate review."
-        title="HighlightSmith Desktop"
+        subtitle="Local-first analysis launch, session review, and backlog clearing."
+        title="Desktop Review"
       >
         <ShellHeader
           activeSessionStateLabel={

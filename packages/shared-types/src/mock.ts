@@ -36,29 +36,29 @@ export function createMockProjectSession(): ProjectSession {
         id: "chunk_001",
         startSeconds: 318,
         endSeconds: 322,
-        text: "wait wait no way that worked",
-        confidence: 0.97,
+        text: "Seeded local anchor near 00:05:20",
+        confidence: 0,
       },
       {
         id: "chunk_002",
         startSeconds: 1458,
         endSeconds: 1462,
-        text: "okay here we go push now",
-        confidence: 0.93,
+        text: "Seeded local anchor near 00:24:20",
+        confidence: 0,
       },
       {
         id: "chunk_003",
         startSeconds: 4240,
         endSeconds: 4244,
-        text: "we survived that by inches",
-        confidence: 0.96,
+        text: "Seeded local anchor near 01:10:42",
+        confidence: 0,
       },
       {
         id: "chunk_004",
         startSeconds: 6112,
         endSeconds: 6117,
-        text: "this might be bad unless that puzzle path loops back",
-        confidence: 0.88,
+        text: "Seeded local anchor near 01:41:56",
+        confidence: 0,
       },
     ],
     speechRegions: [
@@ -170,7 +170,7 @@ export function createMockProjectSession(): ProjectSession {
           "LOUDNESS_SPIKE",
           "STRUCTURE_RESOLUTION",
         ],
-        transcriptSnippet: "wait wait no way that worked",
+        transcriptSnippet: "Seeded local anchor near 00:05:20",
         scoreBreakdown: [
           {
             reasonCode: "REACTION_PHRASE",
@@ -192,7 +192,7 @@ export function createMockProjectSession(): ProjectSession {
           },
         ],
         contextRequired: false,
-        editableLabel: "Clutch escape payoff",
+        editableLabel: "Reaction cue near 00:05:18",
         reviewTags: [],
       },
       {
@@ -215,7 +215,7 @@ export function createMockProjectSession(): ProjectSession {
           "COMMENTARY_DENSITY",
           "STRUCTURE_SETUP",
         ],
-        transcriptSnippet: "okay here we go push now",
+        transcriptSnippet: "Seeded local anchor near 00:24:20",
         scoreBreakdown: [
           {
             reasonCode: "TACTICAL_NARRATION",
@@ -237,7 +237,7 @@ export function createMockProjectSession(): ProjectSession {
           },
         ],
         contextRequired: false,
-        editableLabel: "Push call before engagement",
+        editableLabel: "Setup cue near 00:24:08",
         reviewTags: [],
       },
       {
@@ -260,7 +260,7 @@ export function createMockProjectSession(): ProjectSession {
           "LAUGHTER_BURST",
           "STRUCTURE_CONSEQUENCE",
         ],
-        transcriptSnippet: "we survived that by inches",
+        transcriptSnippet: "Seeded local anchor near 01:10:42",
         scoreBreakdown: [
           {
             reasonCode: "OVERLAP_SPIKE",
@@ -282,7 +282,7 @@ export function createMockProjectSession(): ProjectSession {
           },
         ],
         contextRequired: false,
-        editableLabel: "Near-wipe recovery",
+        editableLabel: "Payoff spike near 01:10:34",
         reviewTags: [],
       },
       {
@@ -301,8 +301,7 @@ export function createMockProjectSession(): ProjectSession {
         confidenceBand: "EXPERIMENTAL",
         scoreEstimate: 0.41,
         reasonCodes: ["CONTEXT_REQUIRED", "STRUCTURE_SETUP", "LOW_INFORMATION"],
-        transcriptSnippet:
-          "this might be bad unless that puzzle path loops back",
+        transcriptSnippet: "Seeded local anchor near 01:41:56",
         scoreBreakdown: [
           {
             reasonCode: "STRUCTURE_SETUP",
@@ -324,7 +323,7 @@ export function createMockProjectSession(): ProjectSession {
           },
         ],
         contextRequired: true,
-        editableLabel: "Puzzle tension setup",
+        editableLabel: "Context-heavy window near 01:41:44",
         reviewTags: ["LOW_INFORMATION_RISK"],
       },
     ],
@@ -362,8 +361,7 @@ export function createMockProjectSessions(): ProjectSession[] {
         ...candidate,
         id: `stealth_candidate_${index + 1}`,
         confidenceBand: index === 0 ? "MEDIUM" : "LOW",
-        editableLabel:
-          index === 0 ? "Alert dodge setup" : "Experimental flank path",
+        editableLabel: candidate.editableLabel,
       })),
       reviewDecisions: [],
       createdAt: "2026-03-14T11:00:00.000Z",
@@ -391,12 +389,7 @@ export function createMockProjectSessions(): ProjectSession[] {
       candidates: primary.candidates.slice(1, 4).map((candidate, index) => ({
         ...candidate,
         id: `exploration_candidate_${index + 1}`,
-        editableLabel:
-          index === 0
-            ? "Clue reveal"
-            : index === 1
-              ? "Route realization"
-              : "Context-heavy setup",
+        editableLabel: candidate.editableLabel,
       })),
       reviewDecisions: [],
       createdAt: "2026-03-15T08:18:00.000Z",
@@ -412,7 +405,7 @@ export function createMockReviewHistory(): ReviewDecision[] {
       projectSessionId: "session_demo_local",
       candidateId: "candidate_001",
       action: "ACCEPT",
-      label: "Clutch escape payoff",
+      label: "Reaction cue near 00:05:18",
       createdAt: "2026-03-13T09:15:00.000Z",
     },
     {
@@ -420,7 +413,7 @@ export function createMockReviewHistory(): ReviewDecision[] {
       projectSessionId: "session_demo_local",
       candidateId: "candidate_003",
       action: "RELABEL",
-      label: "Near-wipe recovery",
+      label: "Payoff spike near 01:10:34",
       createdAt: "2026-03-13T09:18:00.000Z",
     },
   ];

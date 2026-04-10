@@ -1,6 +1,6 @@
 .hs-layout {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-columns: 260px minmax(0, 1fr) minmax(280px, 360px);
   gap: 20px;
 }
 
@@ -9,6 +9,7 @@
 .hs-aside,
 .hs-block,
 .hs-candidate-card {
+  min-width: 0;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(10, 12, 17, 0.62);
@@ -18,6 +19,18 @@
 .hs-content,
 .hs-aside {
   padding: 20px;
+}
+
+.hs-sidebar {
+  overflow: hidden;
+}
+
+.hs-sidebar h1 {
+  margin: 10px 0 0;
+  font-size: clamp(1.7rem, 2.1vw, 2.2rem);
+  line-height: 0.98;
+  text-wrap: balance;
+  max-width: 9ch;
 }
 
 .hs-kicker,
@@ -34,6 +47,11 @@
 .hs-muted,
 .hs-secondary {
   color: rgba(255, 255, 255, 0.72);
+}
+
+.hs-subtitle {
+  margin: 14px 0 0;
+  font-size: 0.98rem;
 }
 
 .hs-nav {
@@ -86,6 +104,13 @@
 
 .hs-controls-row {
   margin-top: 12px;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.hs-controls-row-label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .hs-controls-row button,
@@ -99,6 +124,29 @@
 
 .hs-controls-row input {
   flex: 1;
+  min-width: 0;
+}
+
+.hs-controls-row button {
+  white-space: normal;
+}
+
+.hs-candidate-card strong,
+.hs-candidate-card p,
+.hs-meta,
+.hs-subtitle,
+.hs-sidebar h1,
+.hs-block blockquote {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.hs-candidate-row {
+  align-items: flex-start;
+}
+
+.hs-block blockquote {
+  margin: 10px 0 0;
 }
 
 .hs-badge {
@@ -129,6 +177,12 @@
 
 @media (max-width: 1180px) {
   .hs-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .hs-controls-row-label {
     grid-template-columns: 1fr;
   }
 }

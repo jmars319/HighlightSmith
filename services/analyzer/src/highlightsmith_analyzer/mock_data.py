@@ -50,29 +50,29 @@ def build_mock_transcript() -> list[TranscriptChunk]:
             id="chunk_001",
             start_seconds=318.0,
             end_seconds=322.0,
-            text="wait wait no way that worked",
-            confidence=0.97,
+            text="Seeded local anchor near 00:05:20",
+            confidence=0.0,
         ),
         TranscriptChunk(
             id="chunk_002",
             start_seconds=1458.0,
             end_seconds=1462.0,
-            text="okay here we go push now",
-            confidence=0.93,
+            text="Seeded local anchor near 00:24:20",
+            confidence=0.0,
         ),
         TranscriptChunk(
             id="chunk_003",
             start_seconds=4240.0,
             end_seconds=4244.0,
-            text="we survived that by inches",
-            confidence=0.96,
+            text="Seeded local anchor near 01:10:42",
+            confidence=0.0,
         ),
         TranscriptChunk(
             id="chunk_004",
             start_seconds=6112.0,
             end_seconds=6117.0,
-            text="this might be bad unless that puzzle path loops back",
-            confidence=0.88,
+            text="Seeded local anchor near 01:41:56",
+            confidence=0.0,
         ),
     ]
 
@@ -190,7 +190,7 @@ def build_mock_candidates() -> list[CandidateWindow]:
                 ReasonCode.LOUDNESS_SPIKE,
                 ReasonCode.STRUCTURE_RESOLUTION,
             ],
-            transcript_snippet="wait wait no way that worked",
+            transcript_snippet="Seeded local anchor near 00:05:20",
             score_breakdown=[
                 ScoreContribution(
                     reason_code=ReasonCode.REACTION_PHRASE,
@@ -212,7 +212,7 @@ def build_mock_candidates() -> list[CandidateWindow]:
                 ),
             ],
             context_required=False,
-            editable_label="Clutch escape payoff",
+            editable_label="Reaction cue near 00:05:18",
         ),
         CandidateWindow(
             id="candidate_002",
@@ -231,7 +231,7 @@ def build_mock_candidates() -> list[CandidateWindow]:
                 ReasonCode.COMMENTARY_DENSITY,
                 ReasonCode.STRUCTURE_SETUP,
             ],
-            transcript_snippet="okay here we go push now",
+            transcript_snippet="Seeded local anchor near 00:24:20",
             score_breakdown=[
                 ScoreContribution(
                     reason_code=ReasonCode.TACTICAL_NARRATION,
@@ -253,7 +253,7 @@ def build_mock_candidates() -> list[CandidateWindow]:
                 ),
             ],
             context_required=False,
-            editable_label="Push call before engagement",
+            editable_label="Setup cue near 00:24:08",
         ),
         CandidateWindow(
             id="candidate_003",
@@ -272,7 +272,7 @@ def build_mock_candidates() -> list[CandidateWindow]:
                 ReasonCode.LAUGHTER_BURST,
                 ReasonCode.STRUCTURE_CONSEQUENCE,
             ],
-            transcript_snippet="we survived that by inches",
+            transcript_snippet="Seeded local anchor near 01:10:42",
             score_breakdown=[
                 ScoreContribution(
                     reason_code=ReasonCode.OVERLAP_SPIKE,
@@ -294,7 +294,7 @@ def build_mock_candidates() -> list[CandidateWindow]:
                 ),
             ],
             context_required=False,
-            editable_label="Near-wipe recovery",
+            editable_label="Payoff spike near 01:10:34",
         ),
         CandidateWindow(
             id="candidate_004",
@@ -313,7 +313,7 @@ def build_mock_candidates() -> list[CandidateWindow]:
                 ReasonCode.STRUCTURE_SETUP,
                 ReasonCode.LOW_INFORMATION,
             ],
-            transcript_snippet="this might be bad unless that puzzle path loops back",
+            transcript_snippet="Seeded local anchor near 01:41:56",
             score_breakdown=[
                 ScoreContribution(
                     reason_code=ReasonCode.STRUCTURE_SETUP,
@@ -335,7 +335,7 @@ def build_mock_candidates() -> list[CandidateWindow]:
                 ),
             ],
             context_required=True,
-            editable_label="Puzzle tension setup",
+            editable_label="Context-heavy window near 01:41:44",
             review_tags=[ReviewTag.LOW_INFORMATION_RISK],
         ),
     ]

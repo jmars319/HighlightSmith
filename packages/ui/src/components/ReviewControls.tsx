@@ -20,7 +20,7 @@ export function ReviewControls({
   return (
     <section className="hs-block">
       <span className="hs-block-label">Review controls</span>
-      <div className="hs-controls-row">
+      <div className="hs-controls-row hs-controls-row-actions">
         <button disabled={disabled} onClick={onAccept} type="button">
           Accept
         </button>
@@ -31,7 +31,7 @@ export function ReviewControls({
           Adjust
         </button>
       </div>
-      <div className="hs-controls-row">
+      <div className="hs-controls-row hs-controls-row-label">
         <input
           disabled={disabled}
           onChange={(event) => onLabelChange(event.target.value)}
