@@ -2,9 +2,9 @@ import type { CandidateWindow, ReviewTag } from "@highlightsmith/shared-types";
 
 const reviewTagLabels: Record<ReviewTag, string> = {
   DEAD_AIR_RISK: "Dead air risk",
-  CLEANUP_RISK: "Cleanup risk",
-  MENU_RISK: "Menu risk",
-  LOW_INFORMATION_RISK: "Low-info risk",
+  CLEANUP_RISK: "Cleanup-heavy section",
+  MENU_RISK: "Menu-heavy section",
+  LOW_INFORMATION_RISK: "Low-information risk",
 };
 
 export function formatReviewTagLabel(reviewTag: ReviewTag): string {

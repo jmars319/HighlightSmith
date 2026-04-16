@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { CandidateDecisionMap } from "@highlightsmith/shared-types";
 import {
   createMockProjectSession,
-  type CandidateDecisionMap,
-} from "@highlightsmith/shared-types";
+} from "@highlightsmith/shared-types/testing";
 import {
   acceptedCandidates,
   analysisCoverageTone,
   buildProfileMatchingSummary,
   buildCandidateTranscriptContext,
   buildProjectSummary,
+  describeCandidatePlainly,
+  describeReasonCodePlainly,
   defaultReviewQueueMode,
   deriveSessionReviewState,
   filterCandidates,
@@ -24,6 +26,7 @@ import {
   reviewedCandidateCount,
   resolveCandidateProfileMatch,
   resolveCandidateLabel,
+  summarizeSessionQuality,
 } from "./index";
 
 describe("domain helpers", () => {
@@ -322,13 +325,70 @@ describe("domain helpers", () => {
     assert.equal(formatAnalysisCoverageBand("THIN"), "Thin");
     assert.equal(
       formatAnalysisCoverageFlag("METADATA_FALLBACK_USED"),
-      "Metadata fallback",
+      "Estimated media metadata",
     );
     assert.equal(
       analysisCoverageTone({
         band: "THIN",
       }),
       "thin",
+    );
+  });
+
+  it("builds plain-English candidate descriptions from real analyzer signals", () => {
+    const session = createMockProjectSession();
+    const reactionDescription = describeCandidatePlainly(session.candidates[0]);
+    const lowSignalDescription = describeCandidatePlainly(session.candidates[3]);
+
+    assert.equal(
+      reactionDescription.summary,
+      "Short reaction after sudden event",
+    );
+    assert.equal(
+      reactionDescription.signalPhrases[0],
+      "spoken reaction detected",
+    );
+    assert.equal(
+      lowSignalDescription.summary,
+      "Low confidence - low activity, unclear payoff",
+    );
+    assert.equal(lowSignalDescription.detail, "Weak supporting signals.");
+    assert.equal(
+      describeReasonCodePlainly("STRUCTURE_RESOLUTION"),
+      "event appears to resolve",
+    );
+  });
+
+  it("summarizes session quality in plain English", () => {
+    assert.equal(
+      summarizeSessionQuality(
+        {
+          band: "PARTIAL",
+          flags: ["SEEDED_TRANSCRIPT"],
+        },
+        3,
+      ),
+      "Limited transcript coverage",
+    );
+    assert.equal(
+      summarizeSessionQuality(
+        {
+          band: "THIN",
+          flags: ["LOW_CANDIDATE_COUNT"],
+        },
+        1,
+      ),
+      "Low signal density",
+    );
+    assert.equal(
+      summarizeSessionQuality(
+        {
+          band: "STRONG",
+          flags: [],
+        },
+        4,
+      ),
+      "Strong activity detected in multiple regions",
     );
   });
 });

@@ -105,12 +105,12 @@ export function TranscriptContextPeek({
             ) : section.id === "inside" && candidate.transcriptSnippet ? (
               <article className="context-chunk fallback">
                 <div className="context-chunk-top">
-                  <span>Analyzer seed snippet</span>
+                  <span>Candidate snippet</span>
                 </div>
                 <p>{candidate.transcriptSnippet}</p>
                 <small>
                   No stored transcript chunk overlaps this window, so the
-                  analyzer seed snippet is shown instead.
+                  candidate snippet returned by analysis is shown instead.
                 </small>
               </article>
             ) : (
@@ -122,8 +122,8 @@ export function TranscriptContextPeek({
 
       {totalContextChunks === 0 && transcript.length === 0 ? (
         <p className="context-summary-copy">
-          This session does not have transcript chunks yet, so context review is
-          limited to the candidate snippet.
+          No transcript chunks were stored for this session, so context review
+          is limited to the candidate snippet returned by analysis.
         </p>
       ) : null}
     </section>

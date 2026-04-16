@@ -3,9 +3,10 @@ import {
   deriveSessionReviewState,
   reviewedCandidateCount,
 } from "@highlightsmith/domain";
-import { contentProfiles } from "@highlightsmith/profiles";
 import {
+  clipProfileSchema,
   projectSessionSummarySchema,
+  type ClipProfile,
   type ProjectSessionSummary,
 } from "@highlightsmith/shared-types";
 import { LayoutShell } from "@highlightsmith/ui";
@@ -30,9 +31,12 @@ export default function App() {
   const [sessionSummaries, setSessionSummaries] = useState<
     ProjectSessionSummary[]
   >([]);
+  const [profiles, setProfiles] = useState<ClipProfile[]>([]);
   const [apiStatus, setApiStatus] = useState("offline");
   const [isLoadingSummaries, setIsLoadingSummaries] = useState(true);
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const apiBaseUrl =
     import.meta.env.VITE_HIGHLIGHTSMITH_API_BASE_URL ?? "http://127.0.0.1:4010";
 
@@ -51,6 +55,63 @@ export default function App() {
           setApiStatus("offline");
         });
       });
+
+    return () => controller.abort();
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadProfiles() {
+      setIsLoadingProfiles(true);
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/profiles`, {
+          signal: controller.signal,
+        });
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              message?: string;
+            }
+          | ClipProfile[]
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            payload && "message" in payload && payload.message
+              ? payload.message
+              : "Profile list load failed",
+          );
+        }
+
+        const nextProfiles = clipProfileSchema.array().parse(payload);
+        startTransition(() => {
+          setProfiles(nextProfiles);
+          setProfileError(null);
+        });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        startTransition(() => {
+          setProfiles([]);
+          setProfileError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load persisted profiles",
+          );
+        });
+      } finally {
+        if (!controller.signal.aborted) {
+          startTransition(() => {
+            setIsLoadingProfiles(false);
+          });
+        }
+      }
+    }
+
+    void loadProfiles();
 
     return () => controller.abort();
   }, [apiBaseUrl]);
@@ -241,9 +302,47 @@ export default function App() {
     }
 
     if (activePage === "profiles") {
+      if (isLoadingProfiles) {
+        return (
+          <section className="web-grid">
+            <article className="web-panel">
+              <span className="web-label">Profiles</span>
+              <h2>Loading persisted profiles...</h2>
+            </article>
+          </section>
+        );
+      }
+
+      if (profileError) {
+        return (
+          <section className="web-grid">
+            <article className="web-panel">
+              <span className="web-label">Profiles</span>
+              <h2>Real profile list unavailable</h2>
+              <p>{profileError}</p>
+            </article>
+          </section>
+        );
+      }
+
+      if (profiles.length === 0) {
+        return (
+          <section className="web-grid">
+            <article className="web-panel">
+              <span className="web-label">Profiles</span>
+              <h2>No persisted profiles yet</h2>
+              <p>
+                Create or sync profiles through the local API. The web app does
+                not fill this page with built-in presets.
+              </p>
+            </article>
+          </section>
+        );
+      }
+
       return (
         <section className="web-grid">
-          {contentProfiles.map((profile) => (
+          {profiles.map((profile) => (
             <article className="web-panel" key={profile.id}>
               <span className="web-label">{profile.mode}</span>
               <h2>{profile.label}</h2>
@@ -272,6 +371,7 @@ export default function App() {
               Project browsing is real here now. Full review stays on desktop
               until a clearly useful companion flow exists.
             </p>
+            <p>Profile data source: persisted `/api/profiles` records only.</p>
           </article>
         </section>
       );
@@ -299,6 +399,7 @@ export default function App() {
             {sessionStats.pendingSessions} not started
           </p>
           <p>{sessionStats.acceptedCandidates} accepted candidates so far</p>
+          <p>{profiles.length} persisted profiles available</p>
         </article>
         <article className="web-panel">
           <span className="web-label">Latest session</span>

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { projectSessionSchema } from "./index";
 import {
   createMockProjectSession,
   createMockProjectSessions,
   createMockReviewHistory,
-  projectSessionSchema,
-} from "./index";
+} from "./testing";
 
 describe("shared-types mock data", () => {
   it("creates a schema-valid mock project session with shaped candidates", () => {

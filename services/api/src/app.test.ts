@@ -3,7 +3,7 @@ import http from "node:http";
 import { afterEach, describe, it } from "node:test";
 import { once } from "node:events";
 import { buildProjectSummary } from "@highlightsmith/domain";
-import { createMockProjectSession } from "@highlightsmith/shared-types";
+import { createMockProjectSession } from "@highlightsmith/shared-types/testing";
 import { buildApp } from "./app";
 
 describe("api smoke routes", () => {
@@ -30,7 +30,7 @@ describe("api smoke routes", () => {
       assert.deepEqual(healthPayload, {
         service: "api",
         status: "ok",
-        mode: "placeholder-bridge",
+        mode: "local-bridge",
       });
     } finally {
       await app.close();

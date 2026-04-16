@@ -8,6 +8,8 @@ import type {
   TranscriptChunk,
 } from "@highlightsmith/shared-types";
 import {
+  describeCandidatePlainly,
+  describeReasonCodePlainly,
   resolveCandidateProfileMatch,
   type ReviewQueueMode,
 } from "@highlightsmith/domain";
@@ -16,7 +18,6 @@ import {
   ReviewControls,
   TranscriptSnippetBlock,
 } from "@highlightsmith/ui";
-import { reasonCodeLabel, summarizeCandidate } from "@highlightsmith/scoring";
 import { formatLongTime, percentage } from "../lib/format";
 import { formatReviewTagLabel } from "../lib/reviewTags";
 import { TranscriptContextPeek } from "./TranscriptContextPeek";
@@ -88,12 +89,12 @@ export function CandidateDetail({
         <p className="eyebrow">Candidate detail</p>
         <h2>
           {candidateCount === 0
-            ? "No candidate windows returned"
+            ? "No candidates found"
             : "No candidate selected"}
         </h2>
         <p>
           {candidateCount === 0
-            ? "This session finished analysis without candidate windows. Review the session summary and ingest notes, then rerun if needed."
+            ? "Analysis returned no strong signals for this session."
             : "Select a candidate window to inspect its reasons and suggested clip boundaries."}
         </p>
       </section>
@@ -102,6 +103,7 @@ export function CandidateDetail({
 
   const activeSegment = decision?.adjustedSegment ?? candidate.suggestedSegment;
   const profileMatch = resolveCandidateProfileMatch(candidate, profile);
+  const plainDescription = describeCandidatePlainly(candidate);
 
   return (
     <section className="detail-panel glass-panel">
@@ -173,13 +175,21 @@ export function CandidateDetail({
         </article>
 
         <article className="detail-card narrative-card">
-          <span className="detail-label">Narrative summary</span>
-          <strong>{summarizeCandidate(candidate, profile)}</strong>
+          <span className="detail-label">Plain-English read</span>
+          <strong>{plainDescription.summary}</strong>
           <p>
-            {candidate.contextRequired
-              ? "Requires surrounding context to confirm clip value."
-              : "Signals align cleanly enough to review as a likely standalone moment."}
+            {plainDescription.detail ??
+              "Signals align cleanly enough to review as a likely standalone moment."}
           </p>
+          {plainDescription.signalPhrases.length > 0 ? (
+            <div className="analysis-coverage-flag-row">
+              {plainDescription.signalPhrases.map((phrase) => (
+                <span className="analysis-coverage-flag" key={phrase}>
+                  {phrase}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </article>
 
         <article className="detail-card">
@@ -207,12 +217,20 @@ export function CandidateDetail({
 
       <TranscriptContextPeek candidate={candidate} transcript={transcript} />
 
-      <section className="breakdown-panel">
-        <div className="section-title-row">
-          <h3>Score breakdown</h3>
+      <details className="breakdown-panel internal-details">
+        <summary className="internal-details-summary">
+          <span>Internal scoring details</span>
           <span className="score-pill">
             {percentage(candidate.scoreEstimate)}
           </span>
+        </summary>
+
+        <div className="analysis-coverage-flag-row">
+          {candidate.reasonCodes.map((reasonCode) => (
+            <span className="analysis-coverage-flag" key={reasonCode}>
+              {reasonCode} • {describeReasonCodePlainly(reasonCode)}
+            </span>
+          ))}
         </div>
 
         <div className="breakdown-list">
@@ -223,7 +241,7 @@ export function CandidateDetail({
             >
               <div className="breakdown-copy">
                 <strong>{item.label}</strong>
-                <span>{reasonCodeLabel(item.reasonCode)}</span>
+                <span>{describeReasonCodePlainly(item.reasonCode)}</span>
               </div>
               <div className="breakdown-meter">
                 <div
@@ -240,7 +258,7 @@ export function CandidateDetail({
             </article>
           ))}
         </div>
-      </section>
+      </details>
 
       {profileMatch.supportingFactors.length > 0 ||
       profileMatch.limitingFactors.length > 0 ? (

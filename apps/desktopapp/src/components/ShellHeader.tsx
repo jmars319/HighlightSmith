@@ -9,7 +9,6 @@ type ShellHeaderProps = {
   activeSessionStateLabel: string;
   themeMode: "dark" | "light";
   onPickMedia: () => Promise<void> | void;
-  onReloadMock: () => void;
   onToggleTheme: () => void;
 };
 
@@ -24,7 +23,6 @@ export function ShellHeader({
   activeSessionStateLabel,
   themeMode,
   onPickMedia,
-  onReloadMock,
   onToggleTheme,
 }: ShellHeaderProps) {
   return (
@@ -71,13 +69,6 @@ export function ShellHeader({
             type="button"
           >
             Select Local Recording
-          </button>
-          <button
-            className="button-secondary"
-            onClick={onReloadMock}
-            type="button"
-          >
-            Load Demo Session
           </button>
           <button
             aria-label={

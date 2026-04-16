@@ -86,9 +86,9 @@ def _coverage_note(
 ) -> str:
     reason_copy = {
         AnalysisCoverageFlag.NO_CANDIDATES: "no candidate windows were produced",
-        AnalysisCoverageFlag.METADATA_FALLBACK_USED: "metadata fallback was used",
+        AnalysisCoverageFlag.METADATA_FALLBACK_USED: "media metadata had to be estimated",
         AnalysisCoverageFlag.TRANSCRIPT_SPARSE: "transcript coverage is sparse",
-        AnalysisCoverageFlag.SEEDED_TRANSCRIPT: "transcript anchors are still seeded heuristics",
+        AnalysisCoverageFlag.SEEDED_TRANSCRIPT: "transcript coverage is still limited",
         AnalysisCoverageFlag.LOW_CANDIDATE_COUNT: "only a few candidate windows were produced",
     }
     ordered_reasons = [
@@ -105,22 +105,21 @@ def _coverage_note(
 
     if band == AnalysisCoverageBand.STRONG:
         return (
-            "Stronger coverage for the current heuristic pass: local metadata was "
-            "probed successfully and the session returned enough transcript/candidate "
-            "coverage to review with normal skepticism."
+            "Strong coverage for this local pass. The session returned enough "
+            "transcript and candidate detail to review normally."
         )
 
     if band == AnalysisCoverageBand.THIN:
         reasons = "; ".join(ordered_reasons[:3]) or "analysis coverage is limited"
         return (
             f"Thin coverage: {reasons}. Treat weaker candidates as exploratory "
-            "rather than reliable shortlist picks."
+            "and lean on timeline context before accepting them."
         )
 
     reasons = "; ".join(ordered_reasons[:3]) or "analysis coverage is provisional"
     return (
         f"Partial coverage: {reasons}. Review with normal caution and lean on "
-        "timeline/context rather than confidence alone."
+        "timeline and transcript context rather than confidence alone."
     )
 
 

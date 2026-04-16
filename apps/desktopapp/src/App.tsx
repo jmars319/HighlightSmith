@@ -10,14 +10,13 @@ import {
   analysisCoverageTone,
   buildProfileMatchingSummary,
   buildProjectSummary,
+  summarizeSessionQuality,
   defaultReviewQueueMode,
   deriveSessionReviewState,
   filterCandidates,
   filterCandidatesByPresentationMode,
   filterCandidatesByReviewMode,
   findNextPendingSessionSummary,
-  formatAnalysisCoverageBand,
-  formatAnalysisCoverageFlag,
   hasStrongCandidateProfileMatch,
   isCandidatePending,
   reviewedCandidateCount,
@@ -31,13 +30,12 @@ import {
   isSupportedInput,
   supportedInputExtensions,
 } from "@highlightsmith/media";
-import { contentProfiles, defaultProfileId } from "@highlightsmith/profiles";
+import { defaultProfileId } from "@highlightsmith/profiles";
 import {
   addExampleClipRequestSchema,
   analyzeProjectRequestSchema,
   clipProfileSchema,
   createClipProfileRequestSchema,
-  createMockProjectSession,
   exampleClipSchema,
   projectSessionSchema,
   projectSessionSummarySchema,
@@ -83,7 +81,6 @@ type AnalysisReadiness = {
 };
 type ThemeMode = "dark" | "light";
 
-const mockSessionFactory = () => createMockProjectSession();
 const lastSessionIdStorageKey = "highlightsmith.desktop.last-session-id";
 const themeModeStorageKey = "highlightsmith.desktop.theme-mode";
 const desktopPages: Array<{ id: DesktopPage; label: string }> = [
@@ -123,7 +120,7 @@ export default function App() {
   >([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
-  const [profiles, setProfiles] = useState<ClipProfile[]>(contentProfiles);
+  const [profiles, setProfiles] = useState<ClipProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] =
     useState<string>(defaultProfileId);
   const [selectedProfileExamples, setSelectedProfileExamples] = useState<
@@ -143,7 +140,8 @@ export default function App() {
     import.meta.env.VITE_HIGHLIGHTSMITH_API_BASE_URL ?? "http://127.0.0.1:4010";
   const sessionCandidates = projectSession?.candidates ?? [];
   const normalizedSelectedMediaPath = selectedMediaPath.trim();
-  const availableProfiles = profiles.length > 0 ? profiles : contentProfiles;
+  const availableProfiles = profiles;
+  const hasPersistedProfiles = availableProfiles.length > 0;
   const selectedDraftProfile = resolveProfile(
     availableProfiles,
     analysisProfileId,
@@ -156,6 +154,10 @@ export default function App() {
   const profileMatchingSummary = buildProfileMatchingSummary(currentProfile);
   const analysisLaunchState = buildAnalysisLaunchState(
     normalizedSelectedMediaPath,
+    {
+      hasPersistedProfiles,
+      isLoadingProfiles,
+    },
   );
   const analysisSourceName = normalizedSelectedMediaPath
     ? extractSourceName(normalizedSelectedMediaPath)
@@ -562,14 +564,6 @@ export default function App() {
         "Desktop file picking is available in the Tauri app. You can also paste a full local file path below.",
       );
     }
-  }
-
-  function handleReloadMock() {
-    const nextSession = mockSessionFactory();
-    window.localStorage.removeItem(lastSessionIdStorageKey);
-    applyProjectSession(nextSession);
-    setAnalysisError(null);
-    setActivePage("candidate-review");
   }
 
   async function handleCreateProfile(input: CreateClipProfileRequest) {
@@ -1202,19 +1196,34 @@ export default function App() {
                   <span className="input-label">Profile</span>
                   <select
                     className="search-input"
-                    disabled={isAnalyzing}
+                    disabled={isAnalyzing || !hasPersistedProfiles}
                     onChange={(event) => {
                       setAnalysisProfileId(event.target.value);
                       setAnalysisError(null);
                     }}
-                    value={analysisProfileId}
+                    value={hasPersistedProfiles ? analysisProfileId : ""}
                   >
-                    {availableProfiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.name}
+                    {hasPersistedProfiles ? (
+                      availableProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">
+                        {isLoadingProfiles
+                          ? "Loading persisted profiles..."
+                          : "No persisted profiles available"}
                       </option>
-                    ))}
+                    )}
                   </select>
+                  <small className="analysis-field-note">
+                    {hasPersistedProfiles
+                      ? "Profiles come from the persisted local library."
+                      : isLoadingProfiles
+                        ? "Waiting for persisted profiles from the local API."
+                        : "No persisted profiles are available yet."}
+                  </small>
                 </label>
 
                 <label className="search-block">
@@ -1590,7 +1599,6 @@ export default function App() {
           currentProfileLabel={currentProfile.name}
           currentSessionLabel={projectSession?.title ?? "No session loaded"}
           onPickMedia={handlePickMedia}
-          onReloadMock={handleReloadMock}
           onToggleTheme={() =>
             setThemeMode((current) => (current === "dark" ? "light" : "dark"))
           }
@@ -1625,7 +1633,33 @@ function extractSourceName(sourcePath: string): string {
   return sourcePath.split(/[\\/]/).pop() ?? sourcePath;
 }
 
-function buildAnalysisLaunchState(sourcePath: string): AnalysisReadiness {
+function buildAnalysisLaunchState(
+  sourcePath: string,
+  options: {
+    hasPersistedProfiles: boolean;
+    isLoadingProfiles: boolean;
+  },
+): AnalysisReadiness {
+  if (options.isLoadingProfiles) {
+    return {
+      canAnalyze: false,
+      detail: "Waiting for the persisted profile library from the local API.",
+      headline: "Loading profiles",
+      statusLabel: "Loading",
+      tone: "blocked",
+    };
+  }
+
+  if (!options.hasPersistedProfiles) {
+    return {
+      canAnalyze: false,
+      detail: "Create or load a persisted clip profile before starting analysis.",
+      headline: "No profiles available",
+      statusLabel: "Needs profile",
+      tone: "blocked",
+    };
+  }
+
   if (!sourcePath) {
     return {
       canAnalyze: false,
@@ -1928,13 +1962,12 @@ function resolveProfile(
   profileId: string,
 ): ClipProfile {
   return (
-    profiles.find((profile) => profile.id === profileId) ??
-    contentProfiles.find((profile) => profile.id === profileId) ?? {
+    profiles.find((profile) => profile.id === profileId) ?? {
       id: profileId,
-      name: profileId,
+      name: "Profile unavailable",
       label: profileId,
       description:
-        "Profile metadata is unavailable locally, but the session still retains its profile reference.",
+        "Profile metadata is unavailable locally. Reload the persisted profile library from the local API.",
       createdAt: "",
       updatedAt: "",
       state: "ACTIVE",
@@ -1957,15 +1990,10 @@ function formatSessionCompletion(summary: ProjectSessionSummary): number {
 }
 
 function buildProjectCoverageCopy(summary: ProjectSessionSummary): string {
-  const flagLabels = summary.analysisCoverage.flags
-    .slice(0, 2)
-    .map((flag) => formatAnalysisCoverageFlag(flag));
-  const conciseReason =
-    flagLabels.length > 0
-      ? flagLabels.join(" • ")
-      : "No major coverage warnings";
-
-  return `Coverage ${formatAnalysisCoverageBand(summary.analysisCoverage.band)} • ${conciseReason}`;
+  return summarizeSessionQuality(
+    summary.analysisCoverage,
+    summary.candidateCount,
+  );
 }
 
 function findFirstPendingCandidateId(session: ProjectSession): string | null {

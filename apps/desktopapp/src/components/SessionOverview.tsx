@@ -7,6 +7,7 @@ import {
   analysisCoverageTone,
   formatAnalysisCoverageBand,
   formatAnalysisCoverageFlag,
+  summarizeSessionQuality,
 } from "@highlightsmith/domain";
 import { formatLongTime } from "../lib/format";
 
@@ -34,9 +35,13 @@ export function SessionOverview({
   profileMatchingSummary,
 }: SessionOverviewProps) {
   const candidateCount = session.candidates.length;
+  const sessionQualitySummary = summarizeSessionQuality(
+    session.analysisCoverage,
+    candidateCount,
+  );
   const selectedCandidateCopy =
     candidateCount === 0
-      ? "No candidate markers returned yet"
+      ? "No candidates found"
       : selectedCandidateIndex >= 0
         ? `Candidate ${selectedCandidateIndex + 1} selected`
         : "Review queue ready";
@@ -109,6 +114,7 @@ export function SessionOverview({
               {formatAnalysisCoverageBand(session.analysisCoverage.band)}
             </span>
           </div>
+          <strong>{sessionQualitySummary}</strong>
           <p>{session.analysisCoverage.note}</p>
           {session.analysisCoverage.flags.length > 0 ? (
             <div className="analysis-coverage-flag-row">
@@ -127,8 +133,9 @@ export function SessionOverview({
             {candidateCount} candidate{candidateCount === 1 ? "" : "s"}
           </strong>
           <p>
-            {pendingCount} pending • {acceptedCount} accepted • {rejectedCount}{" "}
-            rejected
+            {candidateCount === 0
+              ? "Analysis returned no strong signals for this session."
+              : `${pendingCount} pending • ${acceptedCount} accepted • ${rejectedCount} rejected`}
           </p>
         </article>
 
@@ -158,9 +165,8 @@ export function SessionOverview({
         <article className="session-overview-alert empty">
           <span className="detail-label">Sparse output</span>
           <p>
-            Analysis completed, but this recording did not produce any candidate
-            windows. Review the ingest notes, confirm the input file, or rerun
-            with a different profile.
+            No candidates found. Review the ingest notes, confirm the input
+            file, or rerun with a different profile.
           </p>
         </article>
       ) : null}

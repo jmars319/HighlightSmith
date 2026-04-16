@@ -2,6 +2,7 @@ import type {
   CandidateWindow,
   ReviewDecision,
 } from "@highlightsmith/shared-types";
+import { describeCandidatePlainly } from "@highlightsmith/domain";
 import { formatLongTime } from "../lib/format";
 import {
   candidateHasReviewRisk,
@@ -33,8 +34,8 @@ export function CandidateTimeline({
     return (
       <section className="timeline-panel glass-panel empty-state">
         <p className="eyebrow">Session markers</p>
-        <h2>No candidate markers yet</h2>
-        <p>Run analysis or load a session to inspect candidate positions.</p>
+        <h2>No candidates found</h2>
+        <p>Analysis returned no strong signals for this session.</p>
       </section>
     );
   }
@@ -46,6 +47,7 @@ export function CandidateTimeline({
   const laneCount =
     laneMarkers.reduce((maxLane, marker) => Math.max(maxLane, marker.lane), 0) + 1;
   const demotedCount = candidates.filter(candidateHasReviewRisk).length;
+  const selectedCandidateDescription = describeCandidatePlainly(selectedCandidate);
 
   return (
     <section className="timeline-panel glass-panel">
@@ -55,7 +57,7 @@ export function CandidateTimeline({
           <h2>Candidate timeline</h2>
           <p className="timeline-summary-copy">
             {candidates.length} markers across {formatLongTime(durationSeconds)} •{" "}
-            {demotedCount} demoted for review
+            {demotedCount} flagged for closer review
           </p>
         </div>
         <span className="queue-count">{laneCount} lanes</span>
@@ -103,10 +105,11 @@ export function CandidateTimeline({
             18,
           );
           const reviewTag = primaryReviewTag(candidate);
+          const plainDescription = describeCandidatePlainly(candidate);
 
           return (
             <button
-              aria-label={`Focus ${candidate.editableLabel}`}
+              aria-label={`Focus ${plainDescription.summary}`}
               className={buildTimelineMarkerClassName(
                 candidate,
                 decision,
@@ -119,7 +122,7 @@ export function CandidateTimeline({
                 top: `${lane * 28 + 8}px`,
                 width: `${markerWidth}%`,
               }}
-              title={`${candidate.editableLabel} • ${formatLongTime(candidate.candidateWindow.startSeconds)} to ${formatLongTime(candidate.candidateWindow.endSeconds)}`}
+              title={`${plainDescription.summary} • ${formatLongTime(candidate.candidateWindow.startSeconds)} to ${formatLongTime(candidate.candidateWindow.endSeconds)}`}
               type="button"
             >
               <span
@@ -146,6 +149,14 @@ export function CandidateTimeline({
             {decisionsByCandidateId[selectedCandidate.id]?.action ?? "PENDING"}
           </span>
         </div>
+        <p className="timeline-focus-copy">
+          {selectedCandidateDescription.summary}
+        </p>
+        {selectedCandidateDescription.detail ? (
+          <p className="timeline-focus-copy">
+            {selectedCandidateDescription.detail}
+          </p>
+        ) : null}
         <p>
           Window {formatLongTime(selectedCandidate.candidateWindow.startSeconds)} to{" "}
           {formatLongTime(selectedCandidate.candidateWindow.endSeconds)}
@@ -164,7 +175,7 @@ export function CandidateTimeline({
           </div>
         ) : (
           <p className="timeline-focus-copy">
-            No review-risk demotion tags on this candidate.
+            No manual-review flags on this candidate.
           </p>
         )}
       </article>

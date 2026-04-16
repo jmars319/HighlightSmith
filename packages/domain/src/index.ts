@@ -10,6 +10,7 @@ import type {
   ProfilePresentationMode,
   ProjectSession,
   ProjectSessionSummary,
+  ReasonCode,
   ReviewAction,
   ReviewDecision,
   TranscriptChunk,
@@ -20,6 +21,132 @@ export function resolveCandidateLabel(
   decision?: ReviewDecision,
 ): string {
   return decision?.label ?? candidate.editableLabel;
+}
+
+const plainReasonDescriptions: Record<ReasonCode, string> = {
+  LOUDNESS_SPIKE: "sudden increase in audio intensity",
+  LAUGHTER_BURST: "brief laughter-like audio burst",
+  OVERLAP_SPIKE: "multiple voices or sounds rise at once",
+  REACTION_PHRASE: "spoken reaction detected",
+  COMMENTARY_DENSITY: "sustained spoken commentary",
+  SILENCE_BREAK: "quiet stretch followed by renewed activity",
+  ACTION_AUDIO_CLUSTER: "cluster of fast action sounds",
+  STRUCTURE_SETUP: "setup before a possible event",
+  STRUCTURE_CONSEQUENCE: "event appears to create an immediate consequence",
+  STRUCTURE_RESOLUTION: "event appears to resolve",
+  MENU_HEAVY: "menu or non-gameplay activity",
+  CLEANUP_HEAVY: "cleanup or low-payoff activity",
+  LOW_INFORMATION: "low activity or unclear outcome",
+  CONTEXT_REQUIRED: "surrounding context is still needed",
+  TACTICAL_NARRATION: "spoken tactical explanation",
+  PITCH_EXCURSION: "noticeable change in vocal pitch",
+  ABRUPT_SILENCE_AFTER_INTENSITY: "activity drops quickly after a peak",
+};
+
+export type CandidatePlainDescription = {
+  summary: string;
+  detail: string | null;
+  signalPhrases: string[];
+};
+
+export function describeReasonCodePlainly(reasonCode: ReasonCode): string {
+  return plainReasonDescriptions[reasonCode];
+}
+
+export function describeCandidatePlainly(
+  candidate: CandidateWindow,
+): CandidatePlainDescription {
+  const reasonCodes = new Set(candidate.reasonCodes);
+  const topSignalPhrases = uniqueReasonCodes(
+    candidate.scoreBreakdown
+      .filter((item) => item.direction === "POSITIVE")
+      .sort((left, right) => right.contribution - left.contribution)
+      .map((item) => item.reasonCode),
+  )
+    .map(describeReasonCodePlainly)
+    .slice(0, 3);
+
+  const hasReactionPhrase = reasonCodes.has("REACTION_PHRASE");
+  const hasLoudnessSpike = reasonCodes.has("LOUDNESS_SPIKE");
+  const hasPitchExcursion = reasonCodes.has("PITCH_EXCURSION");
+  const hasActionCluster = reasonCodes.has("ACTION_AUDIO_CLUSTER");
+  const hasCommentaryDensity = reasonCodes.has("COMMENTARY_DENSITY");
+  const hasTacticalNarration = reasonCodes.has("TACTICAL_NARRATION");
+  const hasOverlapSpike = reasonCodes.has("OVERLAP_SPIKE");
+  const hasLaughterBurst = reasonCodes.has("LAUGHTER_BURST");
+  const hasStructureSetup = reasonCodes.has("STRUCTURE_SETUP");
+  const hasStructureConsequence = reasonCodes.has("STRUCTURE_CONSEQUENCE");
+  const hasStructureResolution = reasonCodes.has("STRUCTURE_RESOLUTION");
+  const hasLowInformation = reasonCodes.has("LOW_INFORMATION");
+  const needsContext =
+    candidate.contextRequired || reasonCodes.has("CONTEXT_REQUIRED");
+
+  let summary = "Possible moment with limited supporting signals";
+
+  if (hasLowInformation) {
+    summary = "Low activity, unclear payoff";
+  } else if (
+    hasReactionPhrase &&
+    (hasLoudnessSpike || hasPitchExcursion || hasActionCluster)
+  ) {
+    summary = "Short reaction after sudden event";
+  } else if (hasStructureSetup && hasStructureResolution) {
+    summary = "Quick escalation followed by resolution";
+  } else if (hasCommentaryDensity && hasTacticalNarration) {
+    summary = "Extended dialogue segment";
+  } else if (hasOverlapSpike && hasLaughterBurst) {
+    summary = "Brief group reaction or laughter burst";
+  } else if (hasOverlapSpike) {
+    summary = "Brief burst of overlapping voices";
+  } else if (hasActionCluster && (hasStructureConsequence || hasStructureResolution)) {
+    summary = "High-activity segment with a possible outcome";
+  } else if (hasActionCluster) {
+    summary = "Short high-activity segment";
+  } else if (hasTacticalNarration) {
+    summary = "Spoken tactical explanation";
+  } else if (hasCommentaryDensity) {
+    summary = "Extended dialogue segment";
+  } else if (hasStructureSetup) {
+    summary = "Setup segment before possible action";
+  } else if (hasStructureResolution || hasStructureConsequence) {
+    summary = "Possible resolution moment";
+  } else if (hasLoudnessSpike || hasPitchExcursion) {
+    summary = "Brief increase in activity";
+  }
+
+  const lowConfidence =
+    candidate.confidenceBand === "LOW" ||
+    candidate.confidenceBand === "EXPERIMENTAL" ||
+    hasLowInformation;
+  const mediumConfidence =
+    candidate.confidenceBand === "MEDIUM" || needsContext;
+
+  if (lowConfidence) {
+    summary = `Low confidence - ${lowercaseFirst(summary)}`;
+  } else if (mediumConfidence && !summary.toLowerCase().startsWith("possible ")) {
+    summary = `Possible ${lowercaseFirst(summary)}`;
+  }
+
+  let detail: string | null = null;
+  if (hasLowInformation) {
+    detail = "Weak supporting signals.";
+  } else if (needsContext) {
+    detail = "Needs surrounding context to confirm the outcome.";
+  } else if (
+    (candidate.confidenceBand === "LOW" ||
+      candidate.confidenceBand === "EXPERIMENTAL") &&
+    topSignalPhrases.length > 0
+  ) {
+    detail = `Signals were limited to ${joinReadableList(topSignalPhrases.slice(0, 2))}.`;
+  } else if (topSignalPhrases.length > 0) {
+    detail = `Signals include ${joinReadableList(topSignalPhrases.slice(0, 2))}.`;
+  }
+
+  return {
+    summary,
+    detail,
+    signalPhrases: topSignalPhrases,
+  };
 }
 
 export function decisionForCandidate(
@@ -33,9 +160,14 @@ export function buildCandidateSearchText(
   candidate: CandidateWindow,
   label: string,
 ): string {
+  const plainDescription = describeCandidatePlainly(candidate);
+
   return [
     candidate.transcriptSnippet,
     label,
+    plainDescription.summary,
+    plainDescription.detail ?? "",
+    plainDescription.signalPhrases.join(" "),
     candidate.reasonCodes.join(" "),
     candidate.reviewTags.join(" "),
   ]
@@ -330,11 +462,11 @@ export function formatAnalysisCoverageFlag(
   flag: AnalysisCoverage["flags"][number],
 ): string {
   if (flag === "METADATA_FALLBACK_USED") {
-    return "Metadata fallback";
+    return "Estimated media metadata";
   }
 
   if (flag === "SEEDED_TRANSCRIPT") {
-    return "Seeded transcript";
+    return "Limited transcript coverage";
   }
 
   if (flag === "TRANSCRIPT_SPARSE") {
@@ -342,10 +474,10 @@ export function formatAnalysisCoverageFlag(
   }
 
   if (flag === "LOW_CANDIDATE_COUNT") {
-    return "Low candidate count";
+    return "Low signal density";
   }
 
-  return "No candidates";
+  return "No candidates found";
 }
 
 export function analysisCoverageTone(
@@ -360,6 +492,67 @@ export function analysisCoverageTone(
   }
 
   return "partial";
+}
+
+export function summarizeSessionQuality(
+  coverage: Pick<AnalysisCoverage, "band" | "flags">,
+  candidateCount = 0,
+): string {
+  if (coverage.flags.includes("NO_CANDIDATES") || candidateCount === 0) {
+    return "Analysis returned no strong signals";
+  }
+
+  if (
+    coverage.flags.includes("SEEDED_TRANSCRIPT") ||
+    coverage.flags.includes("TRANSCRIPT_SPARSE")
+  ) {
+    return "Limited transcript coverage";
+  }
+
+  if (coverage.band === "THIN" || coverage.flags.includes("LOW_CANDIDATE_COUNT")) {
+    return "Low signal density";
+  }
+
+  if (coverage.band === "STRONG" && candidateCount >= 3) {
+    return "Strong activity detected in multiple regions";
+  }
+
+  if (coverage.band === "STRONG") {
+    return "Strong activity detected";
+  }
+
+  return "Useful signals detected with partial coverage";
+}
+
+function uniqueReasonCodes(reasonCodes: ReasonCode[]): ReasonCode[] {
+  const seen = new Set<ReasonCode>();
+
+  return reasonCodes.filter((reasonCode) => {
+    if (seen.has(reasonCode)) {
+      return false;
+    }
+
+    seen.add(reasonCode);
+    return true;
+  });
+}
+
+function lowercaseFirst(value: string): string {
+  return value.length > 0
+    ? value.charAt(0).toLowerCase() + value.slice(1)
+    : value;
+}
+
+function joinReadableList(values: string[]): string {
+  if (values.length === 0) {
+    return "";
+  }
+
+  if (values.length === 1) {
+    return values[0];
+  }
+
+  return `${values[0]} and ${values[1]}`;
 }
 
 export function isCandidatePending(

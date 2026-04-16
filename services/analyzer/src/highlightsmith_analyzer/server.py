@@ -45,6 +45,11 @@ def _camel_case(value: str) -> str:
     return parts[0] + "".join(part.capitalize() for part in parts[1:])
 
 
+def _demo_mode_enabled() -> bool:
+    value = os.getenv("HIGHLIGHTSMITH_ENABLE_DEMO_MODE", "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
 class AnalyzerRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         request_path = urlparse(self.path).path
@@ -60,7 +65,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if request_path == "/session/mock":
+        if request_path == "/session/mock" and _demo_mode_enabled():
             session = analyze_media(None, Settings(use_mock_data=True))
             self._send_json(200, _convert(session))
             return
@@ -177,7 +182,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         request_path = urlparse(self.path).path
 
-        if request_path == "/analyze/mock":
+        if request_path == "/analyze/mock" and _demo_mode_enabled():
             _ = self._read_json_body()
             session = analyze_media(None, Settings(use_mock_data=True))
             self._send_json(

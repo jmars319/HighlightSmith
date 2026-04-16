@@ -17,6 +17,18 @@ export default function App() {
     if (activeTab === "projects") {
       return (
         <View style={styles.sectionStack}>
+          {companionSnapshot.projects.length === 0 ? (
+            <SurfaceCard
+              accent="teal"
+              eyebrow="Projects"
+              title="No synced sessions yet"
+            >
+              <Text style={styles.bodyText}>
+                This companion surface stays empty until a real mobile sync path
+                exists.
+              </Text>
+            </SurfaceCard>
+          ) : null}
           {companionSnapshot.projects.map((project) => (
             <SurfaceCard
               accent="teal"
@@ -55,6 +67,19 @@ export default function App() {
               sync exist.
             </Text>
           </SurfaceCard>
+
+          {companionSnapshot.queue.length === 0 ? (
+            <SurfaceCard
+              accent="amber"
+              eyebrow="Candidate Queue"
+              title="No synced queue items"
+            >
+              <Text style={styles.bodyText}>
+                Mobile does not invent review backlog items. Real queue data has
+                not been connected here yet.
+              </Text>
+            </SurfaceCard>
+          ) : null}
 
           {companionSnapshot.queue.map((candidate) => {
             const tone = bandTone(candidate.confidenceBand);
@@ -103,6 +128,19 @@ export default function App() {
             </Text>
           </SurfaceCard>
 
+          {companionSnapshot.acceptedClips.length === 0 ? (
+            <SurfaceCard
+              accent="teal"
+              eyebrow="Accepted Clips"
+              title="No accepted clips synced"
+            >
+              <Text style={styles.bodyText}>
+                Approved clips will appear here only when real review decisions
+                are connected to mobile.
+              </Text>
+            </SurfaceCard>
+          ) : null}
+
           {companionSnapshot.acceptedClips.map((clip) => {
             const tone = bandTone(clip.confidenceBand);
 
@@ -144,6 +182,19 @@ export default function App() {
               should not become the place where analysis behavior is authored.
             </Text>
           </SurfaceCard>
+
+          {companionSnapshot.profiles.length === 0 ? (
+            <SurfaceCard
+              accent="rose"
+              eyebrow="Profiles"
+              title="No synced profiles yet"
+            >
+              <Text style={styles.bodyText}>
+                Profile data should come from persisted storage, not placeholder
+                mobile presets.
+              </Text>
+            </SurfaceCard>
+          ) : null}
 
           {companionSnapshot.profiles.map((profile) => (
             <SurfaceCard

@@ -1,14 +1,4 @@
-import {
-  acceptedCandidates,
-  buildProjectSummary,
-} from "@highlightsmith/domain";
-import { contentProfiles, getProfileById } from "@highlightsmith/profiles";
-import {
-  createMockProjectSessions,
-  createMockReviewHistory,
-  type ConfidenceBand,
-  type ReviewDecision,
-} from "@highlightsmith/shared-types";
+import type { ConfidenceBand } from "@highlightsmith/shared-types";
 
 export type MobileTab =
   | "dashboard"
@@ -25,76 +15,54 @@ export const mobileTabs: Array<{ id: MobileTab; label: string }> = [
   { id: "profiles", label: "Profiles" },
 ];
 
-const projectSessions = createMockProjectSessions();
-const reviewHistory = createMockReviewHistory();
-const primarySession = projectSessions[0];
-const primaryProfile = getProfileById(primarySession.profileId);
-const reviewDecisionMap = buildDecisionMap(reviewHistory);
-
 export const companionSnapshot = {
   dashboard: {
-    projectCount: projectSessions.length,
-    pendingCount: primarySession.candidates.filter(
-      (candidate) => !reviewDecisionMap[candidate.id],
-    ).length,
-    acceptedCount: acceptedCandidates(
-      primarySession.candidates,
-      reviewDecisionMap,
-    ).length,
-    profileCount: contentProfiles.length,
-    primaryProjectTitle: primarySession.title,
-    primaryProfileLabel: primaryProfile.label,
-    lastUpdatedLabel: formatDate(primarySession.updatedAt),
-    statusLabel: "Local mock companion snapshot",
-    surfaceNote: "Desktop remains the primary operator surface.",
+    projectCount: 0,
+    pendingCount: 0,
+    acceptedCount: 0,
+    profileCount: 0,
+    primaryProjectTitle: "No synced sessions",
+    primaryProfileLabel: "No profile data",
+    lastUpdatedLabel: "Unavailable",
+    statusLabel: "No synced data yet",
+    surfaceNote:
+      "This companion app does not load demo sessions or fake queue items.",
   },
-  projects: projectSessions.map((session) => {
-    const summary = buildProjectSummary(session);
-    const profile = getProfileById(summary.profileId);
-
-    return {
-      ...summary,
-      profileLabel: profile.label,
-      updatedLabel: formatDate(summary.updatedAt),
-    };
-  }),
-  queue: primarySession.candidates
-    .filter((candidate) => !reviewDecisionMap[candidate.id])
-    .map((candidate) => ({
-      id: candidate.id,
-      label: candidate.editableLabel,
-      transcriptSnippet: candidate.transcriptSnippet,
-      confidenceBand: candidate.confidenceBand,
-      reasonSummary: candidate.reasonCodes.join(" • "),
-      windowLabel: formatRange(
-        candidate.candidateWindow.startSeconds,
-        candidate.candidateWindow.endSeconds,
-      ),
-    })),
-  acceptedClips: acceptedCandidates(
-    primarySession.candidates,
-    reviewDecisionMap,
-  ).map((candidate) => ({
-    id: candidate.id,
-    label: reviewDecisionMap[candidate.id]?.label ?? candidate.editableLabel,
-    transcriptSnippet: candidate.transcriptSnippet,
-    confidenceBand: candidate.confidenceBand,
-    segmentLabel: formatRange(
-      candidate.suggestedSegment.startSeconds,
-      candidate.suggestedSegment.endSeconds,
-    ),
-  })),
-  profiles: contentProfiles.map((profile) => ({
-    id: profile.id,
-    label: profile.label,
-    mode: profile.mode,
-    description: profile.description,
-    weightCount: Object.keys(profile.signalWeights).length,
-  })),
+  projects: [] as Array<{
+    sessionId: string;
+    sessionTitle: string;
+    profileLabel: string;
+    candidateCount: number;
+    acceptedCount: number;
+    sourcePath: string;
+    updatedLabel: string;
+  }>,
+  queue: [] as Array<{
+    id: string;
+    label: string;
+    transcriptSnippet: string;
+    confidenceBand: ConfidenceBand;
+    reasonSummary: string;
+    windowLabel: string;
+  }>,
+  acceptedClips: [] as Array<{
+    id: string;
+    label: string;
+    transcriptSnippet: string;
+    confidenceBand: ConfidenceBand;
+    segmentLabel: string;
+  }>,
+  profiles: [] as Array<{
+    id: string;
+    label: string;
+    mode: string;
+    description: string;
+    weightCount: number;
+  }>,
   guardrails: [
     "No ingest, analysis launch, or clip rendering on mobile.",
     "No heavy local media processing or VOD analysis on-device.",
-    "No fake sync or cloud-only architecture added just to justify mobile.",
+    "No demo backlog, fake queue, or fake accepted clips in normal use.",
   ],
 };
 
@@ -132,33 +100,4 @@ export function bandTone(band: ConfidenceBand): {
     backgroundColor: "rgba(225, 125, 120, 0.18)",
     textColor: "#ffb7b0",
   };
-}
-
-function buildDecisionMap(
-  decisions: ReviewDecision[],
-): Record<string, ReviewDecision> {
-  return decisions.reduce<Record<string, ReviewDecision>>(
-    (current, decision) => {
-      current[decision.candidateId] = decision;
-      return current;
-    },
-    {},
-  );
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatRange(startSeconds: number, endSeconds: number): string {
-  return `${formatClock(startSeconds)} to ${formatClock(endSeconds)}`;
-}
-
-function formatClock(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }

@@ -18,13 +18,16 @@ INGEST_NOTE_METADATA_FALLBACK = (
     "ffprobe metadata unavailable; using provisional local duration heuristics."
 )
 INGEST_NOTE_SEEDED_TRANSCRIPT = (
-    "Transcript chunks still use seeded local anchors until offline STT and richer signal extraction land."
+    "Transcript coverage is still limited in this local build, so candidate snippets may be shorter than the full spoken context."
 )
 
 
 def inspect_media(source_path: str | None, use_mock_data: bool) -> MediaSource:
-    if use_mock_data or not source_path:
+    if use_mock_data:
         return build_mock_media_source(source_path)
+
+    if not source_path:
+        raise ValueError("source_path is required unless mock data is explicitly enabled")
 
     path = Path(source_path).expanduser().resolve()
     if not path.exists():

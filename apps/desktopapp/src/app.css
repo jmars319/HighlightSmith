@@ -1033,6 +1033,27 @@ h3 {
   margin-top: 14px;
 }
 
+.internal-details {
+  overflow: hidden;
+}
+
+.internal-details-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.internal-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.internal-details[open] .internal-details-summary {
+  margin-bottom: 14px;
+}
+
 .review-tag-row {
   display: flex;
   flex-wrap: wrap;

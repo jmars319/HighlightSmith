@@ -7,11 +7,11 @@ import type {
   ReviewDecision,
 } from "@highlightsmith/shared-types";
 import {
+  describeCandidatePlainly,
   resolveCandidateProfileMatch,
   resolveCandidateLabel,
   type ReviewQueueMode,
 } from "@highlightsmith/domain";
-import { summarizeCandidate } from "@highlightsmith/scoring";
 import { CandidateCard } from "@highlightsmith/ui";
 import { formatSeconds, percentage } from "../lib/format";
 import {
@@ -115,7 +115,7 @@ export function CandidateQueue({
           aria-label="Search candidate transcripts"
           className="search-input"
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search phrases, labels, or reason codes"
+          placeholder="Search transcript, labels, or descriptions"
           type="search"
           value={searchValue}
         />
@@ -221,7 +221,7 @@ export function CandidateQueue({
           <span className="detail-label">Queue state</span>
           <p>
             {totalCandidateCount === 0
-              ? "This session did not return any candidate windows yet. Review the session summary, then rerun analysis if needed."
+              ? "No candidates found. Analysis returned no strong signals for this session."
               : reviewQueueMode === "ONLY_PENDING"
                 ? "No pending candidates match the current search and confidence filters."
                 : "No candidates match the current search and confidence filters."}
@@ -237,6 +237,7 @@ export function CandidateQueue({
               candidate,
               profile,
             );
+            const plainDescription = describeCandidatePlainly(candidate);
             const profileMatchLabel =
               presentationMode === "ALL_CANDIDATES"
                 ? null
@@ -254,10 +255,10 @@ export function CandidateQueue({
               >
                 <CandidateCard
                   candidate={candidate}
-                  footerText={`Score ${percentage(candidate.scoreEstimate)} • ${decision?.action ?? "PENDING"}${profileMatchLabel ? ` • ${profileMatchLabel}` : ""}${reviewTag ? ` • ${formatReviewTagLabel(reviewTag)}` : ""}`}
+                  footerText={`Score ${percentage(candidate.scoreEstimate)} • ${formatSeconds(candidate.candidateWindow.startSeconds)} to ${formatSeconds(candidate.candidateWindow.endSeconds)} • ${decision?.action ?? "PENDING"}${profileMatchLabel ? ` • ${profileMatchLabel}` : ""}${reviewTag ? ` • ${formatReviewTagLabel(reviewTag)}` : ""}`}
                   label={resolveCandidateLabel(candidate, decision)}
                   onSelect={() => onSelectCandidate(candidate.id)}
-                  secondaryText={`${summarizeCandidate(candidate, profile)} • ${formatSeconds(candidate.candidateWindow.startSeconds)} to ${formatSeconds(candidate.candidateWindow.endSeconds)}${profileMatch.supportingFactors[0] ? ` • ${profileMatch.supportingFactors[0]}` : ""}`}
+                  secondaryText={`${plainDescription.summary}${plainDescription.detail ? ` ${plainDescription.detail}` : ""}`}
                   selected={isSelected}
                 />
               </div>
