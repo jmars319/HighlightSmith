@@ -12,8 +12,12 @@ from .contracts import Settings
 from .pipeline.orchestrator import analyze_media
 from .service import (
     DEFAULT_DATABASE_PATH,
+    add_profile_example_request,
     analyze_request,
     apply_review_update,
+    create_profile_request,
+    list_profile_examples_request,
+    list_profiles_request,
     list_session_summaries_request,
     load_session_request,
 )
@@ -73,6 +77,59 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
                 {
                     "status": "listed",
                     "sessions": _convert(summaries),
+                },
+            )
+            return
+
+        if request_path == "/profiles":
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            profiles = list_profiles_request(database_path=database_path)
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "profiles": _convert(profiles),
+                },
+            )
+            return
+
+        if request_path.startswith("/profiles/") and request_path.endswith("/examples"):
+            profile_id = self._profile_id_from_examples_path(request_path)
+            if not profile_id:
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_request",
+                        "message": "profileId is required",
+                    },
+                )
+                return
+
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            try:
+                examples = list_profile_examples_request(
+                    profile_id,
+                    database_path=database_path,
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "examples": _convert(examples),
                 },
             )
             return
@@ -188,6 +245,114 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if request_path == "/profiles":
+            payload = self._read_json_body()
+            name = str(payload.get("name", "")).strip()
+            description = payload.get("description")
+            description = str(description).strip() if description is not None else None
+            state = str(payload.get("state", "ACTIVE")).strip() or "ACTIVE"
+            if not name:
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_request",
+                        "message": "name is required",
+                    },
+                )
+                return
+
+            try:
+                profile = create_profile_request(
+                    name,
+                    description=description,
+                    state=state,
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except ValueError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": "profile_create_failed",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "created",
+                    "profile": _convert(profile),
+                },
+            )
+            return
+
+        if request_path.startswith("/profiles/") and request_path.endswith("/examples"):
+            profile_id = self._profile_id_from_examples_path(request_path)
+            if not profile_id:
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_request",
+                        "message": "profileId is required",
+                    },
+                )
+                return
+
+            payload = self._read_json_body()
+            source_type = str(payload.get("sourceType", "")).strip()
+            source_value = str(payload.get("sourceValue", "")).strip()
+            title = payload.get("title")
+            title = str(title).strip() if title is not None else None
+            note = payload.get("note")
+            note = str(note).strip() if note is not None else None
+            if not source_type or not source_value:
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_request",
+                        "message": "sourceType and sourceValue are required",
+                    },
+                )
+                return
+
+            try:
+                example = add_profile_example_request(
+                    profile_id,
+                    source_type=source_type,
+                    source_value=source_value,
+                    title=title,
+                    note=note,
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+            except ValueError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": "example_create_failed",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "created",
+                    "example": _convert(example),
+                },
+            )
+            return
+
         if request_path == "/review":
             payload = self._read_json_body()
             session_id = str(payload.get("sessionId", "")).strip()
@@ -293,6 +458,11 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
             or os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH")
             or DEFAULT_DATABASE_PATH
         )
+
+    def _profile_id_from_examples_path(self, request_path: str) -> str:
+        profile_path = request_path.removeprefix("/profiles/")
+        profile_id, _, _ = profile_path.partition("/examples")
+        return unquote(profile_id).strip()
 
 
 def main() -> int:

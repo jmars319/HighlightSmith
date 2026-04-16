@@ -10,10 +10,21 @@ class StubTranscriptProvider:
 
     def transcribe(self, media_source: MediaSource) -> list[TranscriptChunk]:
         base_ratios = [0.14, 0.33, 0.58, 0.79]
-        duration_seconds = max(media_source.duration_seconds, 240.0)
-        left_margin = min(90.0, max(24.0, duration_seconds * 0.08))
-        right_margin = min(90.0, max(36.0, duration_seconds * 0.1))
-        usable_duration = max(120.0, duration_seconds - left_margin - right_margin)
+        duration_seconds = max(media_source.duration_seconds, 12.0)
+        if duration_seconds <= 150.0:
+            left_margin = max(1.5, duration_seconds * 0.08)
+            right_margin = max(1.5, duration_seconds * 0.08)
+            usable_duration = max(
+                duration_seconds - left_margin - right_margin,
+                duration_seconds * 0.45,
+            )
+        else:
+            left_margin = min(90.0, max(24.0, duration_seconds * 0.08))
+            right_margin = min(90.0, max(36.0, duration_seconds * 0.1))
+            usable_duration = max(
+                120.0,
+                duration_seconds - left_margin - right_margin,
+            )
         seed = hashlib.sha1(media_source.path.encode("utf-8")).digest()
 
         transcript: list[TranscriptChunk] = []

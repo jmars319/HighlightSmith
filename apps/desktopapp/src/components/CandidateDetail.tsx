@@ -1,11 +1,16 @@
 import type {
   CandidateWindow,
   ContentProfile,
+  ProfileMatchingSummary,
+  ProfilePresentationMode,
   ProjectSessionSummary,
   ReviewDecision,
   TranscriptChunk,
 } from "@highlightsmith/shared-types";
-import type { ReviewQueueMode } from "@highlightsmith/domain";
+import {
+  resolveCandidateProfileMatch,
+  type ReviewQueueMode,
+} from "@highlightsmith/domain";
 import {
   ConfidenceBadge,
   ReviewControls,
@@ -27,6 +32,8 @@ type CandidateDetailProps = {
   pendingCount: number;
   nextPendingSession: ProjectSessionSummary | null;
   reviewQueueMode: ReviewQueueMode;
+  presentationMode: ProfilePresentationMode;
+  profileMatchingSummary: ProfileMatchingSummary;
   selectedCandidateVisibleInQueue: boolean;
   visibleCandidateCount: number;
   onAccept: () => void;
@@ -56,6 +63,8 @@ export function CandidateDetail({
   pendingCount,
   nextPendingSession,
   reviewQueueMode,
+  presentationMode,
+  profileMatchingSummary,
   selectedCandidateVisibleInQueue,
   visibleCandidateCount,
   onAccept,
@@ -92,6 +101,7 @@ export function CandidateDetail({
   }
 
   const activeSegment = decision?.adjustedSegment ?? candidate.suggestedSegment;
+  const profileMatch = resolveCandidateProfileMatch(candidate, profile);
 
   return (
     <section className="detail-panel glass-panel">
@@ -100,13 +110,25 @@ export function CandidateDetail({
           <p className="eyebrow">Candidate detail</p>
           <h2>{decision?.label ?? candidate.editableLabel}</h2>
           <p className="detail-progress-copy">
-            Candidate {candidateIndex + 1} of {candidateCount} • {pendingCount} pending
+            Candidate {candidateIndex + 1} of {candidateCount} • {pendingCount}{" "}
+            pending
           </p>
           <p className="detail-mode-copy">
-            Queue mode: {reviewQueueMode === "ONLY_PENDING" ? "Only pending" : "All candidates"}
+            Queue mode:{" "}
+            {reviewQueueMode === "ONLY_PENDING"
+              ? "Only pending"
+              : "All candidates"}
             {!selectedCandidateVisibleInQueue
               ? " • current selection is outside the queue view"
               : ""}
+          </p>
+          <p className="detail-mode-copy">
+            Presentation:{" "}
+            {presentationMode === "ALL_CANDIDATES"
+              ? "All candidates"
+              : presentationMode === "PROFILE_VIEW"
+                ? "Profile view"
+                : "Strong matches"}
           </p>
         </div>
         <div className="detail-header-meta">
@@ -159,6 +181,28 @@ export function CandidateDetail({
               : "Signals align cleanly enough to review as a likely standalone moment."}
           </p>
         </article>
+
+        <article className="detail-card">
+          <span className="detail-label">Profile context</span>
+          <strong>{profile.name}</strong>
+          <p>{profileMatch.note}</p>
+          <p>
+            Match state {formatProfileMatchStatus(profileMatch.status)} •{" "}
+            {profileMatchingSummary.usableLocalExampleCount} usable local
+            example
+            {profileMatchingSummary.usableLocalExampleCount === 1
+              ? ""
+              : "s"} • {profileMatchingSummary.referenceOnlyExampleCount}{" "}
+            reference-only
+          </p>
+          {profileMatch.similarityScore !== undefined ? (
+            <p>
+              Heuristic score {percentage(profileMatch.similarityScore)} •{" "}
+              {profileMatch.comparedExampleCount} local example
+              {profileMatch.comparedExampleCount === 1 ? "" : "s"} compared
+            </p>
+          ) : null}
+        </article>
       </div>
 
       <TranscriptContextPeek candidate={candidate} transcript={transcript} />
@@ -197,6 +241,36 @@ export function CandidateDetail({
           ))}
         </div>
       </section>
+
+      {profileMatch.supportingFactors.length > 0 ||
+      profileMatch.limitingFactors.length > 0 ? (
+        <section className="breakdown-panel">
+          <div className="section-title-row">
+            <h3>Profile match evidence</h3>
+            <span className="eyebrow">
+              {profileMatch.method === "LOCAL_FILE_HEURISTIC"
+                ? "Local-file heuristic"
+                : "Match unavailable"}
+            </span>
+          </div>
+
+          {profileMatch.supportingFactors.length > 0 ? (
+            <div className="plain-list">
+              {profileMatch.supportingFactors.map((factor) => (
+                <p key={factor}>{factor}</p>
+              ))}
+            </div>
+          ) : null}
+
+          {profileMatch.limitingFactors.length > 0 ? (
+            <div className="plain-list">
+              {profileMatch.limitingFactors.map((factor) => (
+                <p key={factor}>{factor}</p>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {pendingCount === 0 ? (
         <section className="completion-panel">
@@ -314,4 +388,22 @@ export function CandidateDetail({
       </section>
     </section>
   );
+}
+
+function formatProfileMatchStatus(
+  status: ReturnType<typeof resolveCandidateProfileMatch>["status"],
+): string {
+  if (status === "EXAMPLE_COMPARISON") {
+    return "Example comparison";
+  }
+
+  if (status === "HEURISTIC") {
+    return "Heuristic";
+  }
+
+  if (status === "PLACEHOLDER") {
+    return "Placeholder";
+  }
+
+  return "Unassessed";
 }

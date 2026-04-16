@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
+import uuid
 from dataclasses import asdict, is_dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -11,10 +14,19 @@ from ..contracts import (
     AnalysisCoverage,
     AnalysisCoverageBand,
     AnalysisCoverageFlag,
+    CandidateProfileMatch,
+    CandidateProfileMatchStatus,
+    CandidateProfileMatchStrength,
     CandidateWindow,
     ConfidenceBand,
+    ContentProfile,
+    ExampleClip,
+    ExampleClipFeatureSummary,
+    ExampleClipSourceType,
+    ExampleClipStatus,
     FeatureWindow,
     MediaSource,
+    ProfileMatchingMethod,
     ProjectSession,
     ReasonCode,
     ReviewTag,
@@ -29,6 +41,10 @@ from ..contracts import (
 )
 from ..pipeline.coverage import build_analysis_coverage
 from ..pipeline.orchestrator import analyze_media
+from ..pipeline.profile_matching import (
+    LOCAL_FILE_HEURISTIC_VERSION,
+    build_local_example_feature_summary,
+)
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS project_sessions (
@@ -74,9 +90,130 @@ CREATE TABLE IF NOT EXISTS analysis_artifacts (
   FOREIGN KEY (project_session_id) REFERENCES project_sessions(id)
 );
 
+CREATE TABLE IF NOT EXISTS clip_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  state TEXT NOT NULL,
+  source TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  signal_weights_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS example_clips (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_value TEXT NOT NULL,
+  title TEXT,
+  note TEXT,
+  status TEXT NOT NULL,
+  status_detail TEXT,
+  summary_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES clip_profiles(id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS review_decisions_session_candidate_idx
 ON review_decisions(project_session_id, candidate_id);
+
+CREATE INDEX IF NOT EXISTS example_clips_profile_idx
+ON example_clips(profile_id, created_at DESC);
 """
+
+SYSTEM_PROFILE_TIMESTAMP = "2026-04-11T00:00:00.000Z"
+
+SYSTEM_PROFILES = [
+    ContentProfile(
+        id="generic",
+        name="Generic",
+        label="Generic",
+        description="High-recall surfacing for creator review. Always available regardless of personalization state.",
+        created_at=SYSTEM_PROFILE_TIMESTAMP,
+        updated_at=SYSTEM_PROFILE_TIMESTAMP,
+        state="ACTIVE",
+        source="SYSTEM",
+        mode="BROAD",
+        signal_weights={
+            ReasonCode.REACTION_PHRASE: 1,
+            ReasonCode.LOUDNESS_SPIKE: 0.95,
+            ReasonCode.COMMENTARY_DENSITY: 0.75,
+            ReasonCode.STRUCTURE_SETUP: 0.65,
+            ReasonCode.STRUCTURE_CONSEQUENCE: 0.7,
+            ReasonCode.STRUCTURE_RESOLUTION: 0.7,
+            ReasonCode.MENU_HEAVY: -0.75,
+            ReasonCode.CLEANUP_HEAVY: -0.6,
+            ReasonCode.LOW_INFORMATION: -0.45,
+            ReasonCode.CONTEXT_REQUIRED: -0.25,
+        },
+    ),
+    ContentProfile(
+        id="stealth",
+        name="Stealth",
+        label="Stealth",
+        description="Rewards tension, anticipation, and payoff while suppressing noisy false positives.",
+        created_at=SYSTEM_PROFILE_TIMESTAMP,
+        updated_at=SYSTEM_PROFILE_TIMESTAMP,
+        state="ACTIVE",
+        source="SYSTEM",
+        mode="CONTEXTUAL",
+        signal_weights={
+            ReasonCode.STRUCTURE_SETUP: 0.95,
+            ReasonCode.TACTICAL_NARRATION: 0.9,
+            ReasonCode.SILENCE_BREAK: 0.8,
+            ReasonCode.ABRUPT_SILENCE_AFTER_INTENSITY: 0.75,
+            ReasonCode.COMMENTARY_DENSITY: 0.55,
+            ReasonCode.LOUDNESS_SPIKE: 0.35,
+            ReasonCode.MENU_HEAVY: -0.85,
+            ReasonCode.CLEANUP_HEAVY: -0.7,
+        },
+    ),
+    ContentProfile(
+        id="raid_coop",
+        name="Raid / Co-op",
+        label="Raid / Co-op",
+        description="Prioritizes team chatter, overlap spikes, wipes, recoveries, and shared reactions.",
+        created_at=SYSTEM_PROFILE_TIMESTAMP,
+        updated_at=SYSTEM_PROFILE_TIMESTAMP,
+        state="ACTIVE",
+        source="SYSTEM",
+        mode="CONTEXTUAL",
+        signal_weights={
+            ReasonCode.OVERLAP_SPIKE: 1,
+            ReasonCode.LAUGHTER_BURST: 0.8,
+            ReasonCode.COMMENTARY_DENSITY: 0.75,
+            ReasonCode.STRUCTURE_CONSEQUENCE: 0.85,
+            ReasonCode.STRUCTURE_RESOLUTION: 0.8,
+            ReasonCode.ACTION_AUDIO_CLUSTER: 0.65,
+            ReasonCode.CLEANUP_HEAVY: -0.55,
+            ReasonCode.LOW_INFORMATION: -0.5,
+        },
+    ),
+    ContentProfile(
+        id="exploration",
+        name="Exploration",
+        label="Exploration",
+        description="Biases toward discovery, realization, and clue-resolution pacing over pure intensity.",
+        created_at=SYSTEM_PROFILE_TIMESTAMP,
+        updated_at=SYSTEM_PROFILE_TIMESTAMP,
+        state="ACTIVE",
+        source="SYSTEM",
+        mode="CONTEXTUAL",
+        signal_weights={
+            ReasonCode.STRUCTURE_SETUP: 0.9,
+            ReasonCode.STRUCTURE_RESOLUTION: 0.95,
+            ReasonCode.REACTION_PHRASE: 0.7,
+            ReasonCode.PITCH_EXCURSION: 0.55,
+            ReasonCode.COMMENTARY_DENSITY: 0.45,
+            ReasonCode.LOUDNESS_SPIKE: 0.2,
+            ReasonCode.LOW_INFORMATION: -0.3,
+            ReasonCode.CONTEXT_REQUIRED: -0.15,
+        },
+    ),
+]
 
 
 class SessionStore:
@@ -88,11 +225,14 @@ class SessionStore:
         with sqlite3.connect(self.database_path) as connection:
             connection.executescript(SCHEMA_SQL)
             self._ensure_column(connection, "project_sessions", "session_json", "TEXT")
+            self._ensure_column(connection, "example_clips", "summary_json", "TEXT")
+            self._seed_system_profiles(connection)
             connection.commit()
 
     def save_session(self, session: ProjectSession) -> None:
         with sqlite3.connect(self.database_path) as connection:
             connection.executescript(SCHEMA_SQL)
+            self._seed_system_profiles(connection)
             connection.execute(
                 """
                 INSERT OR REPLACE INTO project_sessions (
@@ -171,6 +311,7 @@ class SessionStore:
     def save_review_decision(self, decision: ReviewDecision) -> None:
         with sqlite3.connect(self.database_path) as connection:
             connection.executescript(SCHEMA_SQL)
+            self._seed_system_profiles(connection)
             connection.execute(
                 """
                 INSERT INTO review_decisions (
@@ -199,8 +340,216 @@ class SessionStore:
             self._refresh_session_summary(connection, decision.project_session_id, decision.created_at)
             connection.commit()
 
+    def list_profiles(self) -> list[ContentProfile]:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_column(connection, "example_clips", "summary_json", "TEXT")
+            self._seed_system_profiles(connection)
+
+            rows = connection.execute(
+                """
+                SELECT id, name, description, state, source, mode, signal_weights_json, created_at, updated_at
+                FROM clip_profiles
+                ORDER BY CASE source WHEN 'SYSTEM' THEN 0 ELSE 1 END, updated_at DESC, name ASC
+                """
+            ).fetchall()
+            profiles = [self._profile_from_row(connection, row) for row in rows]
+            connection.commit()
+            return profiles
+
+    def load_profile(self, profile_id: str) -> ContentProfile:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_column(connection, "example_clips", "summary_json", "TEXT")
+            self._seed_system_profiles(connection)
+
+            row = connection.execute(
+                """
+                SELECT id, name, description, state, source, mode, signal_weights_json, created_at, updated_at
+                FROM clip_profiles
+                WHERE id = ?
+                """,
+                (profile_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Clip profile not found: {profile_id}")
+
+            profile = self._profile_from_row(connection, row)
+            connection.commit()
+            return profile
+
+    def create_profile(
+        self,
+        *,
+        name: str,
+        description: str = "",
+        state: str = "ACTIVE",
+    ) -> ContentProfile:
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValueError("Profile name is required")
+
+        normalized_description = description.strip()
+        now = datetime.now(timezone.utc).isoformat()
+        profile_id = self._generate_profile_id(normalized_name)
+
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._seed_system_profiles(connection)
+            connection.execute(
+                """
+                INSERT INTO clip_profiles (
+                  id, name, description, state, source, mode, signal_weights_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    profile_id,
+                    normalized_name,
+                    normalized_description,
+                    state,
+                    "USER",
+                    "EXAMPLE_DRIVEN",
+                    self._to_json({}),
+                    now,
+                    now,
+                ),
+            )
+            connection.commit()
+
+            row = connection.execute(
+                """
+                SELECT id, name, description, state, source, mode, signal_weights_json, created_at, updated_at
+                FROM clip_profiles
+                WHERE id = ?
+                """,
+                (profile_id,),
+            ).fetchone()
+
+        if row is None:
+            raise KeyError(f"Profile not found after create: {profile_id}")
+
+        return self._profile_from_row(None, row)
+
+    def profile_exists(self, profile_id: str) -> bool:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.executescript(SCHEMA_SQL)
+            self._seed_system_profiles(connection)
+            row = connection.execute(
+                "SELECT 1 FROM clip_profiles WHERE id = ?",
+                (profile_id,),
+            ).fetchone()
+        return row is not None
+
+    def resolve_profile_id(self, profile_id: str | None) -> str:
+        normalized_profile_id = (profile_id or "").strip() or "generic"
+        if self.profile_exists(normalized_profile_id):
+            return normalized_profile_id
+        return "generic"
+
+    def list_example_clips(self, profile_id: str) -> list[ExampleClip]:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_column(connection, "example_clips", "summary_json", "TEXT")
+            self._seed_system_profiles(connection)
+            self._ensure_profile_exists(connection, profile_id)
+            examples = self._example_clips_for_profile(connection, profile_id)
+            connection.commit()
+            return examples
+
+    def add_example_clip(
+        self,
+        profile_id: str,
+        *,
+        source_type: str,
+        source_value: str,
+        title: str | None = None,
+        note: str | None = None,
+    ) -> ExampleClip:
+        normalized_source_type = ExampleClipSourceType(source_type)
+        normalized_source_value = source_value.strip()
+        if not normalized_source_value:
+            raise ValueError("Example clip sourceValue is required")
+
+        normalized_title = title.strip() if title else None
+        normalized_note = note.strip() if note else None
+        normalized_source_value = self._normalize_example_source_value(
+            normalized_source_type,
+            normalized_source_value,
+        )
+        status, status_detail = self._derive_example_status(
+            normalized_source_type,
+            normalized_source_value,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        example_id = f"example_{uuid.uuid4().hex[:12]}"
+
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_column(connection, "example_clips", "summary_json", "TEXT")
+            self._seed_system_profiles(connection)
+            self._ensure_profile_exists(connection, profile_id)
+            feature_summary = None
+            if normalized_source_type in {
+                ExampleClipSourceType.LOCAL_FILE_PATH,
+                ExampleClipSourceType.LOCAL_FILE_UPLOAD,
+            } and status == ExampleClipStatus.LOCAL_FILE_AVAILABLE:
+                feature_summary, status_detail = self._summarize_local_example(
+                    normalized_source_value,
+                )
+            connection.execute(
+                """
+                INSERT INTO example_clips (
+                  id, profile_id, source_type, source_value, title, note,
+                  status, status_detail, summary_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    example_id,
+                    profile_id,
+                    normalized_source_type.value,
+                    normalized_source_value,
+                    normalized_title,
+                    normalized_note,
+                    status.value,
+                    status_detail,
+                    self._to_json(feature_summary) if feature_summary else None,
+                    now,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE clip_profiles
+                SET updated_at = ?
+                WHERE id = ?
+                """,
+                (now, profile_id),
+            )
+            connection.commit()
+
+            row = connection.execute(
+                """
+                SELECT id, profile_id, source_type, source_value, title, note,
+                       status, status_detail, summary_json, created_at, updated_at
+                FROM example_clips
+                WHERE id = ?
+                """,
+                (example_id,),
+            ).fetchone()
+
+            if row is None:
+                raise KeyError(f"Example clip not found after create: {example_id}")
+
+            return self._example_clip_from_row(connection, row)
+
     def count_candidates(self, project_session_id: str) -> int:
         with sqlite3.connect(self.database_path) as connection:
+            connection.executescript(SCHEMA_SQL)
             result = connection.execute(
                 "SELECT COUNT(*) FROM candidate_windows WHERE project_session_id = ?",
                 (project_session_id,),
@@ -212,6 +561,7 @@ class SessionStore:
             connection.row_factory = sqlite3.Row
             connection.executescript(SCHEMA_SQL)
             self._ensure_column(connection, "project_sessions", "session_json", "TEXT")
+            self._seed_system_profiles(connection)
 
             row = connection.execute(
                 """
@@ -234,6 +584,7 @@ class SessionStore:
             connection.row_factory = sqlite3.Row
             connection.executescript(SCHEMA_SQL)
             self._ensure_column(connection, "project_sessions", "session_json", "TEXT")
+            self._seed_system_profiles(connection)
 
             rows = connection.execute(
                 """
@@ -302,6 +653,260 @@ class SessionStore:
             )
 
         return summaries
+
+    def _seed_system_profiles(self, connection: sqlite3.Connection) -> None:
+        for profile in SYSTEM_PROFILES:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO clip_profiles (
+                  id, name, description, state, source, mode, signal_weights_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    profile.id,
+                    profile.name,
+                    profile.description,
+                    profile.state,
+                    profile.source,
+                    profile.mode,
+                    self._to_json(profile.signal_weights),
+                    profile.created_at,
+                    profile.updated_at,
+                ),
+            )
+
+    def _ensure_profile_exists(
+        self,
+        connection: sqlite3.Connection,
+        profile_id: str,
+    ) -> None:
+        row = connection.execute(
+            "SELECT 1 FROM clip_profiles WHERE id = ?",
+            (profile_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Clip profile not found: {profile_id}")
+
+    def _profile_from_row(
+        self,
+        connection: sqlite3.Connection | None,
+        row: sqlite3.Row,
+    ) -> ContentProfile:
+        signal_weights = json.loads(row["signal_weights_json"])
+        example_clips = (
+            self._example_clips_for_profile(connection, row["id"])
+            if connection is not None
+            else []
+        )
+        return ContentProfile(
+            id=row["id"],
+            name=row["name"],
+            label=row["name"],
+            description=row["description"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            state=row["state"],
+            source=row["source"],
+            mode=row["mode"],
+            signal_weights={
+                ReasonCode(key): float(value)
+                for key, value in signal_weights.items()
+                if key in ReasonCode._value2member_map_
+            },
+            example_clips=example_clips,
+        )
+
+    def _example_clips_for_profile(
+        self,
+        connection: sqlite3.Connection,
+        profile_id: str,
+    ) -> list[ExampleClip]:
+        rows = connection.execute(
+            """
+            SELECT id, profile_id, source_type, source_value, title, note,
+                   status, status_detail, summary_json, created_at, updated_at
+            FROM example_clips
+            WHERE profile_id = ?
+            ORDER BY updated_at DESC, created_at DESC
+            """,
+            (profile_id,),
+        ).fetchall()
+        return [self._example_clip_from_row(connection, row) for row in rows]
+
+    def _example_clip_from_row(
+        self,
+        connection: sqlite3.Connection,
+        row: sqlite3.Row,
+    ) -> ExampleClip:
+        source_type = ExampleClipSourceType(row["source_type"])
+        source_value = row["source_value"]
+        status = ExampleClipStatus(row["status"])
+        status_detail = row["status_detail"]
+        feature_summary = self._example_feature_summary_from_json(row["summary_json"])
+
+        if source_type in {
+            ExampleClipSourceType.LOCAL_FILE_PATH,
+            ExampleClipSourceType.LOCAL_FILE_UPLOAD,
+        }:
+            path = Path(source_value).expanduser()
+            if not path.exists():
+                status = ExampleClipStatus.MISSING_LOCAL_FILE
+                status_detail = (
+                    "Local clip path was saved, but the file is not currently available on this machine."
+                )
+                feature_summary = None
+                connection.execute(
+                    """
+                    UPDATE example_clips
+                    SET status = ?, status_detail = ?, summary_json = NULL
+                    WHERE id = ?
+                    """,
+                    (
+                        status.value,
+                        status_detail,
+                        row["id"],
+                    ),
+                )
+            elif (
+                feature_summary is None
+                or feature_summary.method_version != LOCAL_FILE_HEURISTIC_VERSION
+            ):
+                feature_summary, status_detail = self._summarize_local_example(
+                    source_value,
+                )
+                status = ExampleClipStatus.LOCAL_FILE_AVAILABLE
+                connection.execute(
+                    """
+                    UPDATE example_clips
+                    SET status = ?, status_detail = ?, summary_json = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        status.value,
+                        status_detail,
+                        self._to_json(feature_summary) if feature_summary else None,
+                        feature_summary.generated_at if feature_summary else row["updated_at"],
+                        row["id"],
+                    ),
+                )
+
+        return ExampleClip(
+            id=row["id"],
+            profile_id=row["profile_id"],
+            source_type=source_type,
+            source_value=source_value,
+            title=row["title"],
+            note=row["note"],
+            status=status,
+            status_detail=status_detail,
+            feature_summary=feature_summary,
+            created_at=row["created_at"],
+            updated_at=feature_summary.generated_at if feature_summary else row["updated_at"],
+        )
+
+    def _summarize_local_example(
+        self,
+        source_value: str,
+    ) -> tuple[ExampleClipFeatureSummary | None, str]:
+        try:
+            feature_summary = build_local_example_feature_summary(
+                source_value,
+                Settings(),
+            )
+        except Exception as error:  # pragma: no cover - defensive local-media guard
+            return (
+                None,
+                "Local clip file is present, but HighlightSmith could not build a heuristic summary yet: "
+                f"{error}",
+            )
+
+        return (
+            feature_summary,
+            "Local clip summary is ready for heuristic profile matching.",
+        )
+
+    def _example_feature_summary_from_json(
+        self,
+        summary_json: str | None,
+    ) -> ExampleClipFeatureSummary | None:
+        if not summary_json:
+            return None
+
+        try:
+            payload = json.loads(summary_json)
+        except json.JSONDecodeError:
+            return None
+
+        return ExampleClipFeatureSummary(
+            method_version=payload.get("method_version", "LOCAL_FILE_HEURISTIC_V1"),
+            generated_at=payload["generated_at"],
+            duration_seconds=float(payload["duration_seconds"]),
+            transcript_chunk_count=int(payload["transcript_chunk_count"]),
+            transcript_density_per_minute=float(payload["transcript_density_per_minute"]),
+            candidate_seed_count=int(payload["candidate_seed_count"]),
+            candidate_density_per_minute=float(payload["candidate_density_per_minute"]),
+            transcript_anchor_terms=list(payload.get("transcript_anchor_terms", [])),
+            transcript_anchor_phrases=list(payload.get("transcript_anchor_phrases", [])),
+            speech_density_mean=float(payload["speech_density_mean"]),
+            speech_density_peak=float(payload["speech_density_peak"]),
+            energy_mean=float(payload["energy_mean"]),
+            energy_peak=float(payload["energy_peak"]),
+            pacing_mean=float(payload["pacing_mean"]),
+            overlap_activity_mean=float(payload["overlap_activity_mean"]),
+            high_activity_share=float(payload["high_activity_share"]),
+            top_reason_codes=[
+                ReasonCode(reason_code)
+                for reason_code in payload.get("top_reason_codes", [])
+            ],
+            coverage_band=AnalysisCoverageBand(payload["coverage_band"]),
+            coverage_flags=[
+                AnalysisCoverageFlag(flag)
+                for flag in payload.get("coverage_flags", [])
+            ],
+        )
+
+    def _generate_profile_id(self, name: str) -> str:
+        base_slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "profile"
+        candidate_id = f"profile_{base_slug}"
+        if not self.profile_exists(candidate_id):
+            return candidate_id
+        return f"{candidate_id}_{uuid.uuid4().hex[:6]}"
+
+    def _normalize_example_source_value(
+        self,
+        source_type: ExampleClipSourceType,
+        source_value: str,
+    ) -> str:
+        if source_type in {
+            ExampleClipSourceType.LOCAL_FILE_PATH,
+            ExampleClipSourceType.LOCAL_FILE_UPLOAD,
+        }:
+            return str(Path(source_value).expanduser())
+        return source_value
+
+    def _derive_example_status(
+        self,
+        source_type: ExampleClipSourceType,
+        source_value: str,
+    ) -> tuple[ExampleClipStatus, str | None]:
+        if source_type in {
+            ExampleClipSourceType.LOCAL_FILE_PATH,
+            ExampleClipSourceType.LOCAL_FILE_UPLOAD,
+        }:
+            if Path(source_value).expanduser().exists():
+                return (
+                    ExampleClipStatus.LOCAL_FILE_AVAILABLE,
+                    "Local clip reference saved. HighlightSmith will try to prepare a local heuristic summary for matching.",
+                )
+            return (
+                ExampleClipStatus.MISSING_LOCAL_FILE,
+                "Local clip path was saved, but the file was not found on this machine at ingest time.",
+            )
+
+        return (
+            ExampleClipStatus.REFERENCE_ONLY,
+            "Remote clip retrieval is not enabled yet. HighlightSmith is storing this reference for future matching work.",
+        )
 
     def _refresh_session_summary(
         self,
@@ -581,6 +1186,10 @@ class SessionStore:
             review_tags=[
                 ReviewTag(review_tag) for review_tag in value.get("review_tags", [])
             ],
+            profile_matches=[
+                self._candidate_profile_match_from_dict(match)
+                for match in value.get("profile_matches", [])
+            ],
         )
 
     def _score_contribution_from_dict(self, value: dict[str, Any]) -> ScoreContribution:
@@ -611,6 +1220,26 @@ class SessionStore:
             adjusted_segment=self._time_range_from_dict(adjusted_segment) if adjusted_segment else None,
             notes=value.get("notes"),
             created_at=value["created_at"],
+        )
+
+    def _candidate_profile_match_from_dict(
+        self,
+        value: dict[str, Any],
+    ) -> CandidateProfileMatch:
+        return CandidateProfileMatch(
+            profile_id=value["profile_id"],
+            method=ProfileMatchingMethod(value.get("method", ProfileMatchingMethod.NONE.value)),
+            status=CandidateProfileMatchStatus(value["status"]),
+            strength=CandidateProfileMatchStrength(value["strength"]),
+            note=value["note"],
+            matched_example_clip_ids=list(value.get("matched_example_clip_ids", [])),
+            compared_example_count=int(value.get("compared_example_count", 0)),
+            supporting_factors=list(value.get("supporting_factors", [])),
+            limiting_factors=list(value.get("limiting_factors", [])),
+            similarity_score=float(value["similarity_score"])
+            if value.get("similarity_score") is not None
+            else None,
+            updated_at=value.get("updated_at"),
         )
 
     def _time_range_from_dict(self, value: dict[str, Any]) -> TimeRange:

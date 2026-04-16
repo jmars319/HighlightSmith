@@ -3,13 +3,15 @@ import type {
   ReviewDecision,
 } from "@highlightsmith/shared-types";
 
-export const sqliteSchemaVersion = 1;
+export const sqliteSchemaVersion = 2;
 
 export const sqliteTables = [
   "project_sessions",
   "candidate_windows",
   "review_decisions",
   "analysis_artifacts",
+  "clip_profiles",
+  "example_clips",
 ] as const;
 
 export const initialMigrationSql = `
@@ -20,6 +22,7 @@ CREATE TABLE IF NOT EXISTS project_sessions (
   profile_id TEXT NOT NULL,
   settings_json TEXT NOT NULL,
   summary_json TEXT NOT NULL,
+  session_json TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -53,6 +56,33 @@ CREATE TABLE IF NOT EXISTS analysis_artifacts (
   speech_regions_json TEXT NOT NULL,
   feature_windows_json TEXT NOT NULL,
   FOREIGN KEY (project_session_id) REFERENCES project_sessions(id)
+);
+
+CREATE TABLE IF NOT EXISTS clip_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  state TEXT NOT NULL,
+  source TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  signal_weights_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS example_clips (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_value TEXT NOT NULL,
+  title TEXT,
+  note TEXT,
+  status TEXT NOT NULL,
+  status_detail TEXT,
+  summary_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES clip_profiles(id)
 );
 `;
 
@@ -114,4 +144,5 @@ export const migrationPlaceholders = [
   "001_initial_schema.sql",
   "002_review_feedback_indexes.sql",
   "003_profile_preferences.sql",
+  "004_clip_profiles.sql",
 ] as const;

@@ -2,7 +2,15 @@
 
 ## Role
 
-Desktopapp is the primary surface in V1.
+Desktopapp is the primary product surface in V1.
+
+It is the default place for:
+
+- local media selection
+- analysis launch
+- profile-aware review
+- backlog decision-making
+- trust-sensitive candidate inspection
 
 ## Responsibilities
 

@@ -1,10 +1,13 @@
 import type {
   CandidateWindow,
   ConfidenceBand,
-  ReviewDecision,
   ContentProfile,
+  ProfileMatchingSummary,
+  ProfilePresentationMode,
+  ReviewDecision,
 } from "@highlightsmith/shared-types";
 import {
+  resolveCandidateProfileMatch,
   resolveCandidateLabel,
   type ReviewQueueMode,
 } from "@highlightsmith/domain";
@@ -22,6 +25,7 @@ type CandidateQueueProps = {
   selectedCandidateId: string | null;
   decisionsByCandidateId: Record<string, ReviewDecision>;
   profile: ContentProfile;
+  profileMatchingSummary: ProfileMatchingSummary;
   pendingCount: number;
   reviewedCount: number;
   totalCandidateCount: number;
@@ -33,9 +37,12 @@ type CandidateQueueProps = {
   onBandFilterChange: (value: ConfidenceBand | "ALL") => void;
   reviewQueueMode: ReviewQueueMode;
   onReviewQueueModeChange: (value: ReviewQueueMode) => void;
+  presentationMode: ProfilePresentationMode;
+  onPresentationModeChange: (value: ProfilePresentationMode) => void;
   selectedCandidateVisibleInQueue: boolean;
   onSelectCandidate: (candidateId: string) => void;
   onSelectNextPending: () => void;
+  isStrongMatchFallback: boolean;
 };
 
 const filters: Array<ConfidenceBand | "ALL"> = [
@@ -51,6 +58,7 @@ export function CandidateQueue({
   selectedCandidateId,
   decisionsByCandidateId,
   profile,
+  profileMatchingSummary,
   pendingCount,
   reviewedCount,
   totalCandidateCount,
@@ -62,9 +70,12 @@ export function CandidateQueue({
   onBandFilterChange,
   reviewQueueMode,
   onReviewQueueModeChange,
+  presentationMode,
+  onPresentationModeChange,
   selectedCandidateVisibleInQueue,
   onSelectCandidate,
   onSelectNextPending,
+  isStrongMatchFallback,
 }: CandidateQueueProps) {
   const hiddenReviewedCount =
     reviewQueueMode === "ONLY_PENDING"
@@ -114,6 +125,54 @@ export function CandidateQueue({
       <div className="filter-row">
         <button
           className={
+            presentationMode === "ALL_CANDIDATES"
+              ? "filter-chip active"
+              : "filter-chip"
+          }
+          onClick={() => onPresentationModeChange("ALL_CANDIDATES")}
+          type="button"
+        >
+          All candidates
+        </button>
+        <button
+          className={
+            presentationMode === "PROFILE_VIEW"
+              ? "filter-chip active"
+              : "filter-chip"
+          }
+          onClick={() => onPresentationModeChange("PROFILE_VIEW")}
+          type="button"
+        >
+          Profile view
+        </button>
+        <button
+          className={
+            presentationMode === "STRONG_MATCHES"
+              ? "filter-chip active"
+              : "filter-chip"
+          }
+          onClick={() => onPresentationModeChange("STRONG_MATCHES")}
+          type="button"
+        >
+          Strong matches
+        </button>
+      </div>
+
+      <div className="queue-profile-context">
+        <p className="queue-summary-copy">
+          {profile.name} • {profileMatchingSummary.note}
+        </p>
+        {isStrongMatchFallback ? (
+          <p className="queue-summary-copy">
+            No strong profile matches have been assessed yet, so this view still
+            shows the full candidate set.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="filter-row">
+        <button
+          className={
             reviewQueueMode === "ONLY_PENDING"
               ? "filter-chip active"
               : "filter-chip"
@@ -152,8 +211,8 @@ export function CandidateQueue({
 
       {!selectedCandidateVisibleInQueue ? (
         <p className="queue-summary-copy">
-          The current selection is outside this queue view. Timeline and detail stay
-          focused until you choose another candidate.
+          The current selection is outside this queue view. Timeline and detail
+          stay focused until you choose another candidate.
         </p>
       ) : null}
 
@@ -164,8 +223,8 @@ export function CandidateQueue({
             {totalCandidateCount === 0
               ? "This session did not return any candidate windows yet. Review the session summary, then rerun analysis if needed."
               : reviewQueueMode === "ONLY_PENDING"
-              ? "No pending candidates match the current search and confidence filters."
-              : "No candidates match the current search and confidence filters."}
+                ? "No pending candidates match the current search and confidence filters."
+                : "No candidates match the current search and confidence filters."}
           </p>
         </article>
       ) : (
@@ -174,6 +233,14 @@ export function CandidateQueue({
             const decision = decisionsByCandidateId[candidate.id];
             const isSelected = candidate.id === selectedCandidateId;
             const reviewTag = primaryReviewTag(candidate);
+            const profileMatch = resolveCandidateProfileMatch(
+              candidate,
+              profile,
+            );
+            const profileMatchLabel =
+              presentationMode === "ALL_CANDIDATES"
+                ? null
+                : formatProfileMatchBadge(profileMatch);
 
             return (
               <div
@@ -187,10 +254,10 @@ export function CandidateQueue({
               >
                 <CandidateCard
                   candidate={candidate}
-                  footerText={`Score ${percentage(candidate.scoreEstimate)} • ${decision?.action ?? "PENDING"}${reviewTag ? ` • ${formatReviewTagLabel(reviewTag)}` : ""}`}
+                  footerText={`Score ${percentage(candidate.scoreEstimate)} • ${decision?.action ?? "PENDING"}${profileMatchLabel ? ` • ${profileMatchLabel}` : ""}${reviewTag ? ` • ${formatReviewTagLabel(reviewTag)}` : ""}`}
                   label={resolveCandidateLabel(candidate, decision)}
                   onSelect={() => onSelectCandidate(candidate.id)}
-                  secondaryText={`${summarizeCandidate(candidate, profile)} • ${formatSeconds(candidate.candidateWindow.startSeconds)} to ${formatSeconds(candidate.candidateWindow.endSeconds)}`}
+                  secondaryText={`${summarizeCandidate(candidate, profile)} • ${formatSeconds(candidate.candidateWindow.startSeconds)} to ${formatSeconds(candidate.candidateWindow.endSeconds)}${profileMatch.supportingFactors[0] ? ` • ${profileMatch.supportingFactors[0]}` : ""}`}
                   selected={isSelected}
                 />
               </div>
@@ -200,4 +267,22 @@ export function CandidateQueue({
       )}
     </section>
   );
+}
+
+function formatProfileMatchBadge(
+  profileMatch: ReturnType<typeof resolveCandidateProfileMatch>,
+): string {
+  if (profileMatch.status !== "HEURISTIC") {
+    return "No local match data";
+  }
+
+  if (profileMatch.strength === "STRONG") {
+    return "Strong heuristic match";
+  }
+
+  if (profileMatch.strength === "POSSIBLE") {
+    return "Possible heuristic match";
+  }
+
+  return "Weak heuristic match";
 }

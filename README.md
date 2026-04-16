@@ -7,15 +7,15 @@ This repository is the monorepo foundation for the project. It is structured to 
 ## Monorepo Layout
 
 - `apps/desktopapp`
-  - primary Tauri + React desktop shell
-  - local project/session creation
-  - placeholder review workflow screens
+  - primary Tauri + React product surface
+  - local project/session creation and analysis control
+  - core review workstation and backlog workflow
 - `apps/webapp`
-  - complementary browser surface
+  - browser companion surface
   - project browsing, candidate history, profile inspection
 - `apps/mobileapp`
   - Expo + React Native companion surface
-  - project browsing, queue visibility, accepted clip checks
+  - later-stage project browsing, queue visibility, accepted clip checks
 - `services/analyzer`
   - Python analysis core scaffold
   - CLI and lightweight HTTP entrypoints
@@ -63,6 +63,7 @@ pnpm dev:both
 
 `dev:both` starts analyzer + API + webapp together as the easiest multi-surface development loop from the repo root.
 The API bridge currently runs directly from TypeScript with `tsx`.
+`dev:desktop` remains the primary product-development loop.
 
 ## Verify The Repo
 
@@ -90,7 +91,8 @@ Use `pnpm health` as the primary repo health check. `pnpm doctor` is a built-in 
 Real now:
 
 - coherent pnpm workspace wiring
-- desktopapp and webapp placeholder surfaces
+- desktop-first review surface with local analysis and backlog workflow
+- webapp companion surface for lighter browsing and inspection
 - mobileapp companion scaffold with shared mock-derived views
 - shared contracts, profiles, scoring helpers, and UI primitives
 - analyzer CLI, analyzer HTTP server, and SQLite persistence scaffold

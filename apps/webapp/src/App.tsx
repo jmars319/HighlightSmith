@@ -27,9 +27,9 @@ const navItems: Array<{ id: WebPage; label: string }> = [
 
 export default function App() {
   const [activePage, setActivePage] = useState<WebPage>("dashboard");
-  const [sessionSummaries, setSessionSummaries] = useState<ProjectSessionSummary[]>(
-    [],
-  );
+  const [sessionSummaries, setSessionSummaries] = useState<
+    ProjectSessionSummary[]
+  >([]);
   const [apiStatus, setApiStatus] = useState("offline");
   const [isLoadingSummaries, setIsLoadingSummaries] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -161,7 +161,8 @@ export default function App() {
             />
           </div>
           <p>
-            {reviewedCandidateCount(summary)} of {summary.candidateCount} reviewed
+            {reviewedCandidateCount(summary)} of {summary.candidateCount}{" "}
+            reviewed
           </p>
         </div>
         <p>
@@ -213,7 +214,11 @@ export default function App() {
         );
       }
 
-      return <section className="web-grid">{sessionSummaries.map(renderSummaryCard)}</section>;
+      return (
+        <section className="web-grid">
+          {sessionSummaries.map(renderSummaryCard)}
+        </section>
+      );
     }
 
     if (activePage === "candidate-history") {
@@ -278,7 +283,7 @@ export default function App() {
       <section className="web-grid">
         <article className="web-panel">
           <span className="web-label">Dashboard</span>
-          <h2>Backlog companion</h2>
+          <h2>Desktop-fed backlog companion</h2>
           <p>
             Browser surface for checking real persisted session summaries while
             desktop stays the primary review workstation.
@@ -302,7 +307,9 @@ export default function App() {
               <h2>{latestSession.sessionTitle}</h2>
               <p>{latestSession.sourceName}</p>
               <p>
-                {formatSessionReviewState(deriveSessionReviewState(latestSession))}
+                {formatSessionReviewState(
+                  deriveSessionReviewState(latestSession),
+                )}
                 {" • "}
                 {latestSession.pendingCount} pending
               </p>
@@ -345,8 +352,8 @@ export default function App() {
         }
         navItems={navItems}
         onSelect={(pageId) => setActivePage(pageId as WebPage)}
-        subtitle="Browser companion for project browsing, profile inspection, and later lightweight status review."
-        title="HighlightSmith Web"
+        subtitle="Desktop-first companion for project browsing, profile inspection, and lightweight status review."
+        title="HighlightSmith Web Companion"
       >
         {renderPage()}
       </LayoutShell>

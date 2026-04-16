@@ -1,9 +1,17 @@
 import {
+  addExampleClipRequestSchema,
   analyzeProjectRequestSchema,
+  clipProfileSchema,
+  createClipProfileRequestSchema,
+  exampleClipSchema,
   projectSessionSchema,
   projectSessionSummarySchema,
   reviewUpdateRequestSchema,
+  type AddExampleClipRequest,
   type AnalyzeProjectRequest,
+  type ClipProfile,
+  type CreateClipProfileRequest,
+  type ExampleClip,
   type ProjectSession,
   type ProjectSessionSummary,
   type ReviewUpdateRequest,
@@ -48,28 +56,38 @@ type AnalyzerSessionListEnvelope = {
   sessions?: unknown;
 };
 
-async function parseSessionResponse(response: Response): Promise<ProjectSession> {
-  const payload = (await response.json().catch(() => null)) as
-    | AnalyzerSessionEnvelope
-    | null;
+type AnalyzerProfileEnvelope = {
+  message?: string;
+  profile?: unknown;
+};
 
-  if (!response.ok) {
-    throw new AnalyzerBridgeError(
-      payload?.message ?? "Analyzer request failed",
-      response.status,
-    );
-  }
+type AnalyzerProfileListEnvelope = {
+  message?: string;
+  profiles?: unknown;
+};
 
+type AnalyzerExampleEnvelope = {
+  message?: string;
+  example?: unknown;
+};
+
+type AnalyzerExampleListEnvelope = {
+  message?: string;
+  examples?: unknown;
+};
+
+function parseWithSchema<T>(schemaName: string, parser: () => T): T {
   try {
-    return projectSessionSchema.parse(payload?.session);
+    return parser();
   } catch (error) {
     if (isZodErrorLike(error)) {
       const firstIssue = error.issues[0];
       const issuePathParts = firstIssue?.path ?? [];
-      const issuePath =
-        issuePathParts.length ? issuePathParts.join(".") : "session";
+      const issuePath = issuePathParts.length
+        ? issuePathParts.join(".")
+        : schemaName;
       throw new AnalyzerBridgeError(
-        `Analyzer returned an invalid session payload at ${issuePath}: ${firstIssue?.message ?? "schema mismatch"}`,
+        `Analyzer returned an invalid ${schemaName} payload at ${issuePath}: ${firstIssue?.message ?? "schema mismatch"}`,
         502,
       );
     }
@@ -78,12 +96,12 @@ async function parseSessionResponse(response: Response): Promise<ProjectSession>
   }
 }
 
-async function parseSessionSummaryListResponse(
+async function parseSessionResponse(
   response: Response,
-): Promise<ProjectSessionSummary[]> {
-  const payload = (await response.json().catch(() => null)) as
-    | AnalyzerSessionListEnvelope
-    | null;
+): Promise<ProjectSession> {
+  const payload = (await response
+    .json()
+    .catch(() => null)) as AnalyzerSessionEnvelope | null;
 
   if (!response.ok) {
     throw new AnalyzerBridgeError(
@@ -92,22 +110,100 @@ async function parseSessionSummaryListResponse(
     );
   }
 
-  try {
-    return projectSessionSummarySchema.array().parse(payload?.sessions);
-  } catch (error) {
-    if (isZodErrorLike(error)) {
-      const firstIssue = error.issues[0];
-      const issuePathParts = firstIssue?.path ?? [];
-      const issuePath =
-        issuePathParts.length ? issuePathParts.join(".") : "sessions";
-      throw new AnalyzerBridgeError(
-        `Analyzer returned an invalid session summary payload at ${issuePath}: ${firstIssue?.message ?? "schema mismatch"}`,
-        502,
-      );
-    }
+  return parseWithSchema("session", () =>
+    projectSessionSchema.parse(payload?.session),
+  );
+}
 
-    throw error;
+async function parseSessionSummaryListResponse(
+  response: Response,
+): Promise<ProjectSessionSummary[]> {
+  const payload = (await response
+    .json()
+    .catch(() => null)) as AnalyzerSessionListEnvelope | null;
+
+  if (!response.ok) {
+    throw new AnalyzerBridgeError(
+      payload?.message ?? "Analyzer request failed",
+      response.status,
+    );
   }
+
+  return parseWithSchema("sessions", () =>
+    projectSessionSummarySchema.array().parse(payload?.sessions),
+  );
+}
+
+async function parseProfileResponse(response: Response): Promise<ClipProfile> {
+  const payload = (await response
+    .json()
+    .catch(() => null)) as AnalyzerProfileEnvelope | null;
+
+  if (!response.ok) {
+    throw new AnalyzerBridgeError(
+      payload?.message ?? "Analyzer request failed",
+      response.status,
+    );
+  }
+
+  return parseWithSchema("profile", () =>
+    clipProfileSchema.parse(payload?.profile),
+  );
+}
+
+async function parseProfileListResponse(
+  response: Response,
+): Promise<ClipProfile[]> {
+  const payload = (await response
+    .json()
+    .catch(() => null)) as AnalyzerProfileListEnvelope | null;
+
+  if (!response.ok) {
+    throw new AnalyzerBridgeError(
+      payload?.message ?? "Analyzer request failed",
+      response.status,
+    );
+  }
+
+  return parseWithSchema("profiles", () =>
+    clipProfileSchema.array().parse(payload?.profiles),
+  );
+}
+
+async function parseExampleResponse(response: Response): Promise<ExampleClip> {
+  const payload = (await response
+    .json()
+    .catch(() => null)) as AnalyzerExampleEnvelope | null;
+
+  if (!response.ok) {
+    throw new AnalyzerBridgeError(
+      payload?.message ?? "Analyzer request failed",
+      response.status,
+    );
+  }
+
+  return parseWithSchema("example", () =>
+    exampleClipSchema.parse(payload?.example),
+  );
+}
+
+async function parseExampleListResponse(
+  response: Response,
+): Promise<ExampleClip[]> {
+  const payload = (await response
+    .json()
+    .catch(() => null)) as AnalyzerExampleListEnvelope | null;
+
+  if (!response.ok) {
+    throw new AnalyzerBridgeError(
+      payload?.message ?? "Analyzer request failed",
+      response.status,
+    );
+  }
+
+  return parseWithSchema("examples", () =>
+    exampleClipSchema.array().parse(payload?.examples),
+  );
 }
 
 export async function requestAnalyzerSession(
@@ -139,9 +235,57 @@ export async function requestStoredSession(
   return parseSessionResponse(response);
 }
 
-export async function requestSessionSummaries(): Promise<ProjectSessionSummary[]> {
+export async function requestSessionSummaries(): Promise<
+  ProjectSessionSummary[]
+> {
   const response = await fetch(`${getAnalyzerUrl()}/sessions`);
   return parseSessionSummaryListResponse(response);
+}
+
+export async function requestProfiles(): Promise<ClipProfile[]> {
+  const response = await fetch(`${getAnalyzerUrl()}/profiles`);
+  return parseProfileListResponse(response);
+}
+
+export async function createProfile(
+  input: CreateClipProfileRequest,
+): Promise<ClipProfile> {
+  const request = createClipProfileRequestSchema.parse(input);
+  const response = await fetch(`${getAnalyzerUrl()}/profiles`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+  return parseProfileResponse(response);
+}
+
+export async function requestProfileExamples(
+  profileId: string,
+): Promise<ExampleClip[]> {
+  const response = await fetch(
+    `${getAnalyzerUrl()}/profiles/${encodeURIComponent(profileId)}/examples`,
+  );
+  return parseExampleListResponse(response);
+}
+
+export async function addProfileExample(
+  profileId: string,
+  input: AddExampleClipRequest,
+): Promise<ExampleClip> {
+  const request = addExampleClipRequestSchema.parse(input);
+  const response = await fetch(
+    `${getAnalyzerUrl()}/profiles/${encodeURIComponent(profileId)}/examples`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+  );
+  return parseExampleResponse(response);
 }
 
 export async function submitReviewUpdate(

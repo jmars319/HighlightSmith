@@ -1,11 +1,18 @@
-import type { ContentProfile } from "@highlightsmith/shared-types";
+import type { ClipProfile } from "@highlightsmith/shared-types";
 
-export const contentProfiles: ContentProfile[] = [
+const systemProfileTimestamp = "2026-04-11T00:00:00.000Z";
+
+export const contentProfiles: ClipProfile[] = [
   {
     id: "generic",
+    name: "Generic",
     label: "Generic",
     description:
       "High-recall surfacing for creator review. Always available regardless of personalization state.",
+    createdAt: systemProfileTimestamp,
+    updatedAt: systemProfileTimestamp,
+    state: "ACTIVE",
+    source: "SYSTEM",
     mode: "BROAD",
     signalWeights: {
       REACTION_PHRASE: 1,
@@ -19,12 +26,18 @@ export const contentProfiles: ContentProfile[] = [
       LOW_INFORMATION: -0.45,
       CONTEXT_REQUIRED: -0.25,
     },
+    exampleClips: [],
   },
   {
     id: "stealth",
+    name: "Stealth",
     label: "Stealth",
     description:
       "Rewards tension, anticipation, and payoff while suppressing noisy false positives.",
+    createdAt: systemProfileTimestamp,
+    updatedAt: systemProfileTimestamp,
+    state: "ACTIVE",
+    source: "SYSTEM",
     mode: "CONTEXTUAL",
     signalWeights: {
       STRUCTURE_SETUP: 0.95,
@@ -36,12 +49,18 @@ export const contentProfiles: ContentProfile[] = [
       MENU_HEAVY: -0.85,
       CLEANUP_HEAVY: -0.7,
     },
+    exampleClips: [],
   },
   {
     id: "raid_coop",
+    name: "Raid / Co-op",
     label: "Raid / Co-op",
     description:
       "Prioritizes team chatter, overlap spikes, wipes, recoveries, and shared reactions.",
+    createdAt: systemProfileTimestamp,
+    updatedAt: systemProfileTimestamp,
+    state: "ACTIVE",
+    source: "SYSTEM",
     mode: "CONTEXTUAL",
     signalWeights: {
       OVERLAP_SPIKE: 1,
@@ -53,12 +72,18 @@ export const contentProfiles: ContentProfile[] = [
       CLEANUP_HEAVY: -0.55,
       LOW_INFORMATION: -0.5,
     },
+    exampleClips: [],
   },
   {
     id: "exploration",
+    name: "Exploration",
     label: "Exploration",
     description:
       "Biases toward discovery, realization, and clue-resolution pacing over pure intensity.",
+    createdAt: systemProfileTimestamp,
+    updatedAt: systemProfileTimestamp,
+    state: "ACTIVE",
+    source: "SYSTEM",
     mode: "CONTEXTUAL",
     signalWeights: {
       STRUCTURE_SETUP: 0.9,
@@ -70,12 +95,13 @@ export const contentProfiles: ContentProfile[] = [
       LOW_INFORMATION: -0.3,
       CONTEXT_REQUIRED: -0.15,
     },
+    exampleClips: [],
   },
 ];
 
 export const defaultProfileId = "generic";
 
-export function getProfileById(profileId: string): ContentProfile {
+export function getProfileById(profileId: string): ClipProfile {
   return (
     contentProfiles.find((profile) => profile.id === profileId) ??
     contentProfiles[0]

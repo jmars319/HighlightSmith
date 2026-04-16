@@ -4,6 +4,9 @@
 
 `mobileapp` is a companion surface only.
 
+It exists as a later-stage extension of the desktop workflow, not as a peer to
+the desktop product.
+
 It is appropriate for:
 
 - project browsing

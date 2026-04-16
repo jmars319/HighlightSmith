@@ -7,11 +7,11 @@ This repo is organized as a real monorepo, not a single-app prototype.
 ## Top-Level Structure
 
 - `apps/desktopapp`
-  - primary local-first desktop shell
+  - primary local-first desktop shell and review workstation
 - `apps/webapp`
-  - complementary browser surface
+  - complementary browser companion
 - `apps/mobileapp`
-  - companion management surface
+  - thin later-stage companion surface
 - `services/analyzer`
   - Python analysis engine scaffold
 - `services/api`

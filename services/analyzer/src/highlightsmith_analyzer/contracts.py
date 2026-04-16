@@ -61,6 +61,38 @@ class AnalysisCoverageFlag(str, Enum):
     NO_CANDIDATES = "NO_CANDIDATES"
 
 
+class ExampleClipSourceType(str, Enum):
+    TWITCH_CLIP_URL = "TWITCH_CLIP_URL"
+    YOUTUBE_SHORT_URL = "YOUTUBE_SHORT_URL"
+    LOCAL_FILE_UPLOAD = "LOCAL_FILE_UPLOAD"
+    LOCAL_FILE_PATH = "LOCAL_FILE_PATH"
+
+
+class ExampleClipStatus(str, Enum):
+    REFERENCE_ONLY = "REFERENCE_ONLY"
+    LOCAL_FILE_AVAILABLE = "LOCAL_FILE_AVAILABLE"
+    MISSING_LOCAL_FILE = "MISSING_LOCAL_FILE"
+
+
+class ProfileMatchingMethod(str, Enum):
+    NONE = "NONE"
+    LOCAL_FILE_HEURISTIC = "LOCAL_FILE_HEURISTIC"
+
+
+class CandidateProfileMatchStatus(str, Enum):
+    UNASSESSED = "UNASSESSED"
+    PLACEHOLDER = "PLACEHOLDER"
+    HEURISTIC = "HEURISTIC"
+    EXAMPLE_COMPARISON = "EXAMPLE_COMPARISON"
+
+
+class CandidateProfileMatchStrength(str, Enum):
+    UNASSESSED = "UNASSESSED"
+    STRONG = "STRONG"
+    POSSIBLE = "POSSIBLE"
+    WEAK = "WEAK"
+
+
 @dataclass
 class TimeRange:
     start_seconds: float
@@ -144,6 +176,7 @@ class CandidateWindow:
     context_required: bool
     editable_label: str
     review_tags: List[ReviewTag] = field(default_factory=list)
+    profile_matches: List["CandidateProfileMatch"] = field(default_factory=list)
 
 
 @dataclass
@@ -166,12 +199,71 @@ class ReviewDecision:
 
 
 @dataclass
+class ExampleClipFeatureSummary:
+    method_version: str
+    generated_at: str
+    duration_seconds: float
+    transcript_chunk_count: int
+    transcript_density_per_minute: float
+    candidate_seed_count: int
+    candidate_density_per_minute: float
+    speech_density_mean: float
+    speech_density_peak: float
+    energy_mean: float
+    energy_peak: float
+    pacing_mean: float
+    overlap_activity_mean: float
+    high_activity_share: float
+    transcript_anchor_terms: List[str] = field(default_factory=list)
+    transcript_anchor_phrases: List[str] = field(default_factory=list)
+    top_reason_codes: List[ReasonCode] = field(default_factory=list)
+    coverage_band: AnalysisCoverageBand = AnalysisCoverageBand.PARTIAL
+    coverage_flags: List[AnalysisCoverageFlag] = field(default_factory=list)
+
+
+@dataclass
+class ExampleClip:
+    id: str
+    profile_id: str
+    source_type: ExampleClipSourceType
+    source_value: str
+    title: Optional[str] = None
+    note: Optional[str] = None
+    status: ExampleClipStatus = ExampleClipStatus.REFERENCE_ONLY
+    status_detail: Optional[str] = None
+    feature_summary: Optional[ExampleClipFeatureSummary] = None
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class CandidateProfileMatch:
+    profile_id: str
+    method: ProfileMatchingMethod
+    status: CandidateProfileMatchStatus
+    strength: CandidateProfileMatchStrength
+    note: str
+    matched_example_clip_ids: List[str] = field(default_factory=list)
+    compared_example_count: int = 0
+    supporting_factors: List[str] = field(default_factory=list)
+    limiting_factors: List[str] = field(default_factory=list)
+    similarity_score: Optional[float] = None
+    updated_at: Optional[str] = None
+
+
+@dataclass
 class ContentProfile:
     id: str
+    name: str
     label: str
-    description: str
-    mode: str
-    signal_weights: Dict[ReasonCode, float]
+    description: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    state: str = "ACTIVE"
+    source: str = "USER"
+    mode: str = "EXAMPLE_DRIVEN"
+    signal_weights: Dict[ReasonCode, float] = field(default_factory=dict)
+    example_clips: List[ExampleClip] = field(default_factory=list)
 
 
 @dataclass

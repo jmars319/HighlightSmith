@@ -7,18 +7,22 @@ import {
 import {
   acceptedCandidates,
   analysisCoverageTone,
+  buildProfileMatchingSummary,
   buildCandidateTranscriptContext,
   buildProjectSummary,
   defaultReviewQueueMode,
   deriveSessionReviewState,
   filterCandidates,
+  filterCandidatesByPresentationMode,
   filterCandidatesByReviewMode,
   formatAnalysisCoverageBand,
   formatAnalysisCoverageFlag,
   findNextPendingSessionSummary,
+  hasStrongCandidateProfileMatch,
   isCandidatePending,
   makeReviewDecision,
   reviewedCandidateCount,
+  resolveCandidateProfileMatch,
   resolveCandidateLabel,
 } from "./index";
 
@@ -259,6 +263,57 @@ describe("domain helpers", () => {
     }));
 
     assert.equal(defaultReviewQueueMode(session), "ALL");
+  });
+
+  it("builds honest placeholder profile matching state without hiding candidates", () => {
+    const session = createMockProjectSession();
+    const profile = {
+      id: "profile_dry_humor",
+      name: "Dry humor",
+      label: "Dry humor",
+      description: "Deadpan reaction timing.",
+      createdAt: "2026-04-11T00:00:00.000Z",
+      updatedAt: "2026-04-11T00:00:00.000Z",
+      state: "ACTIVE" as const,
+      source: "USER" as const,
+      mode: "EXAMPLE_DRIVEN" as const,
+      signalWeights: {},
+      exampleClips: [
+        {
+          id: "example_001",
+          profileId: "profile_dry_humor",
+          sourceType: "TWITCH_CLIP_URL" as const,
+          sourceValue: "https://clips.twitch.tv/example",
+          status: "REFERENCE_ONLY" as const,
+          createdAt: "2026-04-11T00:00:00.000Z",
+          updatedAt: "2026-04-11T00:00:00.000Z",
+        },
+      ],
+    };
+
+    const summary = buildProfileMatchingSummary(profile);
+    const placeholderMatch = resolveCandidateProfileMatch(
+      session.candidates[0],
+      profile,
+    );
+    const filtered = filterCandidatesByPresentationMode(
+      session.candidates,
+      profile,
+      "STRONG_MATCHES",
+    );
+
+    assert.equal(summary.totalExampleCount, 1);
+    assert.equal(summary.referenceOnlyExampleCount, 1);
+    assert.equal(summary.usableLocalExampleCount, 0);
+    assert.equal(summary.ready, false);
+    assert.equal(summary.method, "NONE");
+    assert.equal(placeholderMatch.status, "PLACEHOLDER");
+    assert.equal(placeholderMatch.strength, "UNASSESSED");
+    assert.equal(
+      hasStrongCandidateProfileMatch(session.candidates[0], profile),
+      false,
+    );
+    assert.equal(filtered.length, session.candidates.length);
   });
 
   it("formats analysis coverage bands for desktop display", () => {

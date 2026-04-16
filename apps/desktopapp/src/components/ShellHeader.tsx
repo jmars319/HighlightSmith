@@ -7,8 +7,10 @@ type ShellHeaderProps = {
   pendingCount: number;
   totalCount: number;
   activeSessionStateLabel: string;
+  themeMode: "dark" | "light";
   onPickMedia: () => Promise<void> | void;
   onReloadMock: () => void;
+  onToggleTheme: () => void;
 };
 
 export function ShellHeader({
@@ -20,8 +22,10 @@ export function ShellHeader({
   pendingCount,
   totalCount,
   activeSessionStateLabel,
+  themeMode,
   onPickMedia,
   onReloadMock,
+  onToggleTheme,
 }: ShellHeaderProps) {
   return (
     <header className="hero-panel">
@@ -41,18 +45,19 @@ export function ShellHeader({
         </div>
         <div className="stat-card">
           <span className="stat-label">Session</span>
-          <strong>
-            {currentSessionLabel}
-          </strong>
+          <strong>{currentSessionLabel}</strong>
           <p>{activeSessionStateLabel}</p>
         </div>
         <div className="stat-card">
           <span className="stat-label">Review progress</span>
           <strong>
-            {totalCount === 0 ? "No queue loaded" : `${totalCount - pendingCount}/${totalCount} reviewed`}
+            {totalCount === 0
+              ? "No queue loaded"
+              : `${totalCount - pendingCount}/${totalCount} reviewed`}
           </strong>
           <p>
-            {acceptedCount} accepted • {rejectedCount} rejected • {pendingCount} pending
+            {acceptedCount} accepted • {rejectedCount} rejected • {pendingCount}{" "}
+            pending
           </p>
         </div>
         <div className="stat-card path-card">
@@ -73,6 +78,18 @@ export function ShellHeader({
             type="button"
           >
             Load Demo Session
+          </button>
+          <button
+            aria-label={
+              themeMode === "dark"
+                ? "Switch to light mode"
+                : "Switch to dark mode"
+            }
+            className="button-secondary"
+            onClick={onToggleTheme}
+            type="button"
+          >
+            {themeMode === "dark" ? "Switch to Light" : "Switch to Dark"}
           </button>
         </div>
       </div>

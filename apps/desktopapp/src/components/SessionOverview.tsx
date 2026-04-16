@@ -1,5 +1,6 @@
 import type {
   ContentProfile,
+  ProfileMatchingSummary,
   ProjectSession,
 } from "@highlightsmith/shared-types";
 import {
@@ -18,6 +19,7 @@ type SessionOverviewProps = {
   selectedCandidateIndex: number;
   reviewStateLabel: string;
   reviewStateTone: "PENDING" | "IN_PROGRESS" | "REVIEWED";
+  profileMatchingSummary: ProfileMatchingSummary;
 };
 
 export function SessionOverview({
@@ -29,6 +31,7 @@ export function SessionOverview({
   selectedCandidateIndex,
   reviewStateLabel,
   reviewStateTone,
+  profileMatchingSummary,
 }: SessionOverviewProps) {
   const candidateCount = session.candidates.length;
   const selectedCandidateCopy =
@@ -69,14 +72,24 @@ export function SessionOverview({
           <p className="session-overview-path">{session.mediaSource.path}</p>
           <p>
             {formatLongTime(session.mediaSource.durationSeconds)} •{" "}
-            {session.mediaSource.kind.toLowerCase()} • {session.mediaSource.format}
+            {session.mediaSource.kind.toLowerCase()} •{" "}
+            {session.mediaSource.format}
           </p>
         </article>
 
         <article className="session-overview-card">
           <span className="detail-label">Profile</span>
-          <strong>{profile.label}</strong>
+          <strong>{profile.name}</strong>
           <p>{profile.description}</p>
+          <p>{profileMatchingSummary.note}</p>
+          <p>
+            {profileMatchingSummary.usableLocalExampleCount} usable local
+            example
+            {profileMatchingSummary.usableLocalExampleCount === 1
+              ? ""
+              : "s"} • {profileMatchingSummary.referenceOnlyExampleCount}{" "}
+            reference-only
+          </p>
         </article>
 
         <article className="session-overview-card">

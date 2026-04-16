@@ -8,14 +8,17 @@ import {
 import {
   acceptedCandidates,
   analysisCoverageTone,
+  buildProfileMatchingSummary,
   buildProjectSummary,
   defaultReviewQueueMode,
   deriveSessionReviewState,
   filterCandidates,
+  filterCandidatesByPresentationMode,
   filterCandidatesByReviewMode,
   findNextPendingSessionSummary,
   formatAnalysisCoverageBand,
   formatAnalysisCoverageFlag,
+  hasStrongCandidateProfileMatch,
   isCandidatePending,
   reviewedCandidateCount,
   type ReviewQueueMode,
@@ -28,18 +31,23 @@ import {
   isSupportedInput,
   supportedInputExtensions,
 } from "@highlightsmith/media";
+import { contentProfiles, defaultProfileId } from "@highlightsmith/profiles";
 import {
-  contentProfiles,
-  defaultProfileId,
-  getProfileById,
-} from "@highlightsmith/profiles";
-import {
+  addExampleClipRequestSchema,
   analyzeProjectRequestSchema,
+  clipProfileSchema,
+  createClipProfileRequestSchema,
   createMockProjectSession,
+  exampleClipSchema,
   projectSessionSchema,
   projectSessionSummarySchema,
+  type AddExampleClipRequest,
   type AnalyzeProjectRequest,
+  type ClipProfile,
   type ConfidenceBand,
+  type CreateClipProfileRequest,
+  type ExampleClip,
+  type ProfilePresentationMode,
   type ProjectSession,
   type ProjectSessionSummary,
 } from "@highlightsmith/shared-types";
@@ -49,6 +57,7 @@ import { CandidateDetail } from "./components/CandidateDetail";
 import { CandidateQueue } from "./components/CandidateQueue";
 import { SessionOverview } from "./components/SessionOverview";
 import { CandidateTimeline } from "./components/CandidateTimeline";
+import { ProfileWorkspace } from "./components/ProfileWorkspace";
 import { ShellHeader } from "./components/ShellHeader";
 import { useReviewState } from "./hooks/useReviewState";
 import {
@@ -63,6 +72,7 @@ type DesktopPage =
   | "new-analysis"
   | "candidate-review"
   | "candidate-detail"
+  | "profiles"
   | "settings";
 type AnalysisReadiness = {
   canAnalyze: boolean;
@@ -71,19 +81,25 @@ type AnalysisReadiness = {
   detail: string;
   tone: "ready" | "blocked";
 };
+type ThemeMode = "dark" | "light";
 
 const mockSessionFactory = () => createMockProjectSession();
 const lastSessionIdStorageKey = "highlightsmith.desktop.last-session-id";
+const themeModeStorageKey = "highlightsmith.desktop.theme-mode";
 const desktopPages: Array<{ id: DesktopPage; label: string }> = [
   { id: "projects", label: "Projects" },
   { id: "new-analysis", label: "New Analysis" },
   { id: "candidate-review", label: "Candidate Review" },
   { id: "candidate-detail", label: "Candidate Detail" },
+  { id: "profiles", label: "Profiles" },
   { id: "settings", label: "Settings" },
 ];
 
 export default function App() {
   const [activePage, setActivePage] = useState<DesktopPage>("new-analysis");
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
+    resolveInitialThemeMode(),
+  );
   const [projectSession, setProjectSession] = useState<ProjectSession | null>(
     null,
   );
@@ -92,28 +108,52 @@ export default function App() {
   );
   const [searchValue, setSearchValue] = useState("");
   const [bandFilter, setBandFilter] = useState<FilterValue>("ALL");
-  const [reviewQueueMode, setReviewQueueMode] = useState<ReviewQueueMode>("ALL");
+  const [reviewQueueMode, setReviewQueueMode] =
+    useState<ReviewQueueMode>("ALL");
+  const [presentationMode, setPresentationMode] =
+    useState<ProfilePresentationMode>("ALL_CANDIDATES");
   const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>({});
   const [selectedMediaPath, setSelectedMediaPath] = useState("");
   const [analysisProfileId, setAnalysisProfileId] = useState(defaultProfileId);
   const [analysisTitle, setAnalysisTitle] = useState("");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [projectSummaries, setProjectSummaries] = useState<ProjectSessionSummary[]>(
-    [],
-  );
+  const [projectSummaries, setProjectSummaries] = useState<
+    ProjectSessionSummary[]
+  >([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<ClipProfile[]>(contentProfiles);
+  const [selectedProfileId, setSelectedProfileId] =
+    useState<string>(defaultProfileId);
+  const [selectedProfileExamples, setSelectedProfileExamples] = useState<
+    ExampleClip[]
+  >([]);
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
+  const [isLoadingProfileExamples, setIsLoadingProfileExamples] =
+    useState(false);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+  const [isAddingProfileExample, setIsAddingProfileExample] = useState(false);
+  const [profileLibraryError, setProfileLibraryError] = useState<string | null>(
+    null,
+  );
 
   const deferredSearchValue = useDeferredValue(searchValue);
   const apiBaseUrl =
     import.meta.env.VITE_HIGHLIGHTSMITH_API_BASE_URL ?? "http://127.0.0.1:4010";
   const sessionCandidates = projectSession?.candidates ?? [];
   const normalizedSelectedMediaPath = selectedMediaPath.trim();
-  const selectedDraftProfile = getProfileById(analysisProfileId);
-  const currentProfile = getProfileById(
+  const availableProfiles = profiles.length > 0 ? profiles : contentProfiles;
+  const selectedDraftProfile = resolveProfile(
+    availableProfiles,
+    analysisProfileId,
+  );
+  const currentProfile = resolveProfile(
+    availableProfiles,
     projectSession?.profileId ?? analysisProfileId,
   );
+  const selectedProfile = resolveProfile(availableProfiles, selectedProfileId);
+  const profileMatchingSummary = buildProfileMatchingSummary(currentProfile);
   const analysisLaunchState = buildAnalysisLaunchState(
     normalizedSelectedMediaPath,
   );
@@ -138,9 +178,9 @@ export default function App() {
       const shouldAutoAdvance =
         context.action === "ACCEPT" || context.action === "REJECT";
       const preferredCandidateId = shouldAutoAdvance
-        ? findNextPendingCandidateId(nextSession, context.candidateId) ??
+        ? (findNextPendingCandidateId(nextSession, context.candidateId) ??
           findFirstPendingCandidateId(nextSession) ??
-          context.candidateId
+          context.candidateId)
         : context.candidateId;
 
       applyProjectSession(nextSession, {
@@ -169,31 +209,47 @@ export default function App() {
     labelDrafts,
     sessionCandidates,
   ]);
+  const presentationFilteredCandidates = useMemo(() => {
+    return filterCandidatesByPresentationMode(
+      searchFilteredCandidates,
+      currentProfile,
+      presentationMode,
+    );
+  }, [currentProfile, presentationMode, searchFilteredCandidates]);
   const queueCandidates = useMemo(() => {
     if (!projectSession) {
-      return searchFilteredCandidates;
+      return presentationFilteredCandidates;
     }
 
     return filterCandidatesByReviewMode(
-      searchFilteredCandidates,
+      presentationFilteredCandidates,
       projectSession,
       reviewQueueMode,
     );
-  }, [projectSession, reviewQueueMode, searchFilteredCandidates]);
+  }, [presentationFilteredCandidates, projectSession, reviewQueueMode]);
+  const hasAssessedStrongMatches = useMemo(() => {
+    return searchFilteredCandidates.some((candidate) =>
+      hasStrongCandidateProfileMatch(candidate, currentProfile),
+    );
+  }, [currentProfile, searchFilteredCandidates]);
+  const isStrongMatchFallback =
+    presentationMode === "STRONG_MATCHES" && !hasAssessedStrongMatches;
 
   const selectedCandidate =
-    queueCandidates.find(
+    queueCandidates.find((candidate) => candidate.id === selectedCandidateId) ??
+    presentationFilteredCandidates.find(
       (candidate) => candidate.id === selectedCandidateId,
     ) ??
-    searchFilteredCandidates.find(
+    sessionCandidates.find(
       (candidate) => candidate.id === selectedCandidateId,
     ) ??
-    sessionCandidates.find((candidate) => candidate.id === selectedCandidateId) ??
     queueCandidates[0] ??
-    (reviewQueueMode === "ALL" ? searchFilteredCandidates[0] : null) ??
+    (reviewQueueMode === "ALL" ? presentationFilteredCandidates[0] : null) ??
     null;
   const selectedCandidateIndex = selectedCandidate
-    ? sessionCandidates.findIndex((candidate) => candidate.id === selectedCandidate.id)
+    ? sessionCandidates.findIndex(
+        (candidate) => candidate.id === selectedCandidate.id,
+      )
     : -1;
 
   const selectedDecision = selectedCandidate
@@ -211,7 +267,10 @@ export default function App() {
     (candidate) => decisionsByCandidateId[candidate.id]?.action === "REJECT",
   ).length;
   const reviewedCount = acceptedCount + rejectedCount;
-  const pendingReviewCount = Math.max(sessionCandidates.length - reviewedCount, 0);
+  const pendingReviewCount = Math.max(
+    sessionCandidates.length - reviewedCount,
+    0,
+  );
   const activeSessionSummary = projectSession
     ? buildProjectSummary(projectSession)
     : null;
@@ -230,7 +289,10 @@ export default function App() {
     }) ?? findNextPendingSessionSummary(projectSummaries);
 
   const timestampPreview = projectSession
-    ? toTimestampExport(sessionCandidates, Object.values(decisionsByCandidateId))
+    ? toTimestampExport(
+        sessionCandidates,
+        Object.values(decisionsByCandidateId),
+      )
     : "";
 
   const jsonPreview = projectSession
@@ -240,6 +302,12 @@ export default function App() {
         Object.values(decisionsByCandidateId),
       )
     : "";
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    document.documentElement.style.colorScheme = themeMode;
+    window.localStorage.setItem(themeModeStorageKey, themeMode);
+  }, [themeMode]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -290,12 +358,113 @@ export default function App() {
   }, [apiBaseUrl]);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    async function loadProfiles() {
+      setIsLoadingProfiles(true);
+      try {
+        const nextProfiles = await fetchProfiles(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setProfiles(nextProfiles);
+        setProfileLibraryError(null);
+        setSelectedProfileId((current) =>
+          nextProfiles.some((profile) => profile.id === current)
+            ? current
+            : (nextProfiles[0]?.id ?? defaultProfileId),
+        );
+        setAnalysisProfileId((current) =>
+          nextProfiles.some((profile) => profile.id === current)
+            ? current
+            : (nextProfiles[0]?.id ?? defaultProfileId),
+        );
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load clip profiles: ${error.message}`
+            : "Unable to load clip profiles",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingProfiles(false);
+        }
+      }
+    }
+
+    void loadProfiles();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    if (!selectedProfileId) {
+      setSelectedProfileExamples([]);
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadExamples() {
+      setIsLoadingProfileExamples(true);
+      try {
+        const examples = await fetchProfileExamples(
+          apiBaseUrl,
+          selectedProfileId,
+        );
+        if (isCancelled) {
+          return;
+        }
+
+        setSelectedProfileExamples(examples);
+        setProfiles((current) =>
+          current.map((profile) =>
+            profile.id === selectedProfileId
+              ? { ...profile, exampleClips: examples }
+              : profile,
+          ),
+        );
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load example clips: ${error.message}`
+            : "Unable to load example clips",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingProfileExamples(false);
+        }
+      }
+    }
+
+    void loadExamples();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl, selectedProfileId]);
+
+  useEffect(() => {
     if (!projectSession) {
       return;
     }
 
     const queueIndex = selectedCandidate
-      ? queueCandidates.findIndex((candidate) => candidate.id === selectedCandidate.id)
+      ? queueCandidates.findIndex(
+          (candidate) => candidate.id === selectedCandidate.id,
+        )
       : -1;
 
     saveSessionResumeState(projectSession.id, {
@@ -304,12 +473,7 @@ export default function App() {
       queueIndex: queueIndex >= 0 ? queueIndex : null,
       updatedAt: new Date().toISOString(),
     });
-  }, [
-    projectSession,
-    queueCandidates,
-    reviewQueueMode,
-    selectedCandidate?.id,
-  ]);
+  }, [projectSession, queueCandidates, reviewQueueMode, selectedCandidate?.id]);
 
   useEffect(() => {
     const lastSessionId = window.localStorage.getItem(lastSessionIdStorageKey);
@@ -406,6 +570,93 @@ export default function App() {
     applyProjectSession(nextSession);
     setAnalysisError(null);
     setActivePage("candidate-review");
+  }
+
+  async function handleCreateProfile(input: CreateClipProfileRequest) {
+    const request = createClipProfileRequestSchema.parse(input);
+    setIsCreatingProfile(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdProfile = await createProfile(apiBaseUrl, request);
+      setProfiles((current) =>
+        upsertProfile(current, {
+          ...createdProfile,
+          exampleClips: createdProfile.exampleClips ?? [],
+        }),
+      );
+      setSelectedProfileId(createdProfile.id);
+      setSelectedProfileExamples(createdProfile.exampleClips ?? []);
+      setAnalysisProfileId(createdProfile.id);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected profile creation failure while contacting the local API",
+      );
+      throw error;
+    } finally {
+      setIsCreatingProfile(false);
+    }
+  }
+
+  async function handleAddProfileExample(
+    profileId: string,
+    input: AddExampleClipRequest,
+  ) {
+    const request = addExampleClipRequestSchema.parse(input);
+    setIsAddingProfileExample(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdExample = await createProfileExample(
+        apiBaseUrl,
+        profileId,
+        request,
+      );
+      const nextExamples = [
+        createdExample,
+        ...selectedProfileExamples.filter(
+          (example) => example.id !== createdExample.id,
+        ),
+      ];
+      setSelectedProfileExamples(nextExamples);
+      setProfiles((current) =>
+        current.map((profile) =>
+          profile.id === profileId
+            ? {
+                ...profile,
+                exampleClips: nextExamples,
+                updatedAt: createdExample.updatedAt,
+              }
+            : profile,
+        ),
+      );
+      if (projectSession?.profileId === profileId) {
+        const refreshedSession = await fetchProjectSession(
+          apiBaseUrl,
+          projectSession.id,
+        );
+        applyProjectSession(refreshedSession, {
+          preferredCandidateId: selectedCandidateId,
+          preserveSelection: true,
+          preserveFilters: true,
+          rememberRealSession: true,
+        });
+        setProjectSummaries((current) =>
+          upsertProjectSummary(current, buildProjectSummary(refreshedSession)),
+        );
+      }
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected example clip save failure while contacting the local API",
+      );
+      throw error;
+    } finally {
+      setIsAddingProfileExample(false);
+    }
   }
 
   function handleSearchChange(nextValue: string) {
@@ -524,7 +775,8 @@ export default function App() {
         )
       : null;
     const nextDefaultReviewQueueMode =
-      restoredResumeState?.reviewQueueMode ?? defaultReviewQueueMode(nextSession);
+      restoredResumeState?.reviewQueueMode ??
+      defaultReviewQueueMode(nextSession);
     const preferredCandidateId =
       options.preferredCandidateId &&
       nextSession.candidates.some(
@@ -542,7 +794,9 @@ export default function App() {
     const preservedSelectedCandidateId =
       options.preserveSelection &&
       selectedCandidateId &&
-      nextSession.candidates.some((candidate) => candidate.id === selectedCandidateId)
+      nextSession.candidates.some(
+        (candidate) => candidate.id === selectedCandidateId,
+      )
         ? selectedCandidateId
         : null;
     const nextSelectedCandidateId =
@@ -554,10 +808,9 @@ export default function App() {
         : null) ??
       nextSession.candidates[0]?.id ??
       null;
-    const nextReviewQueueMode =
-      options.restoreResumeState
-        ? nextDefaultReviewQueueMode
-        : projectSession?.id === nextSession.id
+    const nextReviewQueueMode = options.restoreResumeState
+      ? nextDefaultReviewQueueMode
+      : projectSession?.id === nextSession.id
         ? nextDefaultReviewQueueMode === "ALL" &&
           reviewQueueMode === "ONLY_PENDING"
           ? "ALL"
@@ -570,10 +823,12 @@ export default function App() {
     setLabelDrafts(buildLabelDrafts(nextSession));
     setSelectedMediaPath(nextSession.mediaSource.path);
     setAnalysisProfileId(nextSession.profileId);
+    setSelectedProfileId(nextSession.profileId);
     setAnalysisTitle(nextSession.title);
     if (!options.preserveFilters) {
       setSearchValue("");
       setBandFilter("ALL");
+      setPresentationMode("ALL_CANDIDATES");
     }
     if (options.rememberRealSession) {
       window.localStorage.setItem(lastSessionIdStorageKey, nextSession.id);
@@ -743,7 +998,9 @@ export default function App() {
               <p className="analysis-error">{projectsError}</p>
             </article>
           ) : null}
-          {!isLoadingProjects && !projectsError && projectSummaries.length === 0 ? (
+          {!isLoadingProjects &&
+          !projectsError &&
+          projectSummaries.length === 0 ? (
             <article className="utility-block">
               <span className="detail-label">Project sessions</span>
               <h2>No persisted sessions yet</h2>
@@ -753,7 +1010,9 @@ export default function App() {
               </p>
             </article>
           ) : null}
-          {!isLoadingProjects && !projectsError && projectSummaries.length > 0 ? (
+          {!isLoadingProjects &&
+          !projectsError &&
+          projectSummaries.length > 0 ? (
             <article className="utility-block backlog-shortcut-card">
               <div className="panel-header">
                 <div>
@@ -802,10 +1061,14 @@ export default function App() {
             </article>
           ) : null}
           {projectSummaries.map((summary) => {
-            const profile = getProfileById(summary.profileId);
+            const profile = resolveProfile(
+              availableProfiles,
+              summary.profileId,
+            );
             const sessionReviewState = deriveSessionReviewState(summary);
             const isActiveSession = summary.sessionId === projectSession?.id;
-            const isNextPendingSession = summary.sessionId === nextPendingSession?.sessionId;
+            const isNextPendingSession =
+              summary.sessionId === nextPendingSession?.sessionId;
             return (
               <button
                 className={
@@ -828,7 +1091,9 @@ export default function App() {
                       {formatSessionReviewState(sessionReviewState)}
                     </span>
                     {isNextPendingSession ? (
-                      <span className="session-state-pill next-target">Next up</span>
+                      <span className="session-state-pill next-target">
+                        Next up
+                      </span>
                     ) : null}
                     {isActiveSession ? (
                       <span className="session-state-pill active-session">
@@ -850,8 +1115,8 @@ export default function App() {
                     />
                   </div>
                   <p>
-                    {reviewedCandidateCount(summary)} of {summary.candidateCount}{" "}
-                    reviewed
+                    {reviewedCandidateCount(summary)} of{" "}
+                    {summary.candidateCount} reviewed
                   </p>
                 </div>
                 <p>
@@ -865,7 +1130,7 @@ export default function App() {
                   {buildProjectCoverageCopy(summary)}
                 </p>
                 <p>
-                  Profile {profile.label} • updated{" "}
+                  Profile {profile.name} • updated{" "}
                   {formatSummaryTimestamp(summary.updatedAt)}
                 </p>
                 <p className="project-summary-cta">
@@ -944,9 +1209,9 @@ export default function App() {
                     }}
                     value={analysisProfileId}
                   >
-                    {contentProfiles.map((profile) => (
+                    {availableProfiles.map((profile) => (
                       <option key={profile.id} value={profile.id}>
-                        {profile.label}
+                        {profile.name}
                       </option>
                     ))}
                   </select>
@@ -975,7 +1240,9 @@ export default function App() {
               <div className="analysis-summary-grid analysis-summary-grid-compact">
                 <article className="analysis-summary-card">
                   <span className="detail-label">Selected source</span>
-                  <strong>{analysisSourceName ?? "No local recording staged"}</strong>
+                  <strong>
+                    {analysisSourceName ?? "No local recording staged"}
+                  </strong>
                   <p className="analysis-summary-path">
                     {normalizedSelectedMediaPath ||
                       "Choose a supported local VOD path or use the file picker."}
@@ -983,7 +1250,7 @@ export default function App() {
                 </article>
                 <article className="analysis-summary-card">
                   <span className="detail-label">Profile</span>
-                  <strong>{selectedDraftProfile.label}</strong>
+                  <strong>{selectedDraftProfile.name}</strong>
                   <p>{selectedDraftProfile.description}</p>
                 </article>
                 <article className="analysis-summary-card">
@@ -1006,7 +1273,9 @@ export default function App() {
                   }}
                   type="button"
                 >
-                  {isAnalyzing ? "Analyzing local VOD..." : "Run Local Analysis"}
+                  {isAnalyzing
+                    ? "Analyzing local VOD..."
+                    : "Run Local Analysis"}
                 </button>
                 <p className="analysis-support-copy">
                   HighlightSmith will create one persisted session and open it
@@ -1077,6 +1346,7 @@ export default function App() {
               acceptedCount={acceptedCount}
               pendingCount={pendingReviewCount}
               profile={currentProfile}
+              profileMatchingSummary={profileMatchingSummary}
               rejectedCount={rejectedCount}
               reviewStateLabel={activeSessionReviewStateLabel ?? "Pending"}
               reviewStateTone={activeSessionReviewState}
@@ -1097,6 +1367,8 @@ export default function App() {
             candidateIndex={Math.max(selectedCandidateIndex, 0)}
             decision={selectedDecision}
             exportPreview={timestampPreview}
+            presentationMode={presentationMode}
+            profileMatchingSummary={profileMatchingSummary}
             reviewQueueMode={reviewQueueMode}
             selectedCandidateVisibleInQueue={selectedCandidateVisibleInQueue}
             transcript={projectSession?.transcript ?? []}
@@ -1124,6 +1396,25 @@ export default function App() {
             visibleCandidateCount={queueCandidates.length}
           />
         </section>
+      );
+    }
+
+    if (activePage === "profiles") {
+      return (
+        <ProfileWorkspace
+          error={profileLibraryError}
+          examples={selectedProfileExamples}
+          isAddingExample={isAddingProfileExample}
+          isCreatingProfile={isCreatingProfile}
+          isLoadingExamples={isLoadingProfileExamples}
+          isLoadingProfiles={isLoadingProfiles}
+          onAddExample={handleAddProfileExample}
+          onCreateProfile={handleCreateProfile}
+          onSelectProfile={setSelectedProfileId}
+          profiles={availableProfiles}
+          selectedProfile={selectedProfile}
+          selectedProfileId={selectedProfileId}
+        />
       );
     }
 
@@ -1160,6 +1451,7 @@ export default function App() {
             acceptedCount={acceptedCount}
             pendingCount={pendingReviewCount}
             profile={currentProfile}
+            profileMatchingSummary={profileMatchingSummary}
             rejectedCount={rejectedCount}
             reviewStateLabel={activeSessionReviewStateLabel ?? "Pending"}
             reviewStateTone={activeSessionReviewState}
@@ -1180,14 +1472,18 @@ export default function App() {
             candidates={queueCandidates}
             decisionsByCandidateId={decisionsByCandidateId}
             deferredSearchValue={deferredSearchValue}
+            isStrongMatchFallback={isStrongMatchFallback}
             matchingCandidateCount={searchFilteredCandidates.length}
             onSelectNextPending={handleSelectNextPending}
             onBandFilterChange={setBandFilter}
+            onPresentationModeChange={setPresentationMode}
             onReviewQueueModeChange={handleReviewQueueModeChange}
             onSearchChange={handleSearchChange}
             onSelectCandidate={handleSelectCandidate}
             pendingCount={pendingReviewCount}
             profile={currentProfile}
+            profileMatchingSummary={profileMatchingSummary}
+            presentationMode={presentationMode}
             reviewQueueMode={reviewQueueMode}
             reviewedCount={reviewedCount}
             searchValue={searchValue}
@@ -1202,6 +1498,8 @@ export default function App() {
             candidateIndex={Math.max(selectedCandidateIndex, 0)}
             decision={selectedDecision}
             exportPreview={timestampPreview}
+            presentationMode={presentationMode}
+            profileMatchingSummary={profileMatchingSummary}
             reviewQueueMode={reviewQueueMode}
             selectedCandidateVisibleInQueue={selectedCandidateVisibleInQueue}
             transcript={projectSession?.transcript ?? []}
@@ -1261,11 +1559,16 @@ export default function App() {
               <span className="detail-label">Export preview</span>
               <details>
                 <summary>Timestamp export</summary>
-                <pre>{timestampPreview || "Run an analysis to generate export data."}</pre>
+                <pre>
+                  {timestampPreview ||
+                    "Run an analysis to generate export data."}
+                </pre>
               </details>
               <details>
                 <summary>JSON candidate export</summary>
-                <pre>{jsonPreview || "Run an analysis to generate export data."}</pre>
+                <pre>
+                  {jsonPreview || "Run an analysis to generate export data."}
+                </pre>
               </details>
             </article>
           </div>
@@ -1284,19 +1587,34 @@ export default function App() {
                 : "Choose a local file or reopen a backlog session."
           }
           acceptedCount={acceptedCount}
-          currentProfileLabel={currentProfile.label}
+          currentProfileLabel={currentProfile.name}
           currentSessionLabel={projectSession?.title ?? "No session loaded"}
           onPickMedia={handlePickMedia}
           onReloadMock={handleReloadMock}
+          onToggleTheme={() =>
+            setThemeMode((current) => (current === "dark" ? "light" : "dark"))
+          }
           pendingCount={pendingReviewCount}
           rejectedCount={rejectedCount}
-          selectedMediaPath={selectedMediaPath || "No local recording selected yet."}
+          selectedMediaPath={
+            selectedMediaPath || "No local recording selected yet."
+          }
+          themeMode={themeMode}
           totalCount={sessionCandidates.length}
         />
         {renderDesktopPage()}
       </LayoutShell>
     </div>
   );
+}
+
+function resolveInitialThemeMode(): ThemeMode {
+  if (typeof window === "undefined") {
+    return "dark";
+  }
+
+  const savedThemeMode = window.localStorage.getItem(themeModeStorageKey);
+  return savedThemeMode === "light" ? "light" : "dark";
 }
 
 function buildSuggestedSessionTitle(sourcePath: string): string {
@@ -1351,6 +1669,130 @@ function buildLabelDrafts(session: ProjectSession): Record<string, string> {
       decisionLabelsByCandidateId[candidate.id] ?? candidate.editableLabel,
     ]),
   );
+}
+
+async function fetchProfiles(apiBaseUrl: string): Promise<ClipProfile[]> {
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/profiles`,
+    apiBaseUrl,
+    undefined,
+    "Unable to load clip profiles.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | ClipProfile[]
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Profile list load failed",
+    );
+  }
+
+  return clipProfileSchema.array().parse(payload);
+}
+
+async function fetchProfileExamples(
+  apiBaseUrl: string,
+  profileId: string,
+): Promise<ExampleClip[]> {
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/profiles/${encodeURIComponent(profileId)}/examples`,
+    apiBaseUrl,
+    undefined,
+    "Unable to load profile examples.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | ExampleClip[]
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Profile example list load failed",
+    );
+  }
+
+  return exampleClipSchema.array().parse(payload);
+}
+
+async function createProfile(
+  apiBaseUrl: string,
+  input: CreateClipProfileRequest,
+): Promise<ClipProfile> {
+  const request = createClipProfileRequestSchema.parse(input);
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/profiles`,
+    apiBaseUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    "Unable to create clip profile.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | ClipProfile
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Profile create failed",
+    );
+  }
+
+  return clipProfileSchema.parse(payload);
+}
+
+async function createProfileExample(
+  apiBaseUrl: string,
+  profileId: string,
+  input: AddExampleClipRequest,
+): Promise<ExampleClip> {
+  const request = addExampleClipRequestSchema.parse(input);
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/profiles/${encodeURIComponent(profileId)}/examples`,
+    apiBaseUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    "Unable to save example clip reference.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | ExampleClip
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Profile example create failed",
+    );
+  }
+
+  return exampleClipSchema.parse(payload);
 }
 
 async function fetchProjectSession(
@@ -1422,6 +1864,23 @@ function upsertProjectSummary(
   );
 }
 
+function upsertProfile(
+  current: ClipProfile[],
+  nextProfile: ClipProfile,
+): ClipProfile[] {
+  const merged = [
+    nextProfile,
+    ...current.filter((profile) => profile.id !== nextProfile.id),
+  ];
+
+  return merged.sort((left, right) => {
+    if (left.source !== right.source) {
+      return left.source === "SYSTEM" ? -1 : 1;
+    }
+    return right.updatedAt.localeCompare(left.updatedAt);
+  });
+}
+
 async function fetchWithLocalApiMessage(
   input: string,
   apiBaseUrl: string,
@@ -1464,6 +1923,29 @@ function buildSessionOpenLabel(summary: ProjectSessionSummary): string {
   return "Start review";
 }
 
+function resolveProfile(
+  profiles: ClipProfile[],
+  profileId: string,
+): ClipProfile {
+  return (
+    profiles.find((profile) => profile.id === profileId) ??
+    contentProfiles.find((profile) => profile.id === profileId) ?? {
+      id: profileId,
+      name: profileId,
+      label: profileId,
+      description:
+        "Profile metadata is unavailable locally, but the session still retains its profile reference.",
+      createdAt: "",
+      updatedAt: "",
+      state: "ACTIVE",
+      source: "USER",
+      mode: "EXAMPLE_DRIVEN",
+      signalWeights: {},
+      exampleClips: [],
+    }
+  );
+}
+
 function formatSessionCompletion(summary: ProjectSessionSummary): number {
   if (summary.candidateCount === 0) {
     return 0;
@@ -1478,7 +1960,10 @@ function buildProjectCoverageCopy(summary: ProjectSessionSummary): string {
   const flagLabels = summary.analysisCoverage.flags
     .slice(0, 2)
     .map((flag) => formatAnalysisCoverageFlag(flag));
-  const conciseReason = flagLabels.length > 0 ? flagLabels.join(" • ") : "No major coverage warnings";
+  const conciseReason =
+    flagLabels.length > 0
+      ? flagLabels.join(" • ")
+      : "No major coverage warnings";
 
   return `Coverage ${formatAnalysisCoverageBand(summary.analysisCoverage.band)} • ${conciseReason}`;
 }
@@ -1510,7 +1995,9 @@ function findNextCandidateId(
   }
 
   const startIndex = currentCandidateId
-    ? session.candidates.findIndex((candidate) => candidate.id === currentCandidateId)
+    ? session.candidates.findIndex(
+        (candidate) => candidate.id === currentCandidateId,
+      )
     : -1;
 
   for (let offset = 1; offset <= session.candidates.length; offset += 1) {
@@ -1543,8 +2030,8 @@ function findAdjacentVisibleCandidateId(
 
   if (currentIndex === -1) {
     return direction === 1
-      ? candidates[0]?.id ?? null
-      : candidates[candidates.length - 1]?.id ?? null;
+      ? (candidates[0]?.id ?? null)
+      : (candidates[candidates.length - 1]?.id ?? null);
   }
 
   const nextIndex =
