@@ -74,6 +74,71 @@ class ExampleClipStatus(str, Enum):
     MISSING_LOCAL_FILE = "MISSING_LOCAL_FILE"
 
 
+class MediaLibraryAssetType(str, Enum):
+    CLIP = "CLIP"
+    VOD = "VOD"
+    EDIT = "EDIT"
+
+
+class MediaLibraryAssetScope(str, Enum):
+    GLOBAL = "GLOBAL"
+    PROFILE = "PROFILE"
+
+
+class MediaEditPairStatus(str, Enum):
+    READY = "READY"
+    INCOMPLETE = "INCOMPLETE"
+
+
+class MediaIndexJobStatus(str, Enum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class MediaIndexArtifactKind(str, Enum):
+    AUDIO_FINGERPRINT = "AUDIO_FINGERPRINT"
+
+
+class MediaIndexArtifactMethod(str, Enum):
+    BYTE_SAMPLED_AUDIO_PROXY_V1 = "BYTE_SAMPLED_AUDIO_PROXY_V1"
+    DECODED_AUDIO_FINGERPRINT_V1 = "DECODED_AUDIO_FINGERPRINT_V1"
+
+
+class MediaAlignmentJobStatus(str, Enum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class MediaAlignmentMethod(str, Enum):
+    AUDIO_PROXY_BUCKET_CORRELATION_V1 = "AUDIO_PROXY_BUCKET_CORRELATION_V1"
+    DECODED_AUDIO_BUCKET_CORRELATION_V1 = "DECODED_AUDIO_BUCKET_CORRELATION_V1"
+
+
+class MediaAlignmentMatchKind(str, Enum):
+    EDIT_TO_VOD_KEEP = "EDIT_TO_VOD_KEEP"
+    CLIP_TO_VOD_MATCH = "CLIP_TO_VOD_MATCH"
+
+
+class MediaEditAlignmentKind(str, Enum):
+    PROVISIONAL_KEEP = "PROVISIONAL_KEEP"
+    PROVISIONAL_REMOVED_POOL = "PROVISIONAL_REMOVED_POOL"
+    CONFIRMED_KEEP = "CONFIRMED_KEEP"
+    CONFIRMED_REMOVED = "CONFIRMED_REMOVED"
+
+
+class MediaEditAlignmentMethod(str, Enum):
+    RUNTIME_PROPORTIONAL_ESTIMATE = "RUNTIME_PROPORTIONAL_ESTIMATE"
+    AUDIO_PROXY_ALIGNMENT = "AUDIO_PROXY_ALIGNMENT"
+    DECODED_AUDIO_ALIGNMENT = "DECODED_AUDIO_ALIGNMENT"
+    MANUAL = "MANUAL"
+
+
 class ProfileMatchingMethod(str, Enum):
     NONE = "NONE"
     LOCAL_FILE_HEURISTIC = "LOCAL_FILE_HEURISTIC"
@@ -222,6 +287,71 @@ class ExampleClipFeatureSummary:
 
 
 @dataclass
+class MediaIndexSummary:
+    method_version: str
+    generated_at: str
+    source_path: str
+    file_name: str
+    file_size_bytes: int
+    kind: str
+    format: str
+    duration_seconds: float
+    has_video: bool
+    has_audio: bool
+    stream_count: int
+    frame_rate: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    video_codec: Optional[str] = None
+    audio_codec: Optional[str] = None
+    notes: List[str] = field(default_factory=list)
+
+
+@dataclass
+class MediaIndexAudioBucket:
+    index: int
+    start_seconds: float
+    end_seconds: float
+    energy_score: float
+    onset_score: float
+    spectral_flux_score: float
+    silence_score: float
+    fingerprint: str
+
+
+@dataclass
+class MediaIndexArtifactSummary:
+    latest_audio_fingerprint_artifact_id: Optional[str] = None
+    audio_fingerprint_bucket_count: int = 0
+    audio_fingerprint_method: Optional[MediaIndexArtifactMethod] = None
+    audio_fingerprint_updated_at: Optional[str] = None
+    bucket_duration_seconds: Optional[float] = None
+    confidence_score: Optional[float] = None
+
+
+@dataclass
+class MediaIndexArtifact:
+    id: str
+    asset_id: str
+    kind: MediaIndexArtifactKind
+    method: MediaIndexArtifactMethod
+    bucket_duration_seconds: float
+    duration_seconds: float
+    bucket_count: int
+    confidence_score: float
+    payload_byte_size: int
+    energy_mean: float
+    energy_peak: float
+    onset_mean: float
+    silence_share: float
+    buckets: List[MediaIndexAudioBucket]
+    note: str
+    job_id: Optional[str] = None
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
 class ExampleClip:
     id: str
     profile_id: str
@@ -232,6 +362,122 @@ class ExampleClip:
     status: ExampleClipStatus = ExampleClipStatus.REFERENCE_ONLY
     status_detail: Optional[str] = None
     feature_summary: Optional[ExampleClipFeatureSummary] = None
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class MediaLibraryAsset:
+    id: str
+    asset_type: MediaLibraryAssetType
+    scope: MediaLibraryAssetScope
+    source_type: ExampleClipSourceType
+    source_value: str
+    profile_id: Optional[str] = None
+    title: Optional[str] = None
+    note: Optional[str] = None
+    status: ExampleClipStatus = ExampleClipStatus.REFERENCE_ONLY
+    status_detail: Optional[str] = None
+    feature_summary: Optional[ExampleClipFeatureSummary] = None
+    index_summary: Optional[MediaIndexSummary] = None
+    index_artifact_summary: Optional[MediaIndexArtifactSummary] = None
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class MediaIndexJob:
+    id: str
+    asset_id: str
+    status: MediaIndexJobStatus
+    progress: float
+    status_detail: str
+    error_message: Optional[str] = None
+    result: Optional[MediaIndexSummary] = None
+    created_at: str = ""
+    updated_at: str = ""
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    cancelled_at: Optional[str] = None
+
+
+@dataclass
+class MediaAlignmentBucketMatch:
+    query_bucket_index: int
+    source_bucket_index: int
+    score: float
+
+
+@dataclass
+class MediaAlignmentMatch:
+    id: str
+    job_id: str
+    source_asset_id: str
+    query_asset_id: str
+    kind: MediaAlignmentMatchKind
+    method: MediaAlignmentMethod
+    source_range: TimeRange
+    query_range: TimeRange
+    score: float
+    confidence_score: float
+    matched_bucket_count: int
+    total_query_bucket_count: int
+    note: str
+    pair_id: Optional[str] = None
+    bucket_matches: List[MediaAlignmentBucketMatch] = field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class MediaAlignmentJob:
+    id: str
+    source_asset_id: str
+    query_asset_id: str
+    status: MediaAlignmentJobStatus
+    progress: float
+    status_detail: str
+    method: MediaAlignmentMethod
+    pair_id: Optional[str] = None
+    error_message: Optional[str] = None
+    match_count: int = 0
+    created_at: str = ""
+    updated_at: str = ""
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    cancelled_at: Optional[str] = None
+
+
+@dataclass
+class MediaEditAlignmentSegment:
+    id: str
+    kind: MediaEditAlignmentKind
+    method: MediaEditAlignmentMethod
+    confidence_score: float
+    note: str
+    source_range: Optional[TimeRange] = None
+    edit_range: Optional[TimeRange] = None
+    estimated_source_seconds: Optional[float] = None
+    estimated_edit_seconds: Optional[float] = None
+
+
+@dataclass
+class MediaEditPair:
+    id: str
+    vod_asset_id: str
+    edit_asset_id: str
+    status: MediaEditPairStatus
+    status_detail: str
+    profile_id: Optional[str] = None
+    title: Optional[str] = None
+    note: Optional[str] = None
+    source_duration_seconds: Optional[float] = None
+    edit_duration_seconds: Optional[float] = None
+    kept_duration_seconds: Optional[float] = None
+    removed_duration_seconds: Optional[float] = None
+    keep_ratio: Optional[float] = None
+    compression_ratio: Optional[float] = None
+    alignment_segments: List[MediaEditAlignmentSegment] = field(default_factory=list)
     created_at: str = ""
     updated_at: str = ""
 

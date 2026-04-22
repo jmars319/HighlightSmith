@@ -9,6 +9,7 @@ import {
   projectSessionSchema,
   reviewUpdateRequestSchema,
 } from "@highlightsmith/shared-types";
+import { fetchWithLocalApiMessage } from "../lib/localApi";
 
 type ReviewDecisionOverrides = Pick<
   ReviewDecision,
@@ -67,13 +68,18 @@ export function useReviewState({
     setReviewError(null);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/projects/review`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const response = await fetchWithLocalApiMessage(
+        `${apiBaseUrl}/api/projects/review`,
+        apiBaseUrl,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(request),
         },
-        body: JSON.stringify(request),
-      });
+        "Unable to save the review update.",
+      );
 
       const payload = (await response.json().catch(() => null)) as
         | {

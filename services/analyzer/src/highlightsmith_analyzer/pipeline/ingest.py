@@ -13,6 +13,7 @@ from ..mock_data import build_mock_media_source
 SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mov", ".wav", ".mp3", ".m4a"}
 DEFAULT_VIDEO_DURATION_SECONDS = 1800.0
 DEFAULT_AUDIO_DURATION_SECONDS = 900.0
+FFPROBE_TIMEOUT_SECONDS = 8
 INGEST_NOTE_METADATA_PROBED = "Metadata probed with local ffprobe."
 INGEST_NOTE_METADATA_FALLBACK = (
     "ffprobe metadata unavailable; using provisional local duration heuristics."
@@ -23,8 +24,16 @@ INGEST_NOTE_SEEDED_TRANSCRIPT = (
 
 
 def inspect_media(source_path: str | None, use_mock_data: bool) -> MediaSource:
+    media_source, _metadata = inspect_media_with_metadata(source_path, use_mock_data)
+    return media_source
+
+
+def inspect_media_with_metadata(
+    source_path: str | None,
+    use_mock_data: bool,
+) -> tuple[MediaSource, dict | None]:
     if use_mock_data:
-        return build_mock_media_source(source_path)
+        return build_mock_media_source(source_path), None
 
     if not source_path:
         raise ValueError("source_path is required unless mock data is explicitly enabled")
@@ -32,11 +41,13 @@ def inspect_media(source_path: str | None, use_mock_data: bool) -> MediaSource:
     path = Path(source_path).expanduser().resolve()
     if not path.exists():
         raise FileNotFoundError(f"Media file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Media path must point to a regular file: {path}")
 
     if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"Unsupported media extension: {path.suffix}")
 
-    metadata = _probe_media(path)
+    metadata = probe_media_metadata(path)
     file_size_bytes = path.stat().st_size
     kind = "AUDIO" if path.suffix.lower() in {".wav", ".mp3", ".m4a"} else "VIDEO"
     duration_seconds = _fallback_duration_seconds(kind, file_size_bytes)
@@ -54,16 +65,19 @@ def inspect_media(source_path: str | None, use_mock_data: bool) -> MediaSource:
 
     ingest_notes.append(INGEST_NOTE_SEEDED_TRANSCRIPT)
 
-    return MediaSource(
-        id=_build_media_id(path),
-        path=str(path),
-        kind=kind,
-        file_name=path.name,
-        duration_seconds=duration_seconds,
-        format=path.suffix.lower().lstrip("."),
-        file_size_bytes=file_size_bytes,
-        frame_rate=frame_rate,
-        ingest_notes=ingest_notes,
+    return (
+        MediaSource(
+            id=_build_media_id(path),
+            path=str(path),
+            kind=kind,
+            file_name=path.name,
+            duration_seconds=duration_seconds,
+            format=path.suffix.lower().lstrip("."),
+            file_size_bytes=file_size_bytes,
+            frame_rate=frame_rate,
+            ingest_notes=ingest_notes,
+        ),
+        metadata,
     )
 
 
@@ -74,26 +88,30 @@ def _build_media_id(path: Path) -> str:
     return f"media_{stem_slug}_{digest}"
 
 
-def _probe_media(path: Path) -> dict | None:
+def probe_media_metadata(path: Path) -> dict | None:
     ffprobe = shutil.which("ffprobe")
     if not ffprobe:
         return None
 
-    result = subprocess.run(
-        [
-            ffprobe,
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration,size:stream=codec_type,avg_frame_rate",
-            "-of",
-            "json",
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration,size,format_name:stream=codec_type,codec_name,avg_frame_rate,width,height",
+                "-of",
+                "json",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=FFPROBE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return None
     if result.returncode != 0 or not result.stdout.strip():
         return None
 

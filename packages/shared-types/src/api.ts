@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   exampleClipSourceTypeSchema,
+  mediaLibraryAssetScopeSchema,
+  mediaLibraryAssetTypeSchema,
   profileStateSchema,
   reviewActionSchema,
   timeRangeSchema,
@@ -27,6 +29,85 @@ export const addExampleClipRequestSchema = z.object({
   sourceValue: z.string().trim().min(1, "sourceValue is required").max(4000),
   title: z.string().trim().min(1).max(160).optional(),
   note: z.string().trim().min(1).max(2000).optional(),
+});
+
+export const createMediaLibraryAssetRequestSchema = z
+  .object({
+    assetType: mediaLibraryAssetTypeSchema,
+    scope: mediaLibraryAssetScopeSchema,
+    profileId: z.string().trim().min(1).optional(),
+    sourceType: exampleClipSourceTypeSchema,
+    sourceValue: z.string().trim().min(1, "sourceValue is required").max(4000),
+    title: z.string().trim().min(1).max(160).optional(),
+    note: z.string().trim().min(1).max(2000).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.scope === "PROFILE" && !value.profileId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "profileId is required when scope is PROFILE",
+        path: ["profileId"],
+      });
+    }
+
+    if (
+      value.assetType !== "CLIP" &&
+      !["LOCAL_FILE_UPLOAD", "LOCAL_FILE_PATH"].includes(value.sourceType)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "VOD and EDIT assets must use a local file source",
+        path: ["sourceType"],
+      });
+    }
+  });
+
+export const createMediaEditPairRequestSchema = z.object({
+  vodAssetId: z.string().trim().min(1, "vodAssetId is required"),
+  editAssetId: z.string().trim().min(1, "editAssetId is required"),
+  profileId: z.string().trim().min(1).optional(),
+  title: z.string().trim().min(1).max(160).optional(),
+  note: z.string().trim().min(1).max(2000).optional(),
+});
+
+export const createMediaIndexJobRequestSchema = z.object({
+  assetId: z.string().trim().min(1, "assetId is required"),
+});
+
+export const cancelMediaIndexJobRequestSchema = z.object({
+  jobId: z.string().trim().min(1, "jobId is required"),
+});
+
+export const createMediaAlignmentJobRequestSchema = z
+  .object({
+    pairId: z.string().trim().min(1).optional(),
+    sourceAssetId: z.string().trim().min(1).optional(),
+    queryAssetId: z.string().trim().min(1).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.pairId) {
+      return;
+    }
+
+    if (!value.sourceAssetId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sourceAssetId is required when pairId is not provided",
+        path: ["sourceAssetId"],
+      });
+    }
+
+    if (!value.queryAssetId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "queryAssetId is required when pairId is not provided",
+        path: ["queryAssetId"],
+      });
+    }
+  });
+
+export const cancelMediaAlignmentJobRequestSchema = z.object({
+  jobId: z.string().trim().min(1, "jobId is required"),
 });
 
 export const reviewUpdateRequestSchema = z
@@ -64,3 +145,21 @@ export type CreateClipProfileRequest = z.infer<
   typeof createClipProfileRequestSchema
 >;
 export type AddExampleClipRequest = z.infer<typeof addExampleClipRequestSchema>;
+export type CreateMediaLibraryAssetRequest = z.infer<
+  typeof createMediaLibraryAssetRequestSchema
+>;
+export type CreateMediaEditPairRequest = z.infer<
+  typeof createMediaEditPairRequestSchema
+>;
+export type CreateMediaIndexJobRequest = z.infer<
+  typeof createMediaIndexJobRequestSchema
+>;
+export type CancelMediaIndexJobRequest = z.infer<
+  typeof cancelMediaIndexJobRequestSchema
+>;
+export type CreateMediaAlignmentJobRequest = z.infer<
+  typeof createMediaAlignmentJobRequestSchema
+>;
+export type CancelMediaAlignmentJobRequest = z.infer<
+  typeof cancelMediaAlignmentJobRequestSchema
+>;

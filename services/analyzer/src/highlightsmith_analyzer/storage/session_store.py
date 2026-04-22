@@ -25,6 +25,28 @@ from ..contracts import (
     ExampleClipSourceType,
     ExampleClipStatus,
     FeatureWindow,
+    MediaAlignmentBucketMatch,
+    MediaAlignmentJob,
+    MediaAlignmentJobStatus,
+    MediaAlignmentMatch,
+    MediaAlignmentMatchKind,
+    MediaAlignmentMethod,
+    MediaEditAlignmentKind,
+    MediaEditAlignmentMethod,
+    MediaEditAlignmentSegment,
+    MediaEditPair,
+    MediaEditPairStatus,
+    MediaIndexArtifact,
+    MediaIndexArtifactKind,
+    MediaIndexArtifactMethod,
+    MediaIndexArtifactSummary,
+    MediaIndexAudioBucket,
+    MediaIndexJob,
+    MediaIndexJobStatus,
+    MediaIndexSummary,
+    MediaLibraryAsset,
+    MediaLibraryAssetScope,
+    MediaLibraryAssetType,
     MediaSource,
     ProfileMatchingMethod,
     ProjectSession,
@@ -122,6 +144,143 @@ ON review_decisions(project_session_id, candidate_id);
 
 CREATE INDEX IF NOT EXISTS example_clips_profile_idx
 ON example_clips(profile_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS media_library_assets (
+  id TEXT PRIMARY KEY,
+  asset_type TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  profile_id TEXT,
+  source_type TEXT NOT NULL,
+  source_value TEXT NOT NULL,
+  title TEXT,
+  note TEXT,
+  status TEXT NOT NULL,
+  status_detail TEXT,
+  summary_json TEXT,
+  index_summary_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES clip_profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_index_jobs (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  progress REAL NOT NULL,
+  status_detail TEXT NOT NULL,
+  error_message TEXT,
+  result_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  cancelled_at TEXT,
+  FOREIGN KEY (asset_id) REFERENCES media_library_assets(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_index_artifacts (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  job_id TEXT,
+  kind TEXT NOT NULL,
+  method TEXT NOT NULL,
+  summary_json TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (job_id) REFERENCES media_index_jobs(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_edit_pairs (
+  id TEXT PRIMARY KEY,
+  vod_asset_id TEXT NOT NULL,
+  edit_asset_id TEXT NOT NULL,
+  profile_id TEXT,
+  title TEXT,
+  note TEXT,
+  status TEXT NOT NULL,
+  status_detail TEXT NOT NULL,
+  summary_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (vod_asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (edit_asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (profile_id) REFERENCES clip_profiles(id)
+);
+
+CREATE INDEX IF NOT EXISTS media_library_assets_scope_idx
+ON media_library_assets(scope, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS media_library_assets_profile_idx
+ON media_library_assets(profile_id, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS media_index_jobs_asset_idx
+ON media_index_jobs(asset_id, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS media_index_jobs_status_idx
+ON media_index_jobs(status, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS media_index_artifacts_asset_idx
+ON media_index_artifacts(asset_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS media_alignment_jobs (
+  id TEXT PRIMARY KEY,
+  pair_id TEXT,
+  source_asset_id TEXT NOT NULL,
+  query_asset_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  progress REAL NOT NULL,
+  status_detail TEXT NOT NULL,
+  error_message TEXT,
+  method TEXT NOT NULL,
+  match_count INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  cancelled_at TEXT,
+  FOREIGN KEY (pair_id) REFERENCES media_edit_pairs(id),
+  FOREIGN KEY (source_asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (query_asset_id) REFERENCES media_library_assets(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_alignment_matches (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL,
+  pair_id TEXT,
+  source_asset_id TEXT NOT NULL,
+  query_asset_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  method TEXT NOT NULL,
+  source_range_json TEXT NOT NULL,
+  query_range_json TEXT NOT NULL,
+  score REAL NOT NULL,
+  confidence_score REAL NOT NULL,
+  matched_bucket_count INTEGER NOT NULL,
+  total_query_bucket_count INTEGER NOT NULL,
+  bucket_matches_json TEXT NOT NULL,
+  note TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (job_id) REFERENCES media_alignment_jobs(id),
+  FOREIGN KEY (pair_id) REFERENCES media_edit_pairs(id),
+  FOREIGN KEY (source_asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (query_asset_id) REFERENCES media_library_assets(id)
+);
+
+CREATE INDEX IF NOT EXISTS media_alignment_jobs_pair_idx
+ON media_alignment_jobs(pair_id, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS media_alignment_jobs_status_idx
+ON media_alignment_jobs(status, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS media_alignment_matches_pair_idx
+ON media_alignment_matches(pair_id, confidence_score DESC);
+
+CREATE INDEX IF NOT EXISTS media_edit_pairs_profile_idx
+ON media_edit_pairs(profile_id, updated_at DESC);
 """
 
 SYSTEM_PROFILE_TIMESTAMP = "2026-04-11T00:00:00.000Z"
@@ -226,6 +385,7 @@ class SessionStore:
             connection.executescript(SCHEMA_SQL)
             self._ensure_column(connection, "project_sessions", "session_json", "TEXT")
             self._ensure_column(connection, "example_clips", "summary_json", "TEXT")
+            self._ensure_media_library_asset_columns(connection)
             self._seed_system_profiles(connection)
             connection.commit()
 
@@ -398,6 +558,7 @@ class SessionStore:
         with sqlite3.connect(self.database_path) as connection:
             connection.row_factory = sqlite3.Row
             connection.executescript(SCHEMA_SQL)
+            self._ensure_media_library_asset_columns(connection)
             self._seed_system_profiles(connection)
             connection.execute(
                 """
@@ -546,6 +707,950 @@ class SessionStore:
                 raise KeyError(f"Example clip not found after create: {example_id}")
 
             return self._example_clip_from_row(connection, row)
+
+    def list_media_library_assets(self) -> list[MediaLibraryAsset]:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_column(connection, "example_clips", "summary_json", "TEXT")
+            self._ensure_media_library_asset_columns(connection)
+            self._seed_system_profiles(connection)
+
+            rows = connection.execute(
+                """
+                SELECT id, asset_type, scope, profile_id, source_type, source_value,
+                       title, note, status, status_detail, summary_json,
+                       index_summary_json, created_at, updated_at
+                FROM media_library_assets
+                ORDER BY updated_at DESC, created_at DESC
+                """
+            ).fetchall()
+            assets = [self._media_library_asset_from_row(connection, row) for row in rows]
+            connection.commit()
+            return assets
+
+    def create_media_library_asset(
+        self,
+        *,
+        asset_type: str,
+        scope: str,
+        profile_id: str | None = None,
+        source_type: str,
+        source_value: str,
+        title: str | None = None,
+        note: str | None = None,
+    ) -> MediaLibraryAsset:
+        normalized_asset_type = MediaLibraryAssetType(asset_type)
+        normalized_scope = MediaLibraryAssetScope(scope)
+        normalized_source_type = ExampleClipSourceType(source_type)
+        normalized_source_value = source_value.strip()
+        if not normalized_source_value:
+            raise ValueError("Media library asset sourceValue is required")
+
+        if normalized_scope == MediaLibraryAssetScope.PROFILE and not profile_id:
+            raise ValueError("profileId is required when scope is PROFILE")
+
+        if (
+            normalized_asset_type in {MediaLibraryAssetType.VOD, MediaLibraryAssetType.EDIT}
+            and normalized_source_type
+            not in {
+                ExampleClipSourceType.LOCAL_FILE_PATH,
+                ExampleClipSourceType.LOCAL_FILE_UPLOAD,
+            }
+        ):
+            raise ValueError("VOD and EDIT assets must point to a local file path")
+
+        normalized_title = title.strip() if title else None
+        normalized_note = note.strip() if note else None
+        normalized_profile_id = profile_id.strip() if profile_id else None
+        normalized_source_value = self._normalize_example_source_value(
+            normalized_source_type,
+            normalized_source_value,
+        )
+        status, status_detail = self._derive_example_status(
+            normalized_source_type,
+            normalized_source_value,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        asset_id = f"asset_{uuid.uuid4().hex[:12]}"
+
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_column(connection, "example_clips", "summary_json", "TEXT")
+            self._ensure_media_library_asset_columns(connection)
+            self._seed_system_profiles(connection)
+            if normalized_profile_id:
+                self._ensure_profile_exists(connection, normalized_profile_id)
+
+            feature_summary = None
+            index_summary = None
+            if normalized_source_type in {
+                ExampleClipSourceType.LOCAL_FILE_PATH,
+                ExampleClipSourceType.LOCAL_FILE_UPLOAD,
+            } and status == ExampleClipStatus.LOCAL_FILE_AVAILABLE:
+                status_detail = (
+                    "Local media reference saved. Start an index job to extract bounded metadata "
+                    "without blocking the app."
+                )
+
+            connection.execute(
+                """
+                INSERT INTO media_library_assets (
+                  id, asset_type, scope, profile_id, source_type, source_value,
+                  title, note, status, status_detail, summary_json, index_summary_json,
+                  created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    asset_id,
+                    normalized_asset_type.value,
+                    normalized_scope.value,
+                    normalized_profile_id,
+                    normalized_source_type.value,
+                    normalized_source_value,
+                    normalized_title,
+                    normalized_note,
+                    status.value,
+                    status_detail,
+                    self._to_json(feature_summary) if feature_summary else None,
+                    self._to_json(index_summary) if index_summary else None,
+                    now,
+                    now,
+                ),
+            )
+            if normalized_profile_id:
+                connection.execute(
+                    """
+                    UPDATE clip_profiles
+                    SET updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now, normalized_profile_id),
+                )
+            connection.commit()
+
+            row = connection.execute(
+                """
+                SELECT id, asset_type, scope, profile_id, source_type, source_value,
+                       title, note, status, status_detail, summary_json,
+                       index_summary_json, created_at, updated_at
+                FROM media_library_assets
+                WHERE id = ?
+                """,
+                (asset_id,),
+            ).fetchone()
+
+            if row is None:
+                raise KeyError(f"Media library asset not found after create: {asset_id}")
+
+            return self._media_library_asset_from_row(connection, row)
+
+    def list_media_edit_pairs(self) -> list[MediaEditPair]:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_media_library_asset_columns(connection)
+            self._seed_system_profiles(connection)
+
+            rows = connection.execute(
+                """
+                SELECT id, vod_asset_id, edit_asset_id, profile_id, title, note,
+                       status, status_detail, summary_json, created_at, updated_at
+                FROM media_edit_pairs
+                ORDER BY updated_at DESC, created_at DESC
+                """
+            ).fetchall()
+            pairs = [self._media_edit_pair_from_row(connection, row) for row in rows]
+            connection.commit()
+            return pairs
+
+    def create_media_edit_pair(
+        self,
+        vod_asset_id: str,
+        edit_asset_id: str,
+        *,
+        profile_id: str | None = None,
+        title: str | None = None,
+        note: str | None = None,
+    ) -> MediaEditPair:
+        normalized_vod_asset_id = vod_asset_id.strip()
+        normalized_edit_asset_id = edit_asset_id.strip()
+        normalized_profile_id = profile_id.strip() if profile_id else None
+        if not normalized_vod_asset_id or not normalized_edit_asset_id:
+            raise ValueError("vodAssetId and editAssetId are required")
+        if normalized_vod_asset_id == normalized_edit_asset_id:
+            raise ValueError("vodAssetId and editAssetId must be different assets")
+
+        now = datetime.now(timezone.utc).isoformat()
+        pair_id = f"pair_{uuid.uuid4().hex[:12]}"
+
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._seed_system_profiles(connection)
+            if normalized_profile_id:
+                self._ensure_profile_exists(connection, normalized_profile_id)
+
+            vod_asset = self._load_media_library_asset(connection, normalized_vod_asset_id)
+            edit_asset = self._load_media_library_asset(connection, normalized_edit_asset_id)
+
+            if vod_asset.asset_type != MediaLibraryAssetType.VOD:
+                raise ValueError("vodAssetId must reference a VOD asset")
+            if edit_asset.asset_type != MediaLibraryAssetType.EDIT:
+                raise ValueError("editAssetId must reference an EDIT asset")
+
+            pair_summary = self._build_media_edit_pair_summary(vod_asset, edit_asset)
+            connection.execute(
+                """
+                INSERT INTO media_edit_pairs (
+                  id, vod_asset_id, edit_asset_id, profile_id, title, note,
+                  status, status_detail, summary_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    pair_id,
+                    normalized_vod_asset_id,
+                    normalized_edit_asset_id,
+                    normalized_profile_id,
+                    title.strip() if title else None,
+                    note.strip() if note else None,
+                    pair_summary["status"],
+                    pair_summary["status_detail"],
+                    self._to_json(pair_summary),
+                    now,
+                    now,
+                ),
+            )
+            if normalized_profile_id:
+                connection.execute(
+                    """
+                    UPDATE clip_profiles
+                    SET updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now, normalized_profile_id),
+                )
+            connection.commit()
+
+            row = connection.execute(
+                """
+                SELECT id, vod_asset_id, edit_asset_id, profile_id, title, note,
+                       status, status_detail, summary_json, created_at, updated_at
+                FROM media_edit_pairs
+                WHERE id = ?
+                """,
+                (pair_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Media edit pair not found after create: {pair_id}")
+
+            return self._media_edit_pair_from_row(connection, row)
+
+    def list_media_index_jobs(self) -> list[MediaIndexJob]:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_media_library_asset_columns(connection)
+            rows = connection.execute(
+                """
+                SELECT id, asset_id, status, progress, status_detail, error_message,
+                       result_json, created_at, updated_at, started_at, finished_at, cancelled_at
+                FROM media_index_jobs
+                ORDER BY updated_at DESC, created_at DESC
+                """
+            ).fetchall()
+            return [self._media_index_job_from_row(row) for row in rows]
+
+    def list_media_index_artifacts(
+        self,
+        asset_id: str | None = None,
+    ) -> list[MediaIndexArtifact]:
+        normalized_asset_id = asset_id.strip() if asset_id else None
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            if normalized_asset_id:
+                rows = connection.execute(
+                    """
+                    SELECT id, asset_id, job_id, kind, method, summary_json, payload_json,
+                           created_at, updated_at
+                    FROM media_index_artifacts
+                    WHERE asset_id = ?
+                    ORDER BY updated_at DESC, created_at DESC
+                    """,
+                    (normalized_asset_id,),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT id, asset_id, job_id, kind, method, summary_json, payload_json,
+                           created_at, updated_at
+                    FROM media_index_artifacts
+                    ORDER BY updated_at DESC, created_at DESC
+                    """
+                ).fetchall()
+            return [self._media_index_artifact_from_row(row) for row in rows]
+
+    def save_media_index_artifact(
+        self,
+        artifact: MediaIndexArtifact,
+    ) -> MediaIndexArtifact:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._load_media_library_asset(connection, artifact.asset_id)
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO media_index_artifacts (
+                  id, asset_id, job_id, kind, method, summary_json, payload_json,
+                  created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    artifact.id,
+                    artifact.asset_id,
+                    artifact.job_id,
+                    artifact.kind.value,
+                    artifact.method.value,
+                    self._to_json(self._media_index_artifact_summary_payload(artifact)),
+                    self._to_json({"buckets": artifact.buckets}),
+                    artifact.created_at,
+                    artifact.updated_at,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE media_library_assets
+                SET updated_at = ?
+                WHERE id = ?
+                """,
+                (artifact.updated_at, artifact.asset_id),
+            )
+            connection.commit()
+
+            row = connection.execute(
+                """
+                SELECT id, asset_id, job_id, kind, method, summary_json, payload_json,
+                       created_at, updated_at
+                FROM media_index_artifacts
+                WHERE id = ?
+                """,
+                (artifact.id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Media index artifact not found after save: {artifact.id}")
+            return self._media_index_artifact_from_row(row)
+
+    def load_latest_audio_fingerprint_artifact(
+        self,
+        asset_id: str,
+    ) -> MediaIndexArtifact:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            row = connection.execute(
+                """
+                SELECT id, asset_id, job_id, kind, method, summary_json, payload_json,
+                       created_at, updated_at
+                FROM media_index_artifacts
+                WHERE asset_id = ? AND kind = ?
+                ORDER BY
+                  CASE method
+                    WHEN 'DECODED_AUDIO_FINGERPRINT_V1' THEN 0
+                    ELSE 1
+                  END,
+                  updated_at DESC,
+                  created_at DESC
+                LIMIT 1
+                """,
+                (asset_id, MediaIndexArtifactKind.AUDIO_FINGERPRINT.value),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Audio fingerprint artifact not found for asset: {asset_id}")
+            return self._media_index_artifact_from_row(row)
+
+    def create_media_index_job(self, asset_id: str) -> MediaIndexJob:
+        normalized_asset_id = asset_id.strip()
+        if not normalized_asset_id:
+            raise ValueError("assetId is required")
+
+        now = datetime.now(timezone.utc).isoformat()
+        job_id = f"index_job_{uuid.uuid4().hex[:12]}"
+
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_media_library_asset_columns(connection)
+            asset = self._load_media_library_asset(connection, normalized_asset_id)
+            if asset.source_type not in {
+                ExampleClipSourceType.LOCAL_FILE_PATH,
+                ExampleClipSourceType.LOCAL_FILE_UPLOAD,
+            }:
+                raise ValueError("Only local media assets can be indexed")
+
+            active_row = connection.execute(
+                """
+                SELECT id, asset_id, status, progress, status_detail, error_message,
+                       result_json, created_at, updated_at, started_at, finished_at, cancelled_at
+                FROM media_index_jobs
+                WHERE asset_id = ? AND status IN ('QUEUED', 'RUNNING')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (normalized_asset_id,),
+            ).fetchone()
+            if active_row is not None:
+                return self._media_index_job_from_row(active_row)
+
+            connection.execute(
+                """
+                INSERT INTO media_index_jobs (
+                  id, asset_id, status, progress, status_detail, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    normalized_asset_id,
+                    MediaIndexJobStatus.QUEUED.value,
+                    0.0,
+                    "Media index job queued.",
+                    now,
+                    now,
+                ),
+            )
+            connection.commit()
+
+            row = connection.execute(
+                """
+                SELECT id, asset_id, status, progress, status_detail, error_message,
+                       result_json, created_at, updated_at, started_at, finished_at, cancelled_at
+                FROM media_index_jobs
+                WHERE id = ?
+                """,
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Media index job not found after create: {job_id}")
+            return self._media_index_job_from_row(row)
+
+    def claim_media_index_job(self, job_id: str) -> MediaIndexJob | None:
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            row = connection.execute(
+                """
+                SELECT status
+                FROM media_index_jobs
+                WHERE id = ?
+                """,
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Media index job not found: {job_id}")
+            if row["status"] != MediaIndexJobStatus.QUEUED.value:
+                return None
+
+            connection.execute(
+                """
+                UPDATE media_index_jobs
+                SET status = ?, progress = ?, status_detail = ?, started_at = ?, updated_at = ?
+                WHERE id = ? AND status = ?
+                """,
+                (
+                    MediaIndexJobStatus.RUNNING.value,
+                    0.15,
+                    "Indexing local media metadata with bounded probes.",
+                    now,
+                    now,
+                    job_id,
+                    MediaIndexJobStatus.QUEUED.value,
+                ),
+            )
+            connection.commit()
+            return self._load_media_index_job(connection, job_id)
+
+    def update_media_index_job_progress(
+        self,
+        job_id: str,
+        *,
+        progress: float,
+        status_detail: str,
+    ) -> MediaIndexJob:
+        now = datetime.now(timezone.utc).isoformat()
+        bounded_progress = min(max(progress, 0.0), 0.99)
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            connection.execute(
+                """
+                UPDATE media_index_jobs
+                SET progress = ?, status_detail = ?, updated_at = ?
+                WHERE id = ? AND status = ?
+                """,
+                (
+                    bounded_progress,
+                    status_detail,
+                    now,
+                    job_id,
+                    MediaIndexJobStatus.RUNNING.value,
+                ),
+            )
+            connection.commit()
+            return self._load_media_index_job(connection, job_id)
+
+    def complete_media_index_job(
+        self,
+        job_id: str,
+        result: MediaIndexSummary,
+    ) -> MediaIndexJob:
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_media_library_asset_columns(connection)
+            job = self._load_media_index_job(connection, job_id)
+            if job.status == MediaIndexJobStatus.CANCELLED:
+                return job
+
+            result_json = self._to_json(result)
+            connection.execute(
+                """
+                UPDATE media_index_jobs
+                SET status = ?, progress = ?, status_detail = ?, error_message = NULL,
+                    result_json = ?, finished_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    MediaIndexJobStatus.SUCCEEDED.value,
+                    1.0,
+                    "Media index ready.",
+                    result_json,
+                    now,
+                    now,
+                    job_id,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE media_library_assets
+                SET status = ?, status_detail = ?, index_summary_json = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    ExampleClipStatus.LOCAL_FILE_AVAILABLE.value,
+                    "Media index ready for matching and VOD/edit comparison.",
+                    result_json,
+                    now,
+                    job.asset_id,
+                ),
+            )
+            connection.commit()
+            return self._load_media_index_job(connection, job_id)
+
+    def fail_media_index_job(self, job_id: str, error_message: str) -> MediaIndexJob:
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            job = self._load_media_index_job(connection, job_id)
+            if job.status == MediaIndexJobStatus.CANCELLED:
+                return job
+
+            connection.execute(
+                """
+                UPDATE media_index_jobs
+                SET status = ?, progress = ?, status_detail = ?, error_message = ?,
+                    finished_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    MediaIndexJobStatus.FAILED.value,
+                    job.progress,
+                    "Media index failed.",
+                    error_message,
+                    now,
+                    now,
+                    job_id,
+                ),
+            )
+            connection.commit()
+            return self._load_media_index_job(connection, job_id)
+
+    def cancel_media_index_job(self, job_id: str) -> MediaIndexJob:
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            job = self._load_media_index_job(connection, job_id)
+            if job.status not in {
+                MediaIndexJobStatus.QUEUED,
+                MediaIndexJobStatus.RUNNING,
+            }:
+                return job
+
+            connection.execute(
+                """
+                UPDATE media_index_jobs
+                SET status = ?, status_detail = ?, cancelled_at = ?, finished_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    MediaIndexJobStatus.CANCELLED.value,
+                    "Media index job cancelled.",
+                    now,
+                    now,
+                    now,
+                    job_id,
+                ),
+            )
+            connection.commit()
+            return self._load_media_index_job(connection, job_id)
+
+    def media_index_job_is_cancelled(self, job_id: str) -> bool:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            row = connection.execute(
+                "SELECT status FROM media_index_jobs WHERE id = ?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Media index job not found: {job_id}")
+            return row["status"] == MediaIndexJobStatus.CANCELLED.value
+
+    def list_media_alignment_jobs(self) -> list[MediaAlignmentJob]:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            rows = connection.execute(
+                """
+                SELECT id, pair_id, source_asset_id, query_asset_id, status, progress,
+                       status_detail, error_message, method, match_count, created_at,
+                       updated_at, started_at, finished_at, cancelled_at
+                FROM media_alignment_jobs
+                ORDER BY updated_at DESC, created_at DESC
+                """
+            ).fetchall()
+            return [self._media_alignment_job_from_row(row) for row in rows]
+
+    def list_media_alignment_matches(
+        self,
+        pair_id: str | None = None,
+    ) -> list[MediaAlignmentMatch]:
+        normalized_pair_id = pair_id.strip() if pair_id else None
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            if normalized_pair_id:
+                rows = connection.execute(
+                    """
+                    SELECT id, job_id, pair_id, source_asset_id, query_asset_id, kind, method,
+                           source_range_json, query_range_json, score, confidence_score,
+                           matched_bucket_count, total_query_bucket_count, bucket_matches_json,
+                           note, created_at, updated_at
+                    FROM media_alignment_matches
+                    WHERE pair_id = ?
+                    ORDER BY confidence_score DESC, updated_at DESC
+                    """,
+                    (normalized_pair_id,),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT id, job_id, pair_id, source_asset_id, query_asset_id, kind, method,
+                           source_range_json, query_range_json, score, confidence_score,
+                           matched_bucket_count, total_query_bucket_count, bucket_matches_json,
+                           note, created_at, updated_at
+                    FROM media_alignment_matches
+                    ORDER BY updated_at DESC, confidence_score DESC
+                    """
+                ).fetchall()
+            return [self._media_alignment_match_from_row(row) for row in rows]
+
+    def create_media_alignment_job(
+        self,
+        *,
+        pair_id: str | None = None,
+        source_asset_id: str | None = None,
+        query_asset_id: str | None = None,
+    ) -> MediaAlignmentJob:
+        normalized_pair_id = pair_id.strip() if pair_id else None
+        normalized_source_asset_id = source_asset_id.strip() if source_asset_id else None
+        normalized_query_asset_id = query_asset_id.strip() if query_asset_id else None
+
+        now = datetime.now(timezone.utc).isoformat()
+        job_id = f"align_job_{uuid.uuid4().hex[:12]}"
+
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            if normalized_pair_id:
+                pair = self._load_media_edit_pair(connection, normalized_pair_id)
+                normalized_source_asset_id = pair.vod_asset_id
+                normalized_query_asset_id = pair.edit_asset_id
+
+            if not normalized_source_asset_id or not normalized_query_asset_id:
+                raise ValueError("pairId or sourceAssetId and queryAssetId are required")
+            if normalized_source_asset_id == normalized_query_asset_id:
+                raise ValueError("sourceAssetId and queryAssetId must be different assets")
+
+            self._load_media_library_asset(connection, normalized_source_asset_id)
+            self._load_media_library_asset(connection, normalized_query_asset_id)
+
+            active_row = connection.execute(
+                """
+                SELECT id, pair_id, source_asset_id, query_asset_id, status, progress,
+                       status_detail, error_message, method, match_count, created_at,
+                       updated_at, started_at, finished_at, cancelled_at
+                FROM media_alignment_jobs
+                WHERE source_asset_id = ? AND query_asset_id = ?
+                  AND COALESCE(pair_id, '') = COALESCE(?, '')
+                  AND status IN ('QUEUED', 'RUNNING')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (
+                    normalized_source_asset_id,
+                    normalized_query_asset_id,
+                    normalized_pair_id,
+                ),
+            ).fetchone()
+            if active_row is not None:
+                return self._media_alignment_job_from_row(active_row)
+
+            connection.execute(
+                """
+                INSERT INTO media_alignment_jobs (
+                  id, pair_id, source_asset_id, query_asset_id, status, progress,
+                  status_detail, method, match_count, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    normalized_pair_id,
+                    normalized_source_asset_id,
+                    normalized_query_asset_id,
+                    MediaAlignmentJobStatus.QUEUED.value,
+                    0.0,
+                    "Media alignment job queued.",
+                    MediaAlignmentMethod.AUDIO_PROXY_BUCKET_CORRELATION_V1.value,
+                    0,
+                    now,
+                    now,
+                ),
+            )
+            connection.commit()
+            return self._load_media_alignment_job(connection, job_id)
+
+    def claim_media_alignment_job(self, job_id: str) -> MediaAlignmentJob | None:
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            job = self._load_media_alignment_job(connection, job_id)
+            if job.status != MediaAlignmentJobStatus.QUEUED:
+                return None
+
+            connection.execute(
+                """
+                UPDATE media_alignment_jobs
+                SET status = ?, progress = ?, status_detail = ?, started_at = ?, updated_at = ?
+                WHERE id = ? AND status = ?
+                """,
+                (
+                    MediaAlignmentJobStatus.RUNNING.value,
+                    0.2,
+                    "Loading indexed audio proxy artifacts.",
+                    now,
+                    now,
+                    job_id,
+                    MediaAlignmentJobStatus.QUEUED.value,
+                ),
+            )
+            connection.commit()
+            return self._load_media_alignment_job(connection, job_id)
+
+    def update_media_alignment_job_progress(
+        self,
+        job_id: str,
+        *,
+        progress: float,
+        status_detail: str,
+    ) -> MediaAlignmentJob:
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            connection.execute(
+                """
+                UPDATE media_alignment_jobs
+                SET progress = ?, status_detail = ?, updated_at = ?
+                WHERE id = ? AND status = ?
+                """,
+                (
+                    min(max(progress, 0.0), 0.99),
+                    status_detail,
+                    now,
+                    job_id,
+                    MediaAlignmentJobStatus.RUNNING.value,
+                ),
+            )
+            connection.commit()
+            return self._load_media_alignment_job(connection, job_id)
+
+    def save_media_alignment_matches(
+        self,
+        job_id: str,
+        matches: list[MediaAlignmentMatch],
+    ) -> None:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            connection.execute(
+                "DELETE FROM media_alignment_matches WHERE job_id = ?",
+                (job_id,),
+            )
+            for match in matches:
+                connection.execute(
+                    """
+                    INSERT INTO media_alignment_matches (
+                      id, job_id, pair_id, source_asset_id, query_asset_id, kind, method,
+                      source_range_json, query_range_json, score, confidence_score,
+                      matched_bucket_count, total_query_bucket_count, bucket_matches_json,
+                      note, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        match.id,
+                        match.job_id,
+                        match.pair_id,
+                        match.source_asset_id,
+                        match.query_asset_id,
+                        match.kind.value,
+                        match.method.value,
+                        self._to_json(match.source_range),
+                        self._to_json(match.query_range),
+                        match.score,
+                        match.confidence_score,
+                        match.matched_bucket_count,
+                        match.total_query_bucket_count,
+                        self._to_json(match.bucket_matches),
+                        match.note,
+                        match.created_at,
+                        match.updated_at,
+                    ),
+                )
+            connection.commit()
+
+    def complete_media_alignment_job(
+        self,
+        job_id: str,
+        match_count: int,
+    ) -> MediaAlignmentJob:
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            job = self._load_media_alignment_job(connection, job_id)
+            if job.status == MediaAlignmentJobStatus.CANCELLED:
+                return job
+            connection.execute(
+                """
+                UPDATE media_alignment_jobs
+                SET status = ?, progress = ?, status_detail = ?, error_message = NULL,
+                    match_count = ?, finished_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    MediaAlignmentJobStatus.SUCCEEDED.value,
+                    1.0,
+                    f"Alignment complete with {match_count} candidate match{'es' if match_count != 1 else ''}.",
+                    match_count,
+                    now,
+                    now,
+                    job_id,
+                ),
+            )
+            if job.pair_id:
+                connection.execute(
+                    """
+                    UPDATE media_edit_pairs
+                    SET updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now, job.pair_id),
+                )
+            connection.commit()
+            return self._load_media_alignment_job(connection, job_id)
+
+    def fail_media_alignment_job(self, job_id: str, error_message: str) -> MediaAlignmentJob:
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            job = self._load_media_alignment_job(connection, job_id)
+            if job.status == MediaAlignmentJobStatus.CANCELLED:
+                return job
+            connection.execute(
+                """
+                UPDATE media_alignment_jobs
+                SET status = ?, status_detail = ?, error_message = ?,
+                    finished_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    MediaAlignmentJobStatus.FAILED.value,
+                    "Media alignment failed.",
+                    error_message,
+                    now,
+                    now,
+                    job_id,
+                ),
+            )
+            connection.commit()
+            return self._load_media_alignment_job(connection, job_id)
+
+    def cancel_media_alignment_job(self, job_id: str) -> MediaAlignmentJob:
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            job = self._load_media_alignment_job(connection, job_id)
+            if job.status not in {
+                MediaAlignmentJobStatus.QUEUED,
+                MediaAlignmentJobStatus.RUNNING,
+            }:
+                return job
+            connection.execute(
+                """
+                UPDATE media_alignment_jobs
+                SET status = ?, status_detail = ?, cancelled_at = ?, finished_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    MediaAlignmentJobStatus.CANCELLED.value,
+                    "Media alignment job cancelled.",
+                    now,
+                    now,
+                    now,
+                    job_id,
+                ),
+            )
+            connection.commit()
+            return self._load_media_alignment_job(connection, job_id)
+
+    def media_alignment_job_is_cancelled(self, job_id: str) -> bool:
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            return (
+                self._load_media_alignment_job(connection, job_id).status
+                == MediaAlignmentJobStatus.CANCELLED
+            )
 
     def count_candidates(self, project_session_id: str) -> int:
         with sqlite3.connect(self.database_path) as connection:
@@ -804,6 +1909,446 @@ class SessionStore:
             updated_at=feature_summary.generated_at if feature_summary else row["updated_at"],
         )
 
+    def _load_media_library_asset(
+        self,
+        connection: sqlite3.Connection,
+        asset_id: str,
+    ) -> MediaLibraryAsset:
+        row = connection.execute(
+            """
+            SELECT id, asset_type, scope, profile_id, source_type, source_value,
+                   title, note, status, status_detail, summary_json,
+                   index_summary_json, created_at, updated_at
+            FROM media_library_assets
+            WHERE id = ?
+            """,
+            (asset_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Media library asset not found: {asset_id}")
+        return self._media_library_asset_from_row(connection, row)
+
+    def _load_media_edit_pair(
+        self,
+        connection: sqlite3.Connection,
+        pair_id: str,
+    ) -> MediaEditPair:
+        row = connection.execute(
+            """
+            SELECT id, vod_asset_id, edit_asset_id, profile_id, title, note,
+                   status, status_detail, summary_json, created_at, updated_at
+            FROM media_edit_pairs
+            WHERE id = ?
+            """,
+            (pair_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Media edit pair not found: {pair_id}")
+        return self._media_edit_pair_from_row(connection, row)
+
+    def _load_media_index_job(
+        self,
+        connection: sqlite3.Connection,
+        job_id: str,
+    ) -> MediaIndexJob:
+        row = connection.execute(
+            """
+            SELECT id, asset_id, status, progress, status_detail, error_message,
+                   result_json, created_at, updated_at, started_at, finished_at, cancelled_at
+            FROM media_index_jobs
+            WHERE id = ?
+            """,
+            (job_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Media index job not found: {job_id}")
+        return self._media_index_job_from_row(row)
+
+    def _load_media_alignment_job(
+        self,
+        connection: sqlite3.Connection,
+        job_id: str,
+    ) -> MediaAlignmentJob:
+        row = connection.execute(
+            """
+            SELECT id, pair_id, source_asset_id, query_asset_id, status, progress,
+                   status_detail, error_message, method, match_count, created_at,
+                   updated_at, started_at, finished_at, cancelled_at
+            FROM media_alignment_jobs
+            WHERE id = ?
+            """,
+            (job_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Media alignment job not found: {job_id}")
+        return self._media_alignment_job_from_row(row)
+
+    def _media_index_job_from_row(self, row: sqlite3.Row) -> MediaIndexJob:
+        return MediaIndexJob(
+            id=row["id"],
+            asset_id=row["asset_id"],
+            status=MediaIndexJobStatus(row["status"]),
+            progress=float(row["progress"]),
+            status_detail=row["status_detail"],
+            error_message=row["error_message"],
+            result=self._media_index_summary_from_json(row["result_json"]),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            started_at=row["started_at"],
+            finished_at=row["finished_at"],
+            cancelled_at=row["cancelled_at"],
+        )
+
+    def _media_alignment_job_from_row(self, row: sqlite3.Row) -> MediaAlignmentJob:
+        return MediaAlignmentJob(
+            id=row["id"],
+            pair_id=row["pair_id"],
+            source_asset_id=row["source_asset_id"],
+            query_asset_id=row["query_asset_id"],
+            status=MediaAlignmentJobStatus(row["status"]),
+            progress=float(row["progress"]),
+            status_detail=row["status_detail"],
+            error_message=row["error_message"],
+            method=MediaAlignmentMethod(row["method"]),
+            match_count=int(row["match_count"]),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            started_at=row["started_at"],
+            finished_at=row["finished_at"],
+            cancelled_at=row["cancelled_at"],
+        )
+
+    def _media_alignment_match_from_row(
+        self,
+        row: sqlite3.Row,
+    ) -> MediaAlignmentMatch:
+        bucket_matches = [
+            MediaAlignmentBucketMatch(
+                query_bucket_index=int(
+                    item.get("query_bucket_index", item.get("queryBucketIndex"))
+                ),
+                source_bucket_index=int(
+                    item.get("source_bucket_index", item.get("sourceBucketIndex"))
+                ),
+                score=float(item["score"]),
+            )
+            for item in self._json_list_from_text(row["bucket_matches_json"])
+            if isinstance(item, dict)
+        ]
+        return MediaAlignmentMatch(
+            id=row["id"],
+            job_id=row["job_id"],
+            pair_id=row["pair_id"],
+            source_asset_id=row["source_asset_id"],
+            query_asset_id=row["query_asset_id"],
+            kind=MediaAlignmentMatchKind(row["kind"]),
+            method=MediaAlignmentMethod(row["method"]),
+            source_range=self._time_range_from_dict(
+                self._json_dict_from_text(row["source_range_json"])
+            ),
+            query_range=self._time_range_from_dict(
+                self._json_dict_from_text(row["query_range_json"])
+            ),
+            score=float(row["score"]),
+            confidence_score=float(row["confidence_score"]),
+            matched_bucket_count=int(row["matched_bucket_count"]),
+            total_query_bucket_count=int(row["total_query_bucket_count"]),
+            bucket_matches=bucket_matches,
+            note=row["note"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def _media_index_artifact_from_row(
+        self,
+        row: sqlite3.Row,
+    ) -> MediaIndexArtifact:
+        summary_payload = self._json_dict_from_text(row["summary_json"])
+        payload = self._json_dict_from_text(row["payload_json"])
+        buckets = [
+            self._media_index_audio_bucket_from_dict(bucket)
+            for bucket in payload.get("buckets", [])
+            if isinstance(bucket, dict)
+        ]
+        return MediaIndexArtifact(
+            id=row["id"],
+            asset_id=row["asset_id"],
+            job_id=row["job_id"],
+            kind=MediaIndexArtifactKind(row["kind"]),
+            method=MediaIndexArtifactMethod(row["method"]),
+            bucket_duration_seconds=float(summary_payload["bucket_duration_seconds"]),
+            duration_seconds=float(summary_payload["duration_seconds"]),
+            bucket_count=int(summary_payload["bucket_count"]),
+            confidence_score=float(summary_payload["confidence_score"]),
+            payload_byte_size=int(summary_payload["payload_byte_size"]),
+            energy_mean=float(summary_payload["energy_mean"]),
+            energy_peak=float(summary_payload["energy_peak"]),
+            onset_mean=float(summary_payload["onset_mean"]),
+            silence_share=float(summary_payload["silence_share"]),
+            buckets=buckets,
+            note=str(summary_payload["note"]),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def _media_index_audio_bucket_from_dict(
+        self,
+        value: dict[str, Any],
+    ) -> MediaIndexAudioBucket:
+        return MediaIndexAudioBucket(
+            index=int(value["index"]),
+            start_seconds=float(value.get("start_seconds", value.get("startSeconds"))),
+            end_seconds=float(value.get("end_seconds", value.get("endSeconds"))),
+            energy_score=float(value.get("energy_score", value.get("energyScore"))),
+            onset_score=float(value.get("onset_score", value.get("onsetScore"))),
+            spectral_flux_score=float(
+                value.get("spectral_flux_score", value.get("spectralFluxScore"))
+            ),
+            silence_score=float(value.get("silence_score", value.get("silenceScore"))),
+            fingerprint=str(value["fingerprint"]),
+        )
+
+    def _media_index_artifact_summary_payload(
+        self,
+        artifact: MediaIndexArtifact,
+    ) -> dict[str, Any]:
+        return {
+            "bucket_duration_seconds": artifact.bucket_duration_seconds,
+            "duration_seconds": artifact.duration_seconds,
+            "bucket_count": artifact.bucket_count,
+            "confidence_score": artifact.confidence_score,
+            "payload_byte_size": artifact.payload_byte_size,
+            "energy_mean": artifact.energy_mean,
+            "energy_peak": artifact.energy_peak,
+            "onset_mean": artifact.onset_mean,
+            "silence_share": artifact.silence_share,
+            "note": artifact.note,
+        }
+
+    def _media_asset_index_artifact_summary(
+        self,
+        connection: sqlite3.Connection,
+        asset_id: str,
+    ) -> MediaIndexArtifactSummary | None:
+        row = connection.execute(
+            """
+            SELECT id, method, summary_json, updated_at
+            FROM media_index_artifacts
+            WHERE asset_id = ? AND kind = ?
+            ORDER BY
+              CASE method
+                WHEN 'DECODED_AUDIO_FINGERPRINT_V1' THEN 0
+                ELSE 1
+              END,
+              updated_at DESC,
+              created_at DESC
+            LIMIT 1
+            """,
+            (asset_id, MediaIndexArtifactKind.AUDIO_FINGERPRINT.value),
+        ).fetchone()
+        if row is None:
+            return None
+
+        summary_payload = self._json_dict_from_text(row["summary_json"])
+        return MediaIndexArtifactSummary(
+            latest_audio_fingerprint_artifact_id=row["id"],
+            audio_fingerprint_bucket_count=int(summary_payload.get("bucket_count", 0)),
+            audio_fingerprint_method=MediaIndexArtifactMethod(row["method"]),
+            audio_fingerprint_updated_at=row["updated_at"],
+            bucket_duration_seconds=(
+                float(summary_payload["bucket_duration_seconds"])
+                if summary_payload.get("bucket_duration_seconds") is not None
+                else None
+            ),
+            confidence_score=(
+                float(summary_payload["confidence_score"])
+                if summary_payload.get("confidence_score") is not None
+                else None
+            ),
+        )
+
+    def _json_dict_from_text(self, value: str | None) -> dict[str, Any]:
+        if not value:
+            return {}
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _json_list_from_text(self, value: str | None) -> list[Any]:
+        if not value:
+            return []
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+        return payload if isinstance(payload, list) else []
+
+    def _media_library_asset_from_row(
+        self,
+        connection: sqlite3.Connection,
+        row: sqlite3.Row,
+    ) -> MediaLibraryAsset:
+        source_type = ExampleClipSourceType(row["source_type"])
+        source_value = row["source_value"]
+        status = ExampleClipStatus(row["status"])
+        status_detail = row["status_detail"]
+        feature_summary = self._example_feature_summary_from_json(row["summary_json"])
+        index_summary = self._media_index_summary_from_json(row["index_summary_json"])
+
+        if source_type in {
+            ExampleClipSourceType.LOCAL_FILE_PATH,
+            ExampleClipSourceType.LOCAL_FILE_UPLOAD,
+        }:
+            path = Path(source_value).expanduser()
+            if not path.exists():
+                status = ExampleClipStatus.MISSING_LOCAL_FILE
+                status_detail = (
+                    "Local media path was saved, but the file is not currently available on this machine."
+                )
+                feature_summary = None
+                index_summary = None
+                connection.execute(
+                    """
+                    UPDATE media_library_assets
+                    SET status = ?, status_detail = ?, summary_json = NULL, index_summary_json = NULL
+                    WHERE id = ?
+                    """,
+                    (
+                        status.value,
+                        status_detail,
+                        row["id"],
+                    ),
+                )
+
+        return MediaLibraryAsset(
+            id=row["id"],
+            asset_type=MediaLibraryAssetType(row["asset_type"]),
+            scope=MediaLibraryAssetScope(row["scope"]),
+            profile_id=row["profile_id"],
+            source_type=source_type,
+            source_value=source_value,
+            title=row["title"],
+            note=row["note"],
+            status=status,
+            status_detail=status_detail,
+            feature_summary=feature_summary,
+            index_summary=index_summary,
+            index_artifact_summary=self._media_asset_index_artifact_summary(
+                connection,
+                row["id"],
+            ),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def _media_edit_pair_from_row(
+        self,
+        connection: sqlite3.Connection,
+        row: sqlite3.Row,
+    ) -> MediaEditPair:
+        summary_payload: dict[str, Any] = {}
+        if row["summary_json"]:
+            try:
+                parsed_summary = json.loads(row["summary_json"])
+                if isinstance(parsed_summary, dict):
+                    summary_payload = parsed_summary
+            except json.JSONDecodeError:
+                summary_payload = {}
+
+        vod_asset = self._load_media_library_asset(connection, row["vod_asset_id"])
+        edit_asset = self._load_media_library_asset(connection, row["edit_asset_id"])
+        refreshed_summary = self._build_media_edit_pair_summary(vod_asset, edit_asset)
+        self._append_confirmed_alignment_segments(
+            connection,
+            row["id"],
+            refreshed_summary,
+        )
+        updated_at = row["updated_at"]
+        if (
+            summary_payload.get("status") != refreshed_summary["status"]
+            or summary_payload.get("status_detail") != refreshed_summary["status_detail"]
+            or summary_payload.get("source_duration_seconds") != refreshed_summary["source_duration_seconds"]
+            or summary_payload.get("edit_duration_seconds") != refreshed_summary["edit_duration_seconds"]
+            or summary_payload.get("kept_duration_seconds") != refreshed_summary["kept_duration_seconds"]
+            or summary_payload.get("removed_duration_seconds") != refreshed_summary["removed_duration_seconds"]
+            or summary_payload.get("keep_ratio") != refreshed_summary["keep_ratio"]
+            or summary_payload.get("compression_ratio") != refreshed_summary["compression_ratio"]
+            or summary_payload.get("alignment_segments") != refreshed_summary["alignment_segments"]
+        ):
+            updated_at = datetime.now(timezone.utc).isoformat()
+            connection.execute(
+                """
+                UPDATE media_edit_pairs
+                SET status = ?, status_detail = ?, summary_json = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    refreshed_summary["status"],
+                    refreshed_summary["status_detail"],
+                    self._to_json(refreshed_summary),
+                    updated_at,
+                    row["id"],
+                ),
+            )
+            summary_payload = refreshed_summary
+
+        return MediaEditPair(
+            id=row["id"],
+            vod_asset_id=row["vod_asset_id"],
+            edit_asset_id=row["edit_asset_id"],
+            profile_id=row["profile_id"],
+            title=row["title"],
+            note=row["note"],
+            status=MediaEditPairStatus(summary_payload.get("status", row["status"])),
+            status_detail=summary_payload.get("status_detail", row["status_detail"]),
+            source_duration_seconds=summary_payload.get("source_duration_seconds"),
+            edit_duration_seconds=summary_payload.get("edit_duration_seconds"),
+            kept_duration_seconds=summary_payload.get("kept_duration_seconds"),
+            removed_duration_seconds=summary_payload.get("removed_duration_seconds"),
+            keep_ratio=summary_payload.get("keep_ratio"),
+            compression_ratio=summary_payload.get("compression_ratio"),
+            alignment_segments=[
+                self._media_edit_alignment_segment_from_dict(segment)
+                for segment in summary_payload.get("alignment_segments", [])
+            ],
+            created_at=row["created_at"],
+            updated_at=updated_at,
+        )
+
+    def _media_edit_alignment_segment_from_dict(
+        self,
+        value: dict[str, Any],
+    ) -> MediaEditAlignmentSegment:
+        source_range = value.get("source_range") or value.get("sourceRange")
+        edit_range = value.get("edit_range") or value.get("editRange")
+        return MediaEditAlignmentSegment(
+            id=value["id"],
+            kind=MediaEditAlignmentKind(value["kind"]),
+            method=MediaEditAlignmentMethod(value["method"]),
+            source_range=self._time_range_from_dict(source_range) if source_range else None,
+            edit_range=self._time_range_from_dict(edit_range) if edit_range else None,
+            estimated_source_seconds=(
+                float(value["estimated_source_seconds"])
+                if value.get("estimated_source_seconds") is not None
+                else float(value["estimatedSourceSeconds"])
+                if value.get("estimatedSourceSeconds") is not None
+                else None
+            ),
+            estimated_edit_seconds=(
+                float(value["estimated_edit_seconds"])
+                if value.get("estimated_edit_seconds") is not None
+                else float(value["estimatedEditSeconds"])
+                if value.get("estimatedEditSeconds") is not None
+                else None
+            ),
+            confidence_score=float(
+                value.get("confidence_score", value.get("confidenceScore", 0.0))
+            ),
+            note=value["note"],
+        )
+
     def _summarize_local_example(
         self,
         source_value: str,
@@ -824,6 +2369,168 @@ class SessionStore:
             feature_summary,
             "Local clip summary is ready for heuristic profile matching.",
         )
+
+    def _build_media_edit_pair_summary(
+        self,
+        vod_asset: MediaLibraryAsset,
+        edit_asset: MediaLibraryAsset,
+    ) -> dict[str, Any]:
+        source_duration_seconds = self._media_asset_duration_seconds(vod_asset)
+        edit_duration_seconds = self._media_asset_duration_seconds(edit_asset)
+        if source_duration_seconds is None or edit_duration_seconds is None:
+            return {
+                "status": MediaEditPairStatus.INCOMPLETE.value,
+                "status_detail": (
+                    "The VOD/edit connection is saved, but one or both media indexes "
+                    "are still unavailable. Runtime-level keep/remove estimates will appear once both files index cleanly."
+                ),
+                "source_duration_seconds": source_duration_seconds,
+                "edit_duration_seconds": edit_duration_seconds,
+                "kept_duration_seconds": None,
+                "removed_duration_seconds": None,
+                "keep_ratio": None,
+                "compression_ratio": None,
+                "alignment_segments": [],
+            }
+
+        kept_duration_seconds = min(edit_duration_seconds, source_duration_seconds)
+        removed_duration_seconds = max(source_duration_seconds - kept_duration_seconds, 0.0)
+        keep_ratio = round(kept_duration_seconds / max(source_duration_seconds, 1.0), 4)
+        compression_ratio = round(
+            source_duration_seconds / max(edit_duration_seconds, 1.0),
+            4,
+        )
+
+        return {
+            "status": MediaEditPairStatus.READY.value,
+            "status_detail": (
+                "Paired source and edit registered. This is a coarse runtime-based editorial summary only; "
+                "timeline-level keep/remove alignment is not implemented yet."
+            ),
+            "source_duration_seconds": round(source_duration_seconds, 2),
+            "edit_duration_seconds": round(edit_duration_seconds, 2),
+            "kept_duration_seconds": round(kept_duration_seconds, 2),
+            "removed_duration_seconds": round(removed_duration_seconds, 2),
+            "keep_ratio": keep_ratio,
+            "compression_ratio": compression_ratio,
+            "alignment_segments": self._build_provisional_alignment_segments(
+                source_duration_seconds,
+                edit_duration_seconds,
+                kept_duration_seconds,
+                removed_duration_seconds,
+            ),
+        }
+
+    def _media_asset_duration_seconds(
+        self,
+        asset: MediaLibraryAsset,
+    ) -> float | None:
+        if asset.index_summary is not None:
+            return asset.index_summary.duration_seconds
+        if asset.feature_summary is not None:
+            return asset.feature_summary.duration_seconds
+        return None
+
+    def _append_confirmed_alignment_segments(
+        self,
+        connection: sqlite3.Connection,
+        pair_id: str,
+        summary: dict[str, Any],
+    ) -> None:
+        rows = connection.execute(
+            """
+            SELECT id, job_id, pair_id, source_asset_id, query_asset_id, kind, method,
+                   source_range_json, query_range_json, score, confidence_score,
+                   matched_bucket_count, total_query_bucket_count, bucket_matches_json,
+                   note, created_at, updated_at
+            FROM media_alignment_matches
+            WHERE pair_id = ? AND confidence_score >= ?
+            ORDER BY confidence_score DESC, updated_at DESC
+            LIMIT 5
+            """,
+            (pair_id, 0.55),
+        ).fetchall()
+        if not rows:
+            return
+
+        existing_segments = list(summary.get("alignment_segments", []))
+        confirmed_segments = [
+            self._convert(
+                MediaEditAlignmentSegment(
+                    id=f"alignment_{match.id}",
+                    kind=MediaEditAlignmentKind.CONFIRMED_KEEP,
+                    method=(
+                        MediaEditAlignmentMethod.DECODED_AUDIO_ALIGNMENT
+                        if match.method
+                        == MediaAlignmentMethod.DECODED_AUDIO_BUCKET_CORRELATION_V1
+                        else MediaEditAlignmentMethod.AUDIO_PROXY_ALIGNMENT
+                    ),
+                    source_range=match.source_range,
+                    edit_range=match.query_range,
+                    estimated_source_seconds=round(
+                        match.source_range.end_seconds - match.source_range.start_seconds,
+                        2,
+                    ),
+                    estimated_edit_seconds=round(
+                        match.query_range.end_seconds - match.query_range.start_seconds,
+                        2,
+                    ),
+                    confidence_score=match.confidence_score,
+                    note=(
+                        "Confirmed keep candidate from alignment job "
+                        f"{match.job_id}. {match.note}"
+                    ),
+                )
+            )
+            for match in [self._media_alignment_match_from_row(row) for row in rows]
+        ]
+        summary["alignment_segments"] = confirmed_segments + existing_segments
+
+    def _build_provisional_alignment_segments(
+        self,
+        source_duration_seconds: float,
+        edit_duration_seconds: float,
+        kept_duration_seconds: float,
+        removed_duration_seconds: float,
+    ) -> list[dict[str, Any]]:
+        return [
+            self._convert(
+                MediaEditAlignmentSegment(
+                    id="alignment_provisional_edit_keep",
+                    kind=MediaEditAlignmentKind.PROVISIONAL_KEEP,
+                    method=MediaEditAlignmentMethod.RUNTIME_PROPORTIONAL_ESTIMATE,
+                    edit_range=TimeRange(
+                        start_seconds=0.0,
+                        end_seconds=round(edit_duration_seconds, 2),
+                    ),
+                    estimated_edit_seconds=round(edit_duration_seconds, 2),
+                    estimated_source_seconds=round(kept_duration_seconds, 2),
+                    confidence_score=0.15,
+                    note=(
+                        "The finished edit is known kept material, but exact source timestamps are unresolved. "
+                        "This segment records the edit runtime as a provisional kept region."
+                    ),
+                )
+            ),
+            self._convert(
+                MediaEditAlignmentSegment(
+                    id="alignment_provisional_removed_pool",
+                    kind=MediaEditAlignmentKind.PROVISIONAL_REMOVED_POOL,
+                    method=MediaEditAlignmentMethod.RUNTIME_PROPORTIONAL_ESTIMATE,
+                    source_range=TimeRange(
+                        start_seconds=0.0,
+                        end_seconds=round(source_duration_seconds, 2),
+                    ),
+                    estimated_source_seconds=round(removed_duration_seconds, 2),
+                    estimated_edit_seconds=0.0,
+                    confidence_score=0.15,
+                    note=(
+                        "This is the estimated source material not represented by the final edit. "
+                        "It is a pool-level removed estimate, not timestamp-level rejection evidence yet."
+                    ),
+                )
+            ),
+        ]
 
     def _example_feature_summary_from_json(
         self,
@@ -863,6 +2570,63 @@ class SessionStore:
                 AnalysisCoverageFlag(flag)
                 for flag in payload.get("coverage_flags", [])
             ],
+        )
+
+    def _media_index_summary_from_json(
+        self,
+        summary_json: str | None,
+    ) -> MediaIndexSummary | None:
+        if not summary_json:
+            return None
+
+        try:
+            payload = json.loads(summary_json)
+        except json.JSONDecodeError:
+            return None
+
+        def get_value(snake_key: str, camel_key: str) -> Any:
+            return payload.get(snake_key, payload.get(camel_key))
+
+        return MediaIndexSummary(
+            method_version=str(get_value("method_version", "methodVersion")),
+            generated_at=str(get_value("generated_at", "generatedAt")),
+            source_path=str(get_value("source_path", "sourcePath")),
+            file_name=str(get_value("file_name", "fileName")),
+            file_size_bytes=int(get_value("file_size_bytes", "fileSizeBytes") or 0),
+            kind=str(payload["kind"]),
+            format=str(payload["format"]),
+            duration_seconds=float(
+                get_value("duration_seconds", "durationSeconds") or 0.0
+            ),
+            frame_rate=(
+                float(get_value("frame_rate", "frameRate"))
+                if get_value("frame_rate", "frameRate") is not None
+                else None
+            ),
+            width=(
+                int(payload["width"])
+                if payload.get("width") is not None
+                else None
+            ),
+            height=(
+                int(payload["height"])
+                if payload.get("height") is not None
+                else None
+            ),
+            video_codec=(
+                str(get_value("video_codec", "videoCodec"))
+                if get_value("video_codec", "videoCodec") is not None
+                else None
+            ),
+            audio_codec=(
+                str(get_value("audio_codec", "audioCodec"))
+                if get_value("audio_codec", "audioCodec") is not None
+                else None
+            ),
+            has_video=bool(get_value("has_video", "hasVideo")),
+            has_audio=bool(get_value("has_audio", "hasAudio")),
+            stream_count=int(get_value("stream_count", "streamCount") or 0),
+            notes=list(payload.get("notes", [])),
         )
 
     def _generate_profile_id(self, name: str) -> str:
@@ -1244,8 +3008,8 @@ class SessionStore:
 
     def _time_range_from_dict(self, value: dict[str, Any]) -> TimeRange:
         return TimeRange(
-            start_seconds=float(value["start_seconds"]),
-            end_seconds=float(value["end_seconds"]),
+            start_seconds=float(value.get("start_seconds", value.get("startSeconds"))),
+            end_seconds=float(value.get("end_seconds", value.get("endSeconds"))),
         )
 
     def _status_from_summary_json(self, summary_json: str | None) -> str:
@@ -1319,6 +3083,17 @@ class SessionStore:
 
         connection.execute(
             f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"
+        )
+
+    def _ensure_media_library_asset_columns(
+        self,
+        connection: sqlite3.Connection,
+    ) -> None:
+        self._ensure_column(
+            connection,
+            "media_library_assets",
+            "index_summary_json",
+            "TEXT",
         )
 
     def _to_json(self, value: Any) -> str:

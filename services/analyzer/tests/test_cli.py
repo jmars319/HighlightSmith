@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +9,7 @@ from pathlib import Path
 from highlightsmith_analyzer.contracts import (
     AnalysisCoverage,
     AnalysisCoverageBand,
+    MediaIndexSummary,
     Settings,
 )
 from highlightsmith_analyzer.mock_data import (
@@ -16,11 +19,18 @@ from highlightsmith_analyzer.mock_data import (
 )
 from highlightsmith_analyzer.pipeline.scoring import apply_review_post_filter
 from highlightsmith_analyzer.pipeline.orchestrator import analyze_media
+from highlightsmith_analyzer.pipeline.indexing import (
+    build_decoded_audio_fingerprint_artifact_from_pcm,
+)
 from highlightsmith_analyzer.service import (
     analyze_request,
     apply_review_update,
+    create_media_edit_pair_request,
+    create_media_library_asset_request,
+    run_media_alignment_job_inline,
     list_session_summaries_request,
     load_session_request,
+    run_media_index_job_inline,
 )
 from highlightsmith_analyzer.storage.session_store import SessionStore
 
@@ -87,6 +97,159 @@ class AnalyzerScaffoldTests(unittest.TestCase):
             )
             store = SessionStore(database_path)
             self.assertEqual(store.count_candidates(session.id), len(session.candidates))
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "mkfifo unavailable on this platform")
+    def test_real_file_request_rejects_non_regular_media_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            media_path = Path(temp_dir) / "blocked-input.mp4"
+            os.mkfifo(media_path)
+
+            with self.assertRaisesRegex(ValueError, "regular file"):
+                analyze_request(
+                    str(media_path),
+                    profile_id="generic",
+                    session_title="Blocked input",
+                    persist=False,
+                    database_path=str(Path(temp_dir) / "highlightsmith.sqlite3"),
+                )
+
+    def test_media_library_assets_and_vod_edit_pair_persist(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            clip_path = Path(temp_dir) / "global-clip.mp4"
+            vod_path = Path(temp_dir) / "session-vod.mp4"
+            edit_path = Path(temp_dir) / "session-edit.mp4"
+            clip_path.write_bytes(b"clip-fixture")
+            vod_path.write_bytes(b"vod-fixture" * 2048)
+            edit_path.write_bytes(b"edit-fixture" * 512)
+
+            clip_asset = create_media_library_asset_request(
+                asset_type="CLIP",
+                scope="GLOBAL",
+                source_type="LOCAL_FILE_PATH",
+                source_value=str(clip_path),
+                title="Global clip",
+                database_path=database_path,
+            )
+            vod_asset = create_media_library_asset_request(
+                asset_type="VOD",
+                scope="GLOBAL",
+                source_type="LOCAL_FILE_PATH",
+                source_value=str(vod_path),
+                title="Source VOD",
+                database_path=database_path,
+            )
+            edit_asset = create_media_library_asset_request(
+                asset_type="EDIT",
+                scope="GLOBAL",
+                source_type="LOCAL_FILE_PATH",
+                source_value=str(edit_path),
+                title="Edited cut",
+                database_path=database_path,
+            )
+            pair = create_media_edit_pair_request(
+                vod_asset.id,
+                edit_asset.id,
+                title="VOD + edit",
+                database_path=database_path,
+            )
+            self.assertEqual(pair.status.value, "INCOMPLETE")
+
+            store = SessionStore(database_path)
+            vod_index_job = store.create_media_index_job(vod_asset.id)
+            edit_index_job = store.create_media_index_job(edit_asset.id)
+            vod_index_result = run_media_index_job_inline(
+                vod_index_job.id,
+                database_path=database_path,
+            )
+            edit_index_result = run_media_index_job_inline(
+                edit_index_job.id,
+                database_path=database_path,
+            )
+            alignment_job = store.create_media_alignment_job(pair_id=pair.id)
+            alignment_result = run_media_alignment_job_inline(
+                alignment_job.id,
+                database_path=database_path,
+            )
+            assets = store.list_media_library_assets()
+            jobs = store.list_media_index_jobs()
+            artifacts = store.list_media_index_artifacts()
+            alignment_jobs = store.list_media_alignment_jobs()
+            alignment_matches = store.list_media_alignment_matches(pair.id)
+            pairs = store.list_media_edit_pairs()
+
+            self.assertEqual(len(assets), 3)
+            self.assertTrue(any(asset.id == clip_asset.id for asset in assets))
+            stored_vod_asset = next(asset for asset in assets if asset.id == vod_asset.id)
+            stored_edit_asset = next(asset for asset in assets if asset.id == edit_asset.id)
+            self.assertIsNotNone(stored_vod_asset.index_summary)
+            self.assertIsNotNone(stored_edit_asset.index_summary)
+            self.assertEqual(vod_index_result.status.value, "SUCCEEDED")
+            self.assertEqual(edit_index_result.status.value, "SUCCEEDED")
+            self.assertEqual(len(jobs), 2)
+            self.assertEqual(len(artifacts), 2)
+            self.assertEqual(alignment_result.status.value, "SUCCEEDED")
+            self.assertEqual(len(alignment_jobs), 1)
+            self.assertGreaterEqual(len(alignment_matches), 1)
+            self.assertEqual(alignment_matches[0].pair_id, pair.id)
+            self.assertEqual(alignment_matches[0].kind.value, "EDIT_TO_VOD_KEEP")
+            self.assertTrue(
+                all(
+                    artifact.kind.value == "AUDIO_FINGERPRINT"
+                    and artifact.bucket_count > 0
+                    and artifact.payload_byte_size > 0
+                    for artifact in artifacts
+                )
+            )
+            self.assertIsNotNone(stored_vod_asset.index_artifact_summary)
+            self.assertGreater(
+                stored_vod_asset.index_artifact_summary.audio_fingerprint_bucket_count,
+                0,
+            )
+            self.assertEqual(pairs[0].id, pair.id)
+            self.assertEqual(pairs[0].vod_asset_id, vod_asset.id)
+            self.assertEqual(pairs[0].edit_asset_id, edit_asset.id)
+            self.assertIn("runtime-based editorial summary", pairs[0].status_detail)
+            self.assertEqual(len(pairs[0].alignment_segments), 2)
+            self.assertEqual(pairs[0].alignment_segments[0].kind.value, "PROVISIONAL_KEEP")
+            self.assertEqual(
+                pairs[0].alignment_segments[1].kind.value,
+                "PROVISIONAL_REMOVED_POOL",
+            )
+
+    def test_decoded_audio_fingerprint_can_be_built_from_pcm(self) -> None:
+        pcm_samples = []
+        for sample_index in range(60_000):
+            amplitude = 8000 if sample_index < 30_000 else 16000
+            value = amplitude if sample_index % 24 < 12 else -amplitude
+            pcm_samples.append(value)
+        pcm_bytes = b"".join(struct.pack("<h", sample) for sample in pcm_samples)
+
+        artifact = build_decoded_audio_fingerprint_artifact_from_pcm(
+            asset_id="asset_audio_fixture",
+            job_id="index_job_audio_fixture",
+            index_summary=MediaIndexSummary(
+                method_version="MEDIA_INDEX_V1",
+                generated_at="2026-04-22T00:00:00.000Z",
+                source_path="/tmp/audio-fixture.wav",
+                file_name="audio-fixture.wav",
+                file_size_bytes=len(pcm_bytes),
+                kind="AUDIO",
+                format="wav",
+                duration_seconds=60.0,
+                has_video=False,
+                has_audio=True,
+                stream_count=1,
+            ),
+            pcm_bytes=pcm_bytes,
+        )
+
+        self.assertIsNotNone(artifact)
+        assert artifact is not None
+        self.assertEqual(artifact.method.value, "DECODED_AUDIO_FINGERPRINT_V1")
+        self.assertEqual(artifact.bucket_count, 2)
+        self.assertGreater(artifact.energy_peak, 0)
+        self.assertTrue(all(bucket.fingerprint for bucket in artifact.buckets))
 
     def test_partial_coverage_demotes_weaker_candidates_without_hiding_them(self) -> None:
         candidates = build_mock_candidates()

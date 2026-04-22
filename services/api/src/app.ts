@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { bridgeRoutes } from "./routes/bridge.js";
 import { healthRoutes } from "./routes/health.js";
+import { libraryRoutes } from "./routes/library.js";
 import { profileRoutes } from "./routes/profiles.js";
 import { projectRoutes } from "./routes/projects.js";
 
@@ -17,6 +18,7 @@ export async function buildApp() {
   await app.register(healthRoutes);
   await app.register(projectRoutes);
   await app.register(profileRoutes);
+  await app.register(libraryRoutes);
   await app.register(bridgeRoutes);
 
   app.get("/", async () => ({

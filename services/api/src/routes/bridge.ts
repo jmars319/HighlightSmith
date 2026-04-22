@@ -1,11 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
-import { getAnalyzerUrl } from "../lib/analyzer.js";
+import { requestAnalyzerHealth } from "../lib/analyzer.js";
 
 export const bridgeRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/api/bridge/analyzer", async () => {
     try {
-      const response = await fetch(`${getAnalyzerUrl()}/health`);
-      const payload = await response.json();
+      const payload = await requestAnalyzerHealth();
       return {
         analyzer: "reachable",
         payload,

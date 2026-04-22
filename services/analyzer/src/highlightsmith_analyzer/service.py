@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timezone
 
 from .contracts import ProjectSession, ReviewAction, ReviewDecision, Settings, TimeRange
+from .pipeline.alignment import build_audio_proxy_alignment_matches
+from .pipeline.indexing import build_media_index_artifacts, build_media_index_summary
 from .pipeline.orchestrator import analyze_media
 from .pipeline.profile_matching import build_profile_match
 from .storage.session_store import SessionStore
@@ -173,6 +176,261 @@ def add_profile_example_request(
         title=title,
         note=note,
     )
+
+
+def list_media_library_assets_request(
+    *,
+    database_path: str = DEFAULT_DATABASE_PATH,
+) -> list[object]:
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.list_media_library_assets()
+
+
+def create_media_library_asset_request(
+    *,
+    asset_type: str,
+    scope: str,
+    profile_id: str | None = None,
+    source_type: str,
+    source_value: str,
+    title: str | None = None,
+    note: str | None = None,
+    database_path: str = DEFAULT_DATABASE_PATH,
+):
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.create_media_library_asset(
+        asset_type=asset_type,
+        scope=scope,
+        profile_id=profile_id,
+        source_type=source_type,
+        source_value=source_value,
+        title=title,
+        note=note,
+    )
+
+
+def list_media_edit_pairs_request(
+    *,
+    database_path: str = DEFAULT_DATABASE_PATH,
+) -> list[object]:
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.list_media_edit_pairs()
+
+
+def create_media_edit_pair_request(
+    vod_asset_id: str,
+    edit_asset_id: str,
+    *,
+    profile_id: str | None = None,
+    title: str | None = None,
+    note: str | None = None,
+    database_path: str = DEFAULT_DATABASE_PATH,
+):
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.create_media_edit_pair(
+        vod_asset_id,
+        edit_asset_id,
+        profile_id=profile_id,
+        title=title,
+        note=note,
+    )
+
+
+def list_media_index_jobs_request(
+    *,
+    database_path: str = DEFAULT_DATABASE_PATH,
+) -> list[object]:
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.list_media_index_jobs()
+
+
+def list_media_index_artifacts_request(
+    *,
+    asset_id: str | None = None,
+    database_path: str = DEFAULT_DATABASE_PATH,
+) -> list[object]:
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.list_media_index_artifacts(asset_id)
+
+
+def create_media_index_job_request(
+    asset_id: str,
+    *,
+    database_path: str = DEFAULT_DATABASE_PATH,
+):
+    store = SessionStore(database_path)
+    store.initialize()
+    job = store.create_media_index_job(asset_id)
+    if job.status.value == "QUEUED":
+        worker = threading.Thread(
+            target=_run_media_index_job,
+            args=(job.id, database_path),
+            daemon=True,
+        )
+        worker.start()
+    return job
+
+
+def cancel_media_index_job_request(
+    job_id: str,
+    *,
+    database_path: str = DEFAULT_DATABASE_PATH,
+):
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.cancel_media_index_job(job_id)
+
+
+def run_media_index_job_inline(
+    job_id: str,
+    *,
+    database_path: str = DEFAULT_DATABASE_PATH,
+):
+    return _run_media_index_job(job_id, database_path)
+
+
+def _run_media_index_job(job_id: str, database_path: str):
+    store = SessionStore(database_path)
+    store.initialize()
+    try:
+        job = store.claim_media_index_job(job_id)
+        if job is None:
+            return store.list_media_index_jobs()
+
+        assets_by_id = {asset.id: asset for asset in store.list_media_library_assets()}
+        asset = assets_by_id.get(job.asset_id)
+        if asset is None:
+            raise KeyError(f"Media library asset not found: {job.asset_id}")
+
+        store.update_media_index_job_progress(
+            job_id,
+            progress=0.35,
+            status_detail="Validated local media path. Running bounded metadata probe.",
+        )
+        result = build_media_index_summary(asset.source_value)
+        if store.media_index_job_is_cancelled(job_id):
+            return store.cancel_media_index_job(job_id)
+
+        store.update_media_index_job_progress(
+            job_id,
+            progress=0.7,
+            status_detail="Metadata ready. Building bounded time-bucketed signal artifacts.",
+        )
+        artifacts = build_media_index_artifacts(
+            asset_id=asset.id,
+            job_id=job_id,
+            index_summary=result,
+        )
+        for artifact in artifacts:
+            store.save_media_index_artifact(artifact)
+        if store.media_index_job_is_cancelled(job_id):
+            return store.cancel_media_index_job(job_id)
+
+        return store.complete_media_index_job(job_id, result)
+    except Exception as error:  # pragma: no cover - defensive background guard
+        return store.fail_media_index_job(job_id, str(error))
+
+
+def list_media_alignment_jobs_request(
+    *,
+    database_path: str = DEFAULT_DATABASE_PATH,
+) -> list[object]:
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.list_media_alignment_jobs()
+
+
+def list_media_alignment_matches_request(
+    *,
+    pair_id: str | None = None,
+    database_path: str = DEFAULT_DATABASE_PATH,
+) -> list[object]:
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.list_media_alignment_matches(pair_id)
+
+
+def create_media_alignment_job_request(
+    *,
+    pair_id: str | None = None,
+    source_asset_id: str | None = None,
+    query_asset_id: str | None = None,
+    database_path: str = DEFAULT_DATABASE_PATH,
+):
+    store = SessionStore(database_path)
+    store.initialize()
+    job = store.create_media_alignment_job(
+        pair_id=pair_id,
+        source_asset_id=source_asset_id,
+        query_asset_id=query_asset_id,
+    )
+    if job.status.value == "QUEUED":
+        worker = threading.Thread(
+            target=_run_media_alignment_job,
+            args=(job.id, database_path),
+            daemon=True,
+        )
+        worker.start()
+    return job
+
+
+def cancel_media_alignment_job_request(
+    job_id: str,
+    *,
+    database_path: str = DEFAULT_DATABASE_PATH,
+):
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.cancel_media_alignment_job(job_id)
+
+
+def run_media_alignment_job_inline(
+    job_id: str,
+    *,
+    database_path: str = DEFAULT_DATABASE_PATH,
+):
+    return _run_media_alignment_job(job_id, database_path)
+
+
+def _run_media_alignment_job(job_id: str, database_path: str):
+    store = SessionStore(database_path)
+    store.initialize()
+    try:
+        job = store.claim_media_alignment_job(job_id)
+        if job is None:
+            return store.list_media_alignment_jobs()
+
+        source_artifact = store.load_latest_audio_fingerprint_artifact(
+            job.source_asset_id,
+        )
+        query_artifact = store.load_latest_audio_fingerprint_artifact(
+            job.query_asset_id,
+        )
+        store.update_media_alignment_job_progress(
+            job_id,
+            progress=0.55,
+            status_detail="Comparing query audio proxy buckets against source buckets.",
+        )
+        matches = build_audio_proxy_alignment_matches(
+            job_id=job.id,
+            source_asset_id=job.source_asset_id,
+            query_asset_id=job.query_asset_id,
+            source_artifact=source_artifact,
+            query_artifact=query_artifact,
+            pair_id=job.pair_id,
+        )
+        store.save_media_alignment_matches(job_id, matches)
+        if store.media_alignment_job_is_cancelled(job_id):
+            return store.cancel_media_alignment_job(job_id)
+        return store.complete_media_alignment_job(job_id, len(matches))
+    except Exception as error:  # pragma: no cover - defensive background guard
+        return store.fail_media_alignment_job(job_id, str(error))
 
 
 def _apply_profile_matches(

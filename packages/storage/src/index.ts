@@ -3,7 +3,7 @@ import type {
   ReviewDecision,
 } from "@highlightsmith/shared-types";
 
-export const sqliteSchemaVersion = 2;
+export const sqliteSchemaVersion = 6;
 
 export const sqliteTables = [
   "project_sessions",
@@ -12,6 +12,12 @@ export const sqliteTables = [
   "analysis_artifacts",
   "clip_profiles",
   "example_clips",
+  "media_library_assets",
+  "media_index_jobs",
+  "media_index_artifacts",
+  "media_alignment_jobs",
+  "media_alignment_matches",
+  "media_edit_pairs",
 ] as const;
 
 export const initialMigrationSql = `
@@ -84,6 +90,116 @@ CREATE TABLE IF NOT EXISTS example_clips (
   updated_at TEXT NOT NULL,
   FOREIGN KEY (profile_id) REFERENCES clip_profiles(id)
 );
+
+CREATE TABLE IF NOT EXISTS media_library_assets (
+  id TEXT PRIMARY KEY,
+  asset_type TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  profile_id TEXT,
+  source_type TEXT NOT NULL,
+  source_value TEXT NOT NULL,
+  title TEXT,
+  note TEXT,
+  status TEXT NOT NULL,
+  status_detail TEXT,
+  summary_json TEXT,
+  index_summary_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES clip_profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_index_jobs (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  progress REAL NOT NULL,
+  status_detail TEXT NOT NULL,
+  error_message TEXT,
+  result_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  cancelled_at TEXT,
+  FOREIGN KEY (asset_id) REFERENCES media_library_assets(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_index_artifacts (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  job_id TEXT,
+  kind TEXT NOT NULL,
+  method TEXT NOT NULL,
+  summary_json TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (job_id) REFERENCES media_index_jobs(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_alignment_jobs (
+  id TEXT PRIMARY KEY,
+  pair_id TEXT,
+  source_asset_id TEXT NOT NULL,
+  query_asset_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  progress REAL NOT NULL,
+  status_detail TEXT NOT NULL,
+  error_message TEXT,
+  method TEXT NOT NULL,
+  match_count INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  cancelled_at TEXT,
+  FOREIGN KEY (pair_id) REFERENCES media_edit_pairs(id),
+  FOREIGN KEY (source_asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (query_asset_id) REFERENCES media_library_assets(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_alignment_matches (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL,
+  pair_id TEXT,
+  source_asset_id TEXT NOT NULL,
+  query_asset_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  method TEXT NOT NULL,
+  source_range_json TEXT NOT NULL,
+  query_range_json TEXT NOT NULL,
+  score REAL NOT NULL,
+  confidence_score REAL NOT NULL,
+  matched_bucket_count INTEGER NOT NULL,
+  total_query_bucket_count INTEGER NOT NULL,
+  bucket_matches_json TEXT NOT NULL,
+  note TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (job_id) REFERENCES media_alignment_jobs(id),
+  FOREIGN KEY (pair_id) REFERENCES media_edit_pairs(id),
+  FOREIGN KEY (source_asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (query_asset_id) REFERENCES media_library_assets(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_edit_pairs (
+  id TEXT PRIMARY KEY,
+  vod_asset_id TEXT NOT NULL,
+  edit_asset_id TEXT NOT NULL,
+  profile_id TEXT,
+  title TEXT,
+  note TEXT,
+  status TEXT NOT NULL,
+  status_detail TEXT NOT NULL,
+  summary_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (vod_asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (edit_asset_id) REFERENCES media_library_assets(id),
+  FOREIGN KEY (profile_id) REFERENCES clip_profiles(id)
+);
 `;
 
 export interface SessionStorageAdapter {
@@ -145,4 +261,5 @@ export const migrationPlaceholders = [
   "002_review_feedback_indexes.sql",
   "003_profile_preferences.sql",
   "004_clip_profiles.sql",
+  "005_media_library_assets.sql",
 ] as const;

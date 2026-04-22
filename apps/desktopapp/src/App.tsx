@@ -34,17 +34,39 @@ import { defaultProfileId } from "@highlightsmith/profiles";
 import {
   addExampleClipRequestSchema,
   analyzeProjectRequestSchema,
+  cancelMediaAlignmentJobRequestSchema,
+  cancelMediaIndexJobRequestSchema,
   clipProfileSchema,
+  createMediaAlignmentJobRequestSchema,
+  createMediaEditPairRequestSchema,
+  createMediaIndexJobRequestSchema,
+  createMediaLibraryAssetRequestSchema,
   createClipProfileRequestSchema,
   exampleClipSchema,
+  mediaAlignmentJobSchema,
+  mediaAlignmentMatchSchema,
+  mediaEditPairSchema,
+  mediaIndexJobSchema,
+  mediaLibraryAssetSchema,
   projectSessionSchema,
   projectSessionSummarySchema,
   type AddExampleClipRequest,
   type AnalyzeProjectRequest,
+  type CancelMediaAlignmentJobRequest,
+  type CancelMediaIndexJobRequest,
   type ClipProfile,
   type ConfidenceBand,
+  type CreateMediaAlignmentJobRequest,
+  type CreateMediaEditPairRequest,
+  type CreateMediaIndexJobRequest,
+  type CreateMediaLibraryAssetRequest,
   type CreateClipProfileRequest,
   type ExampleClip,
+  type MediaAlignmentJob,
+  type MediaAlignmentMatch,
+  type MediaEditPair,
+  type MediaIndexJob,
+  type MediaLibraryAsset,
   type ProfilePresentationMode,
   type ProjectSession,
   type ProjectSessionSummary,
@@ -63,6 +85,10 @@ import {
   resolveSessionResumeState,
   saveSessionResumeState,
 } from "./lib/resumeState";
+import {
+  fetchWithLocalApiMessage,
+  localApiTimeouts,
+} from "./lib/localApi";
 
 type FilterValue = ConfidenceBand | "ALL";
 type DesktopPage =
@@ -131,6 +157,34 @@ export default function App() {
     useState(false);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [isAddingProfileExample, setIsAddingProfileExample] = useState(false);
+  const [mediaLibraryAssets, setMediaLibraryAssets] = useState<
+    MediaLibraryAsset[]
+  >([]);
+  const [mediaEditPairs, setMediaEditPairs] = useState<MediaEditPair[]>([]);
+  const [mediaIndexJobs, setMediaIndexJobs] = useState<MediaIndexJob[]>([]);
+  const [mediaAlignmentJobs, setMediaAlignmentJobs] = useState<
+    MediaAlignmentJob[]
+  >([]);
+  const [mediaAlignmentMatches, setMediaAlignmentMatches] = useState<
+    MediaAlignmentMatch[]
+  >([]);
+  const [isLoadingMediaLibraryAssets, setIsLoadingMediaLibraryAssets] =
+    useState(false);
+  const [isLoadingMediaEditPairs, setIsLoadingMediaEditPairs] = useState(false);
+  const [isLoadingMediaIndexJobs, setIsLoadingMediaIndexJobs] = useState(false);
+  const [isLoadingMediaAlignmentJobs, setIsLoadingMediaAlignmentJobs] =
+    useState(false);
+  const [isCreatingMediaLibraryAsset, setIsCreatingMediaLibraryAsset] =
+    useState(false);
+  const [isCreatingMediaEditPair, setIsCreatingMediaEditPair] = useState(false);
+  const [isCreatingMediaIndexJob, setIsCreatingMediaIndexJob] = useState(false);
+  const [isCreatingMediaAlignmentJob, setIsCreatingMediaAlignmentJob] =
+    useState(false);
+  const [cancellingMediaIndexJobIds, setCancellingMediaIndexJobIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [cancellingMediaAlignmentJobIds, setCancellingMediaAlignmentJobIds] =
+    useState<Record<string, boolean>>({});
   const [profileLibraryError, setProfileLibraryError] = useState<string | null>(
     null,
   );
@@ -407,6 +461,234 @@ export default function App() {
   }, [apiBaseUrl]);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMediaLibraryAssets() {
+      setIsLoadingMediaLibraryAssets(true);
+      try {
+        const nextAssets = await fetchMediaLibraryAssets(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setMediaLibraryAssets(nextAssets);
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load media library assets: ${error.message}`
+            : "Unable to load media library assets",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingMediaLibraryAssets(false);
+        }
+      }
+    }
+
+    void loadMediaLibraryAssets();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMediaEditPairs() {
+      setIsLoadingMediaEditPairs(true);
+      try {
+        const nextPairs = await fetchMediaEditPairs(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setMediaEditPairs(nextPairs);
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load VOD/edit pairs: ${error.message}`
+            : "Unable to load VOD/edit pairs",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingMediaEditPairs(false);
+        }
+      }
+    }
+
+    void loadMediaEditPairs();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMediaIndexJobs() {
+      setIsLoadingMediaIndexJobs(true);
+      try {
+        const nextJobs = await fetchMediaIndexJobs(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setMediaIndexJobs(nextJobs);
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load media index jobs: ${error.message}`
+            : "Unable to load media index jobs",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingMediaIndexJobs(false);
+        }
+      }
+    }
+
+    void loadMediaIndexJobs();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    const hasActiveIndexJobs = mediaIndexJobs.some(
+      (job) => job.status === "QUEUED" || job.status === "RUNNING",
+    );
+    if (!hasActiveIndexJobs) {
+      return;
+    }
+
+    let isCancelled = false;
+    const intervalId = window.setInterval(() => {
+      async function refreshIndexState() {
+        try {
+          const [nextJobs, nextAssets, nextPairs] = await Promise.all([
+            fetchMediaIndexJobs(apiBaseUrl),
+            fetchMediaLibraryAssets(apiBaseUrl),
+            fetchMediaEditPairs(apiBaseUrl),
+          ]);
+          if (isCancelled) {
+            return;
+          }
+
+          setMediaIndexJobs(nextJobs);
+          setMediaLibraryAssets(nextAssets);
+          setMediaEditPairs(nextPairs);
+        } catch {
+          // Keep the current UI state; the explicit refresh/load effects surface errors.
+        }
+      }
+
+      void refreshIndexState();
+    }, 2000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [apiBaseUrl, mediaIndexJobs]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMediaAlignmentState() {
+      setIsLoadingMediaAlignmentJobs(true);
+      try {
+        const [nextJobs, nextMatches] = await Promise.all([
+          fetchMediaAlignmentJobs(apiBaseUrl),
+          fetchMediaAlignmentMatches(apiBaseUrl),
+        ]);
+        if (isCancelled) {
+          return;
+        }
+
+        setMediaAlignmentJobs(nextJobs);
+        setMediaAlignmentMatches(nextMatches);
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load media alignment state: ${error.message}`
+            : "Unable to load media alignment state",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingMediaAlignmentJobs(false);
+        }
+      }
+    }
+
+    void loadMediaAlignmentState();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    const hasActiveAlignmentJobs = mediaAlignmentJobs.some(
+      (job) => job.status === "QUEUED" || job.status === "RUNNING",
+    );
+    if (!hasActiveAlignmentJobs) {
+      return;
+    }
+
+    let isCancelled = false;
+    const intervalId = window.setInterval(() => {
+      async function refreshAlignmentState() {
+        try {
+          const [nextJobs, nextMatches, nextPairs] = await Promise.all([
+            fetchMediaAlignmentJobs(apiBaseUrl),
+            fetchMediaAlignmentMatches(apiBaseUrl),
+            fetchMediaEditPairs(apiBaseUrl),
+          ]);
+          if (isCancelled) {
+            return;
+          }
+
+          setMediaAlignmentJobs(nextJobs);
+          setMediaAlignmentMatches(nextMatches);
+          setMediaEditPairs(nextPairs);
+        } catch {
+          // Keep current state; explicit load effects surface persistent failures.
+        }
+      }
+
+      void refreshAlignmentState();
+    }, 2000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [apiBaseUrl, mediaAlignmentJobs]);
+
+  useEffect(() => {
     if (!selectedProfileId) {
       setSelectedProfileExamples([]);
       return;
@@ -653,6 +935,150 @@ export default function App() {
     }
   }
 
+  async function handleCreateMediaLibraryAsset(
+    input: CreateMediaLibraryAssetRequest,
+  ) {
+    const request = createMediaLibraryAssetRequestSchema.parse(input);
+    setIsCreatingMediaLibraryAsset(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdAsset = await createMediaLibraryAssetEntry(apiBaseUrl, request);
+      setMediaLibraryAssets((current) =>
+        upsertMediaLibraryAsset(current, createdAsset),
+      );
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected media library save failure while contacting the local API",
+      );
+      throw error;
+    } finally {
+      setIsCreatingMediaLibraryAsset(false);
+    }
+  }
+
+  async function handleCreateMediaEditPair(input: CreateMediaEditPairRequest) {
+    const request = createMediaEditPairRequestSchema.parse(input);
+    setIsCreatingMediaEditPair(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdPair = await createMediaEditPairEntry(apiBaseUrl, request);
+      setMediaEditPairs((current) => upsertMediaEditPair(current, createdPair));
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected VOD/edit pair save failure while contacting the local API",
+      );
+      throw error;
+    } finally {
+      setIsCreatingMediaEditPair(false);
+    }
+  }
+
+  async function handleCreateMediaIndexJob(input: CreateMediaIndexJobRequest) {
+    const request = createMediaIndexJobRequestSchema.parse(input);
+    setIsCreatingMediaIndexJob(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdJob = await createMediaIndexJobEntry(apiBaseUrl, request);
+      setMediaIndexJobs((current) => upsertMediaIndexJob(current, createdJob));
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected media index job failure while contacting the local API",
+      );
+      throw error;
+    } finally {
+      setIsCreatingMediaIndexJob(false);
+    }
+  }
+
+  async function handleCancelMediaIndexJob(input: CancelMediaIndexJobRequest) {
+    const request = cancelMediaIndexJobRequestSchema.parse(input);
+    setCancellingMediaIndexJobIds((current) => ({
+      ...current,
+      [request.jobId]: true,
+    }));
+    setProfileLibraryError(null);
+
+    try {
+      const cancelledJob = await cancelMediaIndexJobEntry(apiBaseUrl, request);
+      setMediaIndexJobs((current) => upsertMediaIndexJob(current, cancelledJob));
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected media index cancellation failure while contacting the local API",
+      );
+      throw error;
+    } finally {
+      setCancellingMediaIndexJobIds((current) => {
+        const { [request.jobId]: _removed, ...nextState } = current;
+        return nextState;
+      });
+    }
+  }
+
+  async function handleCreateMediaAlignmentJob(
+    input: CreateMediaAlignmentJobRequest,
+  ) {
+    const request = createMediaAlignmentJobRequestSchema.parse(input);
+    setIsCreatingMediaAlignmentJob(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdJob = await createMediaAlignmentJobEntry(apiBaseUrl, request);
+      setMediaAlignmentJobs((current) =>
+        upsertMediaAlignmentJob(current, createdJob),
+      );
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected media alignment job failure while contacting the local API",
+      );
+      throw error;
+    } finally {
+      setIsCreatingMediaAlignmentJob(false);
+    }
+  }
+
+  async function handleCancelMediaAlignmentJob(
+    input: CancelMediaAlignmentJobRequest,
+  ) {
+    const request = cancelMediaAlignmentJobRequestSchema.parse(input);
+    setCancellingMediaAlignmentJobIds((current) => ({
+      ...current,
+      [request.jobId]: true,
+    }));
+    setProfileLibraryError(null);
+
+    try {
+      const cancelledJob = await cancelMediaAlignmentJobEntry(apiBaseUrl, request);
+      setMediaAlignmentJobs((current) =>
+        upsertMediaAlignmentJob(current, cancelledJob),
+      );
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected media alignment cancellation failure while contacting the local API",
+      );
+      throw error;
+    } finally {
+      setCancellingMediaAlignmentJobIds((current) => {
+        const { [request.jobId]: _removed, ...nextState } = current;
+        return nextState;
+      });
+    }
+  }
+
   function handleSearchChange(nextValue: string) {
     startTransition(() => {
       setSearchValue(nextValue);
@@ -858,6 +1284,7 @@ export default function App() {
           body: JSON.stringify(request),
         },
         "Unable to start local analysis.",
+        localApiTimeouts.analysis,
       );
 
       const payload = (await response.json().catch(() => null)) as
@@ -1411,14 +1838,35 @@ export default function App() {
     if (activePage === "profiles") {
       return (
         <ProfileWorkspace
+          libraryAssets={mediaLibraryAssets}
+          mediaIndexJobs={mediaIndexJobs}
+          mediaAlignmentJobs={mediaAlignmentJobs}
+          mediaAlignmentMatches={mediaAlignmentMatches}
+          mediaEditPairs={mediaEditPairs}
+          cancellingMediaIndexJobIds={cancellingMediaIndexJobIds}
+          cancellingMediaAlignmentJobIds={cancellingMediaAlignmentJobIds}
           error={profileLibraryError}
           examples={selectedProfileExamples}
           isAddingExample={isAddingProfileExample}
           isCreatingProfile={isCreatingProfile}
+          isCreatingMediaAsset={isCreatingMediaLibraryAsset}
+          isCreatingMediaIndexJob={isCreatingMediaIndexJob}
+          isCreatingMediaAlignmentJob={isCreatingMediaAlignmentJob}
+          isCreatingMediaPair={isCreatingMediaEditPair}
           isLoadingExamples={isLoadingProfileExamples}
+          isLoadingMediaIndexJobs={isLoadingMediaIndexJobs}
+          isLoadingMediaAlignmentJobs={isLoadingMediaAlignmentJobs}
+          isLoadingLibraryAssets={isLoadingMediaLibraryAssets}
+          isLoadingMediaPairs={isLoadingMediaEditPairs}
           isLoadingProfiles={isLoadingProfiles}
           onAddExample={handleAddProfileExample}
+          onCancelMediaAlignmentJob={handleCancelMediaAlignmentJob}
+          onCancelMediaIndexJob={handleCancelMediaIndexJob}
           onCreateProfile={handleCreateProfile}
+          onCreateMediaAsset={handleCreateMediaLibraryAsset}
+          onCreateMediaAlignmentJob={handleCreateMediaAlignmentJob}
+          onCreateMediaIndexJob={handleCreateMediaIndexJob}
+          onCreateMediaPair={handleCreateMediaEditPair}
           onSelectProfile={setSelectedProfileId}
           profiles={availableProfiles}
           selectedProfile={selectedProfile}
@@ -1829,6 +2277,348 @@ async function createProfileExample(
   return exampleClipSchema.parse(payload);
 }
 
+async function fetchMediaLibraryAssets(
+  apiBaseUrl: string,
+): Promise<MediaLibraryAsset[]> {
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/assets`,
+    apiBaseUrl,
+    undefined,
+    "Unable to load media library assets.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaLibraryAsset[]
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Media library asset list load failed",
+    );
+  }
+
+  return mediaLibraryAssetSchema.array().parse(payload);
+}
+
+async function createMediaLibraryAssetEntry(
+  apiBaseUrl: string,
+  input: CreateMediaLibraryAssetRequest,
+): Promise<MediaLibraryAsset> {
+  const request = createMediaLibraryAssetRequestSchema.parse(input);
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/assets`,
+    apiBaseUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    "Unable to save media library asset.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaLibraryAsset
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Media library asset create failed",
+    );
+  }
+
+  return mediaLibraryAssetSchema.parse(payload);
+}
+
+async function fetchMediaEditPairs(apiBaseUrl: string): Promise<MediaEditPair[]> {
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/pairs`,
+    apiBaseUrl,
+    undefined,
+    "Unable to load VOD/edit pairs.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaEditPair[]
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "VOD/edit pair list load failed",
+    );
+  }
+
+  return mediaEditPairSchema.array().parse(payload);
+}
+
+async function createMediaEditPairEntry(
+  apiBaseUrl: string,
+  input: CreateMediaEditPairRequest,
+): Promise<MediaEditPair> {
+  const request = createMediaEditPairRequestSchema.parse(input);
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/pairs`,
+    apiBaseUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    "Unable to save VOD/edit pair.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaEditPair
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "VOD/edit pair create failed",
+    );
+  }
+
+  return mediaEditPairSchema.parse(payload);
+}
+
+async function fetchMediaIndexJobs(
+  apiBaseUrl: string,
+): Promise<MediaIndexJob[]> {
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/index-jobs`,
+    apiBaseUrl,
+    undefined,
+    "Unable to load media index jobs.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaIndexJob[]
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Media index job list load failed",
+    );
+  }
+
+  return mediaIndexJobSchema.array().parse(payload);
+}
+
+async function createMediaIndexJobEntry(
+  apiBaseUrl: string,
+  input: CreateMediaIndexJobRequest,
+): Promise<MediaIndexJob> {
+  const request = createMediaIndexJobRequestSchema.parse(input);
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/assets/${encodeURIComponent(request.assetId)}/index-jobs`,
+    apiBaseUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+    },
+    "Unable to start media index job.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaIndexJob
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Media index job create failed",
+    );
+  }
+
+  return mediaIndexJobSchema.parse(payload);
+}
+
+async function cancelMediaIndexJobEntry(
+  apiBaseUrl: string,
+  input: CancelMediaIndexJobRequest,
+): Promise<MediaIndexJob> {
+  const request = cancelMediaIndexJobRequestSchema.parse(input);
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/index-jobs/${encodeURIComponent(request.jobId)}/cancel`,
+    apiBaseUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+    },
+    "Unable to cancel media index job.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaIndexJob
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Media index job cancel failed",
+    );
+  }
+
+  return mediaIndexJobSchema.parse(payload);
+}
+
+async function fetchMediaAlignmentJobs(
+  apiBaseUrl: string,
+): Promise<MediaAlignmentJob[]> {
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/alignment-jobs`,
+    apiBaseUrl,
+    undefined,
+    "Unable to load media alignment jobs.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaAlignmentJob[]
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Media alignment job list load failed",
+    );
+  }
+
+  return mediaAlignmentJobSchema.array().parse(payload);
+}
+
+async function fetchMediaAlignmentMatches(
+  apiBaseUrl: string,
+): Promise<MediaAlignmentMatch[]> {
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/alignment-matches`,
+    apiBaseUrl,
+    undefined,
+    "Unable to load media alignment matches.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaAlignmentMatch[]
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Media alignment match list load failed",
+    );
+  }
+
+  return mediaAlignmentMatchSchema.array().parse(payload);
+}
+
+async function createMediaAlignmentJobEntry(
+  apiBaseUrl: string,
+  input: CreateMediaAlignmentJobRequest,
+): Promise<MediaAlignmentJob> {
+  const request = createMediaAlignmentJobRequestSchema.parse(input);
+  const response = await fetchWithLocalApiMessage(
+    request.pairId
+      ? `${apiBaseUrl}/api/library/pairs/${encodeURIComponent(request.pairId)}/alignment-jobs`
+      : `${apiBaseUrl}/api/library/alignment-jobs`,
+    apiBaseUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    "Unable to start media alignment job.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaAlignmentJob
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Media alignment job create failed",
+    );
+  }
+
+  return mediaAlignmentJobSchema.parse(payload);
+}
+
+async function cancelMediaAlignmentJobEntry(
+  apiBaseUrl: string,
+  input: CancelMediaAlignmentJobRequest,
+): Promise<MediaAlignmentJob> {
+  const request = cancelMediaAlignmentJobRequestSchema.parse(input);
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/alignment-jobs/${encodeURIComponent(request.jobId)}/cancel`,
+    apiBaseUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+    },
+    "Unable to cancel media alignment job.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaAlignmentJob
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Media alignment job cancel failed",
+    );
+  }
+
+  return mediaAlignmentJobSchema.parse(payload);
+}
+
 async function fetchProjectSession(
   apiBaseUrl: string,
   sessionId: string,
@@ -1915,19 +2705,60 @@ function upsertProfile(
   });
 }
 
-async function fetchWithLocalApiMessage(
-  input: string,
-  apiBaseUrl: string,
-  init: RequestInit | undefined,
-  failurePrefix: string,
-): Promise<Response> {
-  try {
-    return await fetch(input, init);
-  } catch {
-    throw new Error(
-      `${failurePrefix} Unable to reach the local API at ${apiBaseUrl}. Start the API bridge and analyzer, then try again.`,
-    );
-  }
+function upsertMediaLibraryAsset(
+  current: MediaLibraryAsset[],
+  nextAsset: MediaLibraryAsset,
+): MediaLibraryAsset[] {
+  const merged = [
+    nextAsset,
+    ...current.filter((asset) => asset.id !== nextAsset.id),
+  ];
+
+  return merged.sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
+}
+
+function upsertMediaEditPair(
+  current: MediaEditPair[],
+  nextPair: MediaEditPair,
+): MediaEditPair[] {
+  const merged = [
+    nextPair,
+    ...current.filter((pair) => pair.id !== nextPair.id),
+  ];
+
+  return merged.sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
+}
+
+function upsertMediaIndexJob(
+  current: MediaIndexJob[],
+  nextJob: MediaIndexJob,
+): MediaIndexJob[] {
+  const merged = [
+    nextJob,
+    ...current.filter((job) => job.id !== nextJob.id),
+  ];
+
+  return merged.sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
+}
+
+function upsertMediaAlignmentJob(
+  current: MediaAlignmentJob[],
+  nextJob: MediaAlignmentJob,
+): MediaAlignmentJob[] {
+  const merged = [
+    nextJob,
+    ...current.filter((job) => job.id !== nextJob.id),
+  ];
+
+  return merged.sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
 }
 
 function formatSessionReviewState(

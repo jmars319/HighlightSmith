@@ -15,7 +15,19 @@ from .service import (
     add_profile_example_request,
     analyze_request,
     apply_review_update,
+    cancel_media_alignment_job_request,
+    create_media_edit_pair_request,
+    create_media_alignment_job_request,
+    create_media_library_asset_request,
     create_profile_request,
+    cancel_media_index_job_request,
+    create_media_index_job_request,
+    list_media_edit_pairs_request,
+    list_media_alignment_jobs_request,
+    list_media_alignment_matches_request,
+    list_media_index_artifacts_request,
+    list_media_index_jobs_request,
+    list_media_library_assets_request,
     list_profile_examples_request,
     list_profiles_request,
     list_session_summaries_request,
@@ -96,6 +108,136 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
                 {
                     "status": "listed",
                     "profiles": _convert(profiles),
+                },
+            )
+            return
+
+        if request_path == "/library/assets":
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            assets = list_media_library_assets_request(database_path=database_path)
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "assets": _convert(assets),
+                },
+            )
+            return
+
+        if request_path == "/library/pairs":
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            pairs = list_media_edit_pairs_request(database_path=database_path)
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "pairs": _convert(pairs),
+                },
+            )
+            return
+
+        if request_path == "/library/index-jobs":
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            jobs = list_media_index_jobs_request(database_path=database_path)
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "jobs": _convert(jobs),
+                },
+            )
+            return
+
+        if request_path == "/library/index-artifacts":
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            artifacts = list_media_index_artifacts_request(database_path=database_path)
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "artifacts": _convert(artifacts),
+                },
+            )
+            return
+
+        if request_path == "/library/alignment-jobs":
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            jobs = list_media_alignment_jobs_request(database_path=database_path)
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "jobs": _convert(jobs),
+                },
+            )
+            return
+
+        if request_path == "/library/alignment-matches":
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            matches = list_media_alignment_matches_request(database_path=database_path)
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "matches": _convert(matches),
+                },
+            )
+            return
+
+        if request_path.startswith("/library/pairs/") and request_path.endswith("/alignment-matches"):
+            pair_id = self._pair_id_from_alignment_matches_path(request_path)
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            matches = list_media_alignment_matches_request(
+                pair_id=pair_id,
+                database_path=database_path,
+            )
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "matches": _convert(matches),
+                },
+            )
+            return
+
+        if request_path.startswith("/library/assets/") and request_path.endswith("/index-artifacts"):
+            asset_id = self._asset_id_from_index_artifacts_path(request_path)
+            if not asset_id:
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_request",
+                        "message": "assetId is required",
+                    },
+                )
+                return
+
+            database_path = str(
+                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+            )
+            artifacts = list_media_index_artifacts_request(
+                asset_id=asset_id,
+                database_path=database_path,
+            )
+            self._send_json(
+                200,
+                {
+                    "status": "listed",
+                    "artifacts": _convert(artifacts),
                 },
             )
             return
@@ -358,6 +500,305 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if request_path == "/library/assets":
+            payload = self._read_json_body()
+            try:
+                asset = create_media_library_asset_request(
+                    asset_type=str(payload.get("assetType", "")).strip(),
+                    scope=str(payload.get("scope", "")).strip(),
+                    profile_id=(
+                        str(payload.get("profileId", "")).strip()
+                        if payload.get("profileId") is not None
+                        else None
+                    ),
+                    source_type=str(payload.get("sourceType", "")).strip(),
+                    source_value=str(payload.get("sourceValue", "")).strip(),
+                    title=(
+                        str(payload.get("title", "")).strip()
+                        if payload.get("title") is not None
+                        else None
+                    ),
+                    note=(
+                        str(payload.get("note", "")).strip()
+                        if payload.get("note") is not None
+                        else None
+                    ),
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+            except ValueError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": "asset_create_failed",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "created",
+                    "asset": _convert(asset),
+                },
+            )
+            return
+
+        if request_path == "/library/pairs":
+            payload = self._read_json_body()
+            try:
+                pair = create_media_edit_pair_request(
+                    str(payload.get("vodAssetId", "")).strip(),
+                    str(payload.get("editAssetId", "")).strip(),
+                    profile_id=(
+                        str(payload.get("profileId", "")).strip()
+                        if payload.get("profileId") is not None
+                        else None
+                    ),
+                    title=(
+                        str(payload.get("title", "")).strip()
+                        if payload.get("title") is not None
+                        else None
+                    ),
+                    note=(
+                        str(payload.get("note", "")).strip()
+                        if payload.get("note") is not None
+                        else None
+                    ),
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+            except ValueError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": "pair_create_failed",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "created",
+                    "pair": _convert(pair),
+                },
+            )
+            return
+
+        if request_path.startswith("/library/assets/") and request_path.endswith("/index-jobs"):
+            asset_id = self._asset_id_from_index_jobs_path(request_path)
+            if not asset_id:
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_request",
+                        "message": "assetId is required",
+                    },
+                )
+                return
+
+            payload = self._read_json_body()
+            try:
+                job = create_media_index_job_request(
+                    asset_id,
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+            except ValueError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": "index_job_create_failed",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "created",
+                    "job": _convert(job),
+                },
+            )
+            return
+
+        if request_path == "/library/alignment-jobs":
+            payload = self._read_json_body()
+            try:
+                job = create_media_alignment_job_request(
+                    pair_id=(
+                        str(payload.get("pairId", "")).strip()
+                        if payload.get("pairId") is not None
+                        else None
+                    ),
+                    source_asset_id=(
+                        str(payload.get("sourceAssetId", "")).strip()
+                        if payload.get("sourceAssetId") is not None
+                        else None
+                    ),
+                    query_asset_id=(
+                        str(payload.get("queryAssetId", "")).strip()
+                        if payload.get("queryAssetId") is not None
+                        else None
+                    ),
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+            except ValueError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": "alignment_job_create_failed",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "created",
+                    "job": _convert(job),
+                },
+            )
+            return
+
+        if request_path.startswith("/library/pairs/") and request_path.endswith("/alignment-jobs"):
+            pair_id = self._pair_id_from_alignment_jobs_path(request_path)
+            payload = self._read_json_body()
+            try:
+                job = create_media_alignment_job_request(
+                    pair_id=pair_id,
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+            except ValueError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": "alignment_job_create_failed",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "created",
+                    "job": _convert(job),
+                },
+            )
+            return
+
+        if request_path.startswith("/library/alignment-jobs/") and request_path.endswith("/cancel"):
+            job_id = self._alignment_job_id_from_cancel_path(request_path)
+            payload = self._read_json_body()
+            try:
+                job = cancel_media_alignment_job_request(
+                    job_id,
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "cancelled",
+                    "job": _convert(job),
+                },
+            )
+            return
+
+        if request_path.startswith("/library/index-jobs/") and request_path.endswith("/cancel"):
+            job_id = self._job_id_from_cancel_path(request_path)
+            if not job_id:
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_request",
+                        "message": "jobId is required",
+                    },
+                )
+                return
+
+            payload = self._read_json_body()
+            try:
+                job = cancel_media_index_job_request(
+                    job_id,
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "cancelled",
+                    "job": _convert(job),
+                },
+            )
+            return
+
         if request_path == "/review":
             payload = self._read_json_body()
             session_id = str(payload.get("sessionId", "")).strip()
@@ -468,6 +909,36 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
         profile_path = request_path.removeprefix("/profiles/")
         profile_id, _, _ = profile_path.partition("/examples")
         return unquote(profile_id).strip()
+
+    def _asset_id_from_index_jobs_path(self, request_path: str) -> str:
+        asset_path = request_path.removeprefix("/library/assets/")
+        asset_id, _, _ = asset_path.partition("/index-jobs")
+        return unquote(asset_id).strip()
+
+    def _asset_id_from_index_artifacts_path(self, request_path: str) -> str:
+        asset_path = request_path.removeprefix("/library/assets/")
+        asset_id, _, _ = asset_path.partition("/index-artifacts")
+        return unquote(asset_id).strip()
+
+    def _pair_id_from_alignment_jobs_path(self, request_path: str) -> str:
+        pair_path = request_path.removeprefix("/library/pairs/")
+        pair_id, _, _ = pair_path.partition("/alignment-jobs")
+        return unquote(pair_id).strip()
+
+    def _pair_id_from_alignment_matches_path(self, request_path: str) -> str:
+        pair_path = request_path.removeprefix("/library/pairs/")
+        pair_id, _, _ = pair_path.partition("/alignment-matches")
+        return unquote(pair_id).strip()
+
+    def _alignment_job_id_from_cancel_path(self, request_path: str) -> str:
+        job_path = request_path.removeprefix("/library/alignment-jobs/")
+        job_id, _, _ = job_path.partition("/cancel")
+        return unquote(job_id).strip()
+
+    def _job_id_from_cancel_path(self, request_path: str) -> str:
+        job_path = request_path.removeprefix("/library/index-jobs/")
+        job_id, _, _ = job_path.partition("/cancel")
+        return unquote(job_id).strip()
 
 
 def main() -> int:
