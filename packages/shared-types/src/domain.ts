@@ -186,11 +186,15 @@ export const mediaIndexJobStatusSchema = z.enum([
   "CANCELLED",
 ]);
 
-export const mediaIndexArtifactKindSchema = z.enum(["AUDIO_FINGERPRINT"]);
+export const mediaIndexArtifactKindSchema = z.enum([
+  "AUDIO_FINGERPRINT",
+  "THUMBNAIL_SUGGESTIONS",
+]);
 
 export const mediaIndexArtifactMethodSchema = z.enum([
   "BYTE_SAMPLED_AUDIO_PROXY_V1",
   "DECODED_AUDIO_FINGERPRINT_V1",
+  "FFMPEG_TIMELINE_THUMBNAILS_V1",
 ]);
 
 export const mediaAlignmentJobStatusSchema = z.enum([
@@ -283,11 +287,57 @@ export const mediaIndexAudioBucketSchema = z.object({
   fingerprint: z.string(),
 });
 
+export const mediaThumbnailSuggestionSchema = z.object({
+  id: z.string(),
+  imagePath: z.string(),
+  timestampSeconds: z.number().nonnegative(),
+  score: z.number().min(0).max(1),
+  activityScore: z.number().min(0).max(1),
+  brightnessScore: z.number().min(0).max(1),
+  contrastScore: z.number().min(0).max(1),
+  sharpnessScore: z.number().min(0).max(1),
+  note: z.string(),
+});
+
+export const mediaThumbnailSuggestionSetSchema = z.object({
+  methodVersion: z.enum(["FFMPEG_TIMELINE_THUMBNAILS_V1"]),
+  generatedAt: z.string(),
+  sourcePath: z.string(),
+  sampleWindowCount: z.number().int().nonnegative(),
+  note: z.string(),
+  suggestions: z.array(mediaThumbnailSuggestionSchema).default([]),
+});
+
+export const mediaThumbnailOutputSchema = z.object({
+  id: z.string(),
+  assetId: z.string(),
+  sourceSuggestionId: z.string(),
+  imagePath: z.string(),
+  timestampSeconds: z.number().nonnegative(),
+  score: z.number().min(0).max(1),
+  activityScore: z.number().min(0).max(1),
+  brightnessScore: z.number().min(0).max(1),
+  contrastScore: z.number().min(0).max(1),
+  sharpnessScore: z.number().min(0).max(1),
+  note: z.string(),
+  position: z.number().int().nonnegative(),
+  selectedAt: z.string(),
+});
+
+export const mediaThumbnailOutputSetSchema = z.object({
+  updatedAt: z.string(),
+  outputs: z.array(mediaThumbnailOutputSchema).default([]),
+});
+
 export const mediaIndexArtifactSummarySchema = z.object({
   latestAudioFingerprintArtifactId: z.string().optional(),
   audioFingerprintBucketCount: z.number().int().nonnegative().default(0),
   audioFingerprintMethod: mediaIndexArtifactMethodSchema.optional(),
   audioFingerprintUpdatedAt: z.string().optional(),
+  latestThumbnailSuggestionArtifactId: z.string().optional(),
+  thumbnailSuggestionCount: z.number().int().nonnegative().default(0),
+  thumbnailSuggestionMethod: mediaIndexArtifactMethodSchema.optional(),
+  thumbnailSuggestionUpdatedAt: z.string().optional(),
   bucketDurationSeconds: z.number().positive().optional(),
   confidenceScore: z.number().min(0).max(1).optional(),
 });
@@ -303,11 +353,13 @@ export const mediaIndexArtifactSchema = z.object({
   bucketCount: z.number().int().nonnegative(),
   confidenceScore: z.number().min(0).max(1),
   payloadByteSize: z.number().int().nonnegative(),
-  energyMean: z.number().min(0).max(1),
-  energyPeak: z.number().min(0).max(1),
-  onsetMean: z.number().min(0).max(1),
-  silenceShare: z.number().min(0).max(1),
-  buckets: z.array(mediaIndexAudioBucketSchema),
+  energyMean: z.number().min(0).max(1).optional(),
+  energyPeak: z.number().min(0).max(1).optional(),
+  onsetMean: z.number().min(0).max(1).optional(),
+  silenceShare: z.number().min(0).max(1).optional(),
+  sampleWindowCount: z.number().int().nonnegative().optional(),
+  buckets: z.array(mediaIndexAudioBucketSchema).default([]),
+  thumbnailSuggestions: z.array(mediaThumbnailSuggestionSchema).default([]),
   note: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -341,6 +393,8 @@ export const mediaLibraryAssetSchema = z.object({
   featureSummary: exampleClipFeatureSummarySchema.optional(),
   indexSummary: mediaIndexSummarySchema.optional(),
   indexArtifactSummary: mediaIndexArtifactSummarySchema.optional(),
+  thumbnailSuggestionSet: mediaThumbnailSuggestionSetSchema.optional(),
+  thumbnailOutputSet: mediaThumbnailOutputSetSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { supportedInputExtensions } from "@highlightsmith/media";
 import type {
   AddExampleClipRequest,
@@ -19,6 +20,7 @@ import type {
   MediaLibraryAsset,
   MediaLibraryAssetScope,
   MediaLibraryAssetType,
+  ReplaceMediaThumbnailOutputsRequest,
 } from "@highlightsmith/shared-types";
 
 type ProfileWorkspaceProps = {
@@ -33,6 +35,7 @@ type ProfileWorkspaceProps = {
   mediaEditPairs: MediaEditPair[];
   cancellingMediaIndexJobIds: Record<string, boolean>;
   cancellingMediaAlignmentJobIds: Record<string, boolean>;
+  savingThumbnailOutputAssetIds: Record<string, boolean>;
   isLoadingProfiles: boolean;
   isLoadingExamples: boolean;
   isLoadingLibraryAssets: boolean;
@@ -57,6 +60,10 @@ type ProfileWorkspaceProps = {
   ) => Promise<void>;
   onCreateMediaIndexJob: (
     input: CreateMediaIndexJobRequest,
+  ) => Promise<void>;
+  onReplaceThumbnailOutputs: (
+    assetId: string,
+    input: ReplaceMediaThumbnailOutputsRequest,
   ) => Promise<void>;
   onCreateMediaAlignmentJob: (
     input: CreateMediaAlignmentJobRequest,
@@ -113,6 +120,7 @@ export function ProfileWorkspace({
   mediaEditPairs,
   cancellingMediaIndexJobIds,
   cancellingMediaAlignmentJobIds,
+  savingThumbnailOutputAssetIds,
   isLoadingProfiles,
   isLoadingExamples,
   isLoadingLibraryAssets,
@@ -131,6 +139,7 @@ export function ProfileWorkspace({
   onAddExample,
   onCreateMediaAsset,
   onCreateMediaIndexJob,
+  onReplaceThumbnailOutputs,
   onCreateMediaAlignmentJob,
   onCancelMediaIndexJob,
   onCancelMediaAlignmentJob,
@@ -1030,6 +1039,14 @@ export function ProfileWorkspace({
               const canIndexAsset =
                 asset.sourceType === "LOCAL_FILE_PATH" ||
                 asset.sourceType === "LOCAL_FILE_UPLOAD";
+              const selectedThumbnailSuggestionIds = new Set(
+                asset.thumbnailOutputSet?.outputs.map(
+                  (output) => output.sourceSuggestionId,
+                ) ?? [],
+              );
+              const isSavingThumbnailOutputs = Boolean(
+                savingThumbnailOutputAssetIds[asset.id],
+              );
 
               return (
               <article className="profile-example-card" key={asset.id}>
@@ -1073,6 +1090,125 @@ export function ProfileWorkspace({
                       : ""}
                   </p>
                 ) : null}
+                {asset.thumbnailOutputSet?.outputs.length ? (
+                  <>
+                    <p className="queue-summary-copy">
+                      Chosen thumbnails • {asset.thumbnailOutputSet.outputs.length} output
+                      {asset.thumbnailOutputSet.outputs.length === 1 ? "" : "s"}
+                    </p>
+                    <div className="thumbnail-suggestion-grid chosen">
+                      {asset.thumbnailOutputSet.outputs.map((output) => (
+                        <figure
+                          className="thumbnail-suggestion-card is-selected"
+                          key={output.id}
+                        >
+                          <img
+                            alt={`Chosen thumbnail at ${formatClockDuration(output.timestampSeconds)}`}
+                            className="thumbnail-suggestion-image"
+                            loading="lazy"
+                            src={toLocalImageSrc(output.imagePath)}
+                          />
+                          <figcaption className="thumbnail-suggestion-meta">
+                            <strong>{formatClockDuration(output.timestampSeconds)}</strong>
+                            <span>
+                              Output {output.position + 1} • score{" "}
+                              {formatRatio(output.score)}
+                            </span>
+                            <button
+                              className="button-secondary thumbnail-suggestion-action"
+                              disabled={isSavingThumbnailOutputs}
+                              onClick={() => {
+                                void onReplaceThumbnailOutputs(asset.id, {
+                                  selectedSuggestionIds:
+                                    asset.thumbnailOutputSet?.outputs
+                                      .filter((candidateOutput) =>
+                                        candidateOutput.id !== output.id,
+                                      )
+                                      .map(
+                                        (candidateOutput) =>
+                                          candidateOutput.sourceSuggestionId,
+                                      ) ?? [],
+                                });
+                              }}
+                              type="button"
+                            >
+                              {isSavingThumbnailOutputs ? "Saving..." : "Remove output"}
+                            </button>
+                          </figcaption>
+                        </figure>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+                {asset.thumbnailSuggestionSet ? (
+                  <>
+                    <p className="queue-summary-copy">
+                      Thumbnail suggestions ready •{" "}
+                      {asset.thumbnailSuggestionSet.suggestions.length} picks
+                      {" • "}
+                      sampled {asset.thumbnailSuggestionSet.sampleWindowCount} windows
+                    </p>
+                    <div className="thumbnail-suggestion-grid">
+                      {asset.thumbnailSuggestionSet.suggestions.map((suggestion) => (
+                        <figure
+                          className={
+                            selectedThumbnailSuggestionIds.has(suggestion.id)
+                              ? "thumbnail-suggestion-card is-selected"
+                              : "thumbnail-suggestion-card"
+                          }
+                          key={suggestion.id}
+                        >
+                          <img
+                            alt={`Thumbnail suggestion at ${formatClockDuration(suggestion.timestampSeconds)}`}
+                            className="thumbnail-suggestion-image"
+                            loading="lazy"
+                            src={toLocalImageSrc(suggestion.imagePath)}
+                          />
+                          <figcaption className="thumbnail-suggestion-meta">
+                            <strong>{formatClockDuration(suggestion.timestampSeconds)}</strong>
+                            <span>
+                              Score {formatRatio(suggestion.score)} • activity{" "}
+                              {formatRatio(suggestion.activityScore)}
+                            </span>
+                            <span>{suggestion.note}</span>
+                            <button
+                              className={
+                                selectedThumbnailSuggestionIds.has(suggestion.id)
+                                  ? "button-primary thumbnail-suggestion-action"
+                                  : "button-secondary thumbnail-suggestion-action"
+                              }
+                              disabled={isSavingThumbnailOutputs}
+                              onClick={() => {
+                                const currentIds =
+                                  asset.thumbnailOutputSet?.outputs.map(
+                                    (output) => output.sourceSuggestionId,
+                                  ) ?? [];
+                                const nextSelectedSuggestionIds =
+                                  selectedThumbnailSuggestionIds.has(suggestion.id)
+                                    ? currentIds.filter(
+                                        (selectedSuggestionId) =>
+                                          selectedSuggestionId !== suggestion.id,
+                                      )
+                                    : [...currentIds, suggestion.id];
+                                void onReplaceThumbnailOutputs(asset.id, {
+                                  selectedSuggestionIds:
+                                    nextSelectedSuggestionIds,
+                                });
+                              }}
+                              type="button"
+                            >
+                              {isSavingThumbnailOutputs
+                                ? "Saving..."
+                                : selectedThumbnailSuggestionIds.has(suggestion.id)
+                                  ? "Chosen output"
+                                  : "Promote to output"}
+                            </button>
+                          </figcaption>
+                        </figure>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
                 {asset.featureSummary ? (
                   <p className="queue-summary-copy">
                     Local summary ready • duration{" "}
@@ -1106,7 +1242,11 @@ export function ProfileWorkspace({
                       }}
                       type="button"
                     >
-                      {hasActiveIndexJob ? "Indexing..." : "Index metadata"}
+                      {hasActiveIndexJob
+                        ? "Indexing..."
+                        : latestIndexJob
+                          ? "Refresh index"
+                          : "Index media"}
                     </button>
                     {hasActiveIndexJob && latestIndexJob ? (
                       <button
@@ -1546,6 +1686,21 @@ function formatDuration(value: number | undefined) {
   return `${Math.round(value)}s`;
 }
 
+function formatClockDuration(value: number | undefined) {
+  if (value === undefined) {
+    return "n/a";
+  }
+
+  const totalSeconds = Math.max(0, Math.round(value));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function formatRatio(value: number | undefined) {
   if (value === undefined) {
     return "n/a";
@@ -1568,4 +1723,12 @@ function formatFileSize(value: number) {
   }
 
   return `${value}B`;
+}
+
+function toLocalImageSrc(imagePath: string) {
+  try {
+    return convertFileSrc(imagePath);
+  } catch {
+    return imagePath;
+  }
 }

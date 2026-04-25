@@ -74,6 +74,27 @@ export const createMediaIndexJobRequestSchema = z.object({
   assetId: z.string().trim().min(1, "assetId is required"),
 });
 
+export const replaceMediaThumbnailOutputsRequestSchema = z
+  .object({
+    selectedSuggestionIds: z
+      .array(z.string().trim().min(1, "selectedSuggestionIds entries are required"))
+      .max(8),
+  })
+  .superRefine((value, context) => {
+    const seen = new Set<string>();
+    for (const [index, suggestionId] of value.selectedSuggestionIds.entries()) {
+      if (seen.has(suggestionId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "selectedSuggestionIds must be unique",
+          path: ["selectedSuggestionIds", index],
+        });
+        return;
+      }
+      seen.add(suggestionId);
+    }
+  });
+
 export const cancelMediaIndexJobRequestSchema = z.object({
   jobId: z.string().trim().min(1, "jobId is required"),
 });
@@ -153,6 +174,9 @@ export type CreateMediaEditPairRequest = z.infer<
 >;
 export type CreateMediaIndexJobRequest = z.infer<
   typeof createMediaIndexJobRequestSchema
+>;
+export type ReplaceMediaThumbnailOutputsRequest = z.infer<
+  typeof replaceMediaThumbnailOutputsRequestSchema
 >;
 export type CancelMediaIndexJobRequest = z.infer<
   typeof cancelMediaIndexJobRequestSchema

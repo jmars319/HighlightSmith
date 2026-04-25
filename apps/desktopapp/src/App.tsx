@@ -50,6 +50,7 @@ import {
   mediaLibraryAssetSchema,
   projectSessionSchema,
   projectSessionSummarySchema,
+  replaceMediaThumbnailOutputsRequestSchema,
   type AddExampleClipRequest,
   type AnalyzeProjectRequest,
   type CancelMediaAlignmentJobRequest,
@@ -70,6 +71,7 @@ import {
   type ProfilePresentationMode,
   type ProjectSession,
   type ProjectSessionSummary,
+  type ReplaceMediaThumbnailOutputsRequest,
 } from "@highlightsmith/shared-types";
 import { sqliteSchemaVersion, sqliteTables } from "@highlightsmith/storage";
 import { LayoutShell, TranscriptSnippetBlock } from "@highlightsmith/ui";
@@ -184,6 +186,8 @@ export default function App() {
     Record<string, boolean>
   >({});
   const [cancellingMediaAlignmentJobIds, setCancellingMediaAlignmentJobIds] =
+    useState<Record<string, boolean>>({});
+  const [savingThumbnailOutputAssetIds, setSavingThumbnailOutputAssetIds] =
     useState<Record<string, boolean>>({});
   const [profileLibraryError, setProfileLibraryError] = useState<string | null>(
     null,
@@ -996,6 +1000,41 @@ export default function App() {
       throw error;
     } finally {
       setIsCreatingMediaIndexJob(false);
+    }
+  }
+
+  async function handleReplaceMediaThumbnailOutputs(
+    assetId: string,
+    input: ReplaceMediaThumbnailOutputsRequest,
+  ) {
+    const request = replaceMediaThumbnailOutputsRequestSchema.parse(input);
+    setSavingThumbnailOutputAssetIds((current) => ({
+      ...current,
+      [assetId]: true,
+    }));
+    setProfileLibraryError(null);
+
+    try {
+      const updatedAsset = await replaceMediaThumbnailOutputsEntry(
+        apiBaseUrl,
+        assetId,
+        request,
+      );
+      setMediaLibraryAssets((current) =>
+        upsertMediaLibraryAsset(current, updatedAsset),
+      );
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unexpected thumbnail output update failure while contacting the local API",
+      );
+      throw error;
+    } finally {
+      setSavingThumbnailOutputAssetIds((current) => {
+        const { [assetId]: _removed, ...nextState } = current;
+        return nextState;
+      });
     }
   }
 
@@ -1845,6 +1884,7 @@ export default function App() {
           mediaEditPairs={mediaEditPairs}
           cancellingMediaIndexJobIds={cancellingMediaIndexJobIds}
           cancellingMediaAlignmentJobIds={cancellingMediaAlignmentJobIds}
+          savingThumbnailOutputAssetIds={savingThumbnailOutputAssetIds}
           error={profileLibraryError}
           examples={selectedProfileExamples}
           isAddingExample={isAddingProfileExample}
@@ -1866,6 +1906,7 @@ export default function App() {
           onCreateMediaAsset={handleCreateMediaLibraryAsset}
           onCreateMediaAlignmentJob={handleCreateMediaAlignmentJob}
           onCreateMediaIndexJob={handleCreateMediaIndexJob}
+          onReplaceThumbnailOutputs={handleReplaceMediaThumbnailOutputs}
           onCreateMediaPair={handleCreateMediaEditPair}
           onSelectProfile={setSelectedProfileId}
           profiles={availableProfiles}
@@ -2333,6 +2374,42 @@ async function createMediaLibraryAssetEntry(
       payload && "message" in payload && payload.message
         ? payload.message
         : "Media library asset create failed",
+    );
+  }
+
+  return mediaLibraryAssetSchema.parse(payload);
+}
+
+async function replaceMediaThumbnailOutputsEntry(
+  apiBaseUrl: string,
+  assetId: string,
+  input: ReplaceMediaThumbnailOutputsRequest,
+): Promise<MediaLibraryAsset> {
+  const request = replaceMediaThumbnailOutputsRequestSchema.parse(input);
+  const response = await fetchWithLocalApiMessage(
+    `${apiBaseUrl}/api/library/assets/${encodeURIComponent(assetId)}/thumbnail-outputs`,
+    apiBaseUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    "Unable to update chosen thumbnail outputs.",
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        message?: string;
+      }
+    | MediaLibraryAsset
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && "message" in payload && payload.message
+        ? payload.message
+        : "Thumbnail output update failed",
     );
   }
 

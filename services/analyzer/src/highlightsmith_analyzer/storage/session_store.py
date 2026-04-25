@@ -44,6 +44,10 @@ from ..contracts import (
     MediaIndexJob,
     MediaIndexJobStatus,
     MediaIndexSummary,
+    MediaThumbnailOutput,
+    MediaThumbnailOutputSet,
+    MediaThumbnailSuggestion,
+    MediaThumbnailSuggestionSet,
     MediaLibraryAsset,
     MediaLibraryAssetScope,
     MediaLibraryAssetType,
@@ -193,6 +197,17 @@ CREATE TABLE IF NOT EXISTS media_index_artifacts (
   FOREIGN KEY (job_id) REFERENCES media_index_jobs(id)
 );
 
+CREATE TABLE IF NOT EXISTS media_thumbnail_outputs (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  source_suggestion_id TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  selected_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (asset_id) REFERENCES media_library_assets(id)
+);
+
 CREATE TABLE IF NOT EXISTS media_edit_pairs (
   id TEXT PRIMARY KEY,
   vod_asset_id TEXT NOT NULL,
@@ -224,6 +239,9 @@ ON media_index_jobs(status, updated_at DESC);
 
 CREATE INDEX IF NOT EXISTS media_index_artifacts_asset_idx
 ON media_index_artifacts(asset_id, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS media_thumbnail_outputs_asset_idx
+ON media_thumbnail_outputs(asset_id, position ASC, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS media_alignment_jobs (
   id TEXT PRIMARY KEY,
@@ -846,6 +864,112 @@ class SessionStore:
 
             return self._media_library_asset_from_row(connection, row)
 
+    def replace_media_thumbnail_outputs(
+        self,
+        asset_id: str,
+        *,
+        selected_suggestion_ids: list[str],
+    ) -> MediaLibraryAsset:
+        normalized_asset_id = asset_id.strip()
+        if not normalized_asset_id:
+            raise ValueError("assetId is required")
+
+        normalized_suggestion_ids = [
+            suggestion_id.strip()
+            for suggestion_id in selected_suggestion_ids
+            if suggestion_id.strip()
+        ]
+        if len(normalized_suggestion_ids) != len(set(normalized_suggestion_ids)):
+            raise ValueError("selectedSuggestionIds must be unique")
+
+        now = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(self.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.executescript(SCHEMA_SQL)
+            self._ensure_media_library_asset_columns(connection)
+            asset = self._load_media_library_asset(connection, normalized_asset_id)
+            suggestion_set = asset.thumbnail_suggestion_set
+            suggestion_by_id = {
+                suggestion.id: suggestion
+                for suggestion in (suggestion_set.suggestions if suggestion_set else [])
+            }
+
+            if normalized_suggestion_ids and not suggestion_set:
+                raise ValueError(
+                    "Thumbnail suggestions are not ready for this asset. Run media indexing first."
+                )
+
+            missing_suggestion_ids = [
+                suggestion_id
+                for suggestion_id in normalized_suggestion_ids
+                if suggestion_id not in suggestion_by_id
+            ]
+            if missing_suggestion_ids:
+                raise ValueError(
+                    "Selected thumbnail suggestions are no longer available on this asset."
+                )
+
+            connection.execute(
+                "DELETE FROM media_thumbnail_outputs WHERE asset_id = ?",
+                (normalized_asset_id,),
+            )
+
+            for position, suggestion_id in enumerate(normalized_suggestion_ids):
+                suggestion = suggestion_by_id[suggestion_id]
+                output_id = f"thumb_output_{uuid.uuid4().hex[:12]}"
+                connection.execute(
+                    """
+                    INSERT INTO media_thumbnail_outputs (
+                      id, asset_id, source_suggestion_id, position, payload_json,
+                      selected_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        output_id,
+                        normalized_asset_id,
+                        suggestion.id,
+                        position,
+                        self._to_json(
+                            {
+                                "image_path": suggestion.image_path,
+                                "timestamp_seconds": suggestion.timestamp_seconds,
+                                "score": suggestion.score,
+                                "activity_score": suggestion.activity_score,
+                                "brightness_score": suggestion.brightness_score,
+                                "contrast_score": suggestion.contrast_score,
+                                "sharpness_score": suggestion.sharpness_score,
+                                "note": suggestion.note,
+                            }
+                        ),
+                        now,
+                        now,
+                    ),
+                )
+
+            connection.execute(
+                """
+                UPDATE media_library_assets
+                SET updated_at = ?
+                WHERE id = ?
+                """,
+                (now, normalized_asset_id),
+            )
+            connection.commit()
+
+            row = connection.execute(
+                """
+                SELECT id, asset_type, scope, profile_id, source_type, source_value,
+                       title, note, status, status_detail, summary_json,
+                       index_summary_json, created_at, updated_at
+                FROM media_library_assets
+                WHERE id = ?
+                """,
+                (normalized_asset_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Media library asset not found after update: {normalized_asset_id}")
+            return self._media_library_asset_from_row(connection, row)
+
     def list_media_edit_pairs(self) -> list[MediaEditPair]:
         with sqlite3.connect(self.database_path) as connection:
             connection.row_factory = sqlite3.Row
@@ -1014,7 +1138,12 @@ class SessionStore:
                     artifact.kind.value,
                     artifact.method.value,
                     self._to_json(self._media_index_artifact_summary_payload(artifact)),
-                    self._to_json({"buckets": artifact.buckets}),
+                    self._to_json(
+                        {
+                            "buckets": artifact.buckets,
+                            "thumbnail_suggestions": artifact.thumbnail_suggestions,
+                        }
+                    ),
                     artifact.created_at,
                     artifact.updated_at,
                 ),
@@ -2070,6 +2199,11 @@ class SessionStore:
             for bucket in payload.get("buckets", [])
             if isinstance(bucket, dict)
         ]
+        thumbnail_suggestions = [
+            self._media_thumbnail_suggestion_from_dict(suggestion)
+            for suggestion in payload.get("thumbnail_suggestions", [])
+            if isinstance(suggestion, dict)
+        ]
         return MediaIndexArtifact(
             id=row["id"],
             asset_id=row["asset_id"],
@@ -2081,11 +2215,33 @@ class SessionStore:
             bucket_count=int(summary_payload["bucket_count"]),
             confidence_score=float(summary_payload["confidence_score"]),
             payload_byte_size=int(summary_payload["payload_byte_size"]),
-            energy_mean=float(summary_payload["energy_mean"]),
-            energy_peak=float(summary_payload["energy_peak"]),
-            onset_mean=float(summary_payload["onset_mean"]),
-            silence_share=float(summary_payload["silence_share"]),
+            energy_mean=(
+                float(summary_payload["energy_mean"])
+                if summary_payload.get("energy_mean") is not None
+                else None
+            ),
+            energy_peak=(
+                float(summary_payload["energy_peak"])
+                if summary_payload.get("energy_peak") is not None
+                else None
+            ),
+            onset_mean=(
+                float(summary_payload["onset_mean"])
+                if summary_payload.get("onset_mean") is not None
+                else None
+            ),
+            silence_share=(
+                float(summary_payload["silence_share"])
+                if summary_payload.get("silence_share") is not None
+                else None
+            ),
+            sample_window_count=(
+                int(summary_payload["sample_window_count"])
+                if summary_payload.get("sample_window_count") is not None
+                else None
+            ),
             buckets=buckets,
+            thumbnail_suggestions=thumbnail_suggestions,
             note=str(summary_payload["note"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -2108,6 +2264,63 @@ class SessionStore:
             fingerprint=str(value["fingerprint"]),
         )
 
+    def _media_thumbnail_suggestion_from_dict(
+        self,
+        value: dict[str, Any],
+    ) -> MediaThumbnailSuggestion:
+        return MediaThumbnailSuggestion(
+            id=str(value["id"]),
+            image_path=str(value.get("image_path", value.get("imagePath"))),
+            timestamp_seconds=float(
+                value.get("timestamp_seconds", value.get("timestampSeconds"))
+            ),
+            score=float(value["score"]),
+            activity_score=float(
+                value.get("activity_score", value.get("activityScore"))
+            ),
+            brightness_score=float(
+                value.get("brightness_score", value.get("brightnessScore"))
+            ),
+            contrast_score=float(
+                value.get("contrast_score", value.get("contrastScore"))
+            ),
+            sharpness_score=float(
+                value.get("sharpness_score", value.get("sharpnessScore"))
+            ),
+            note=str(value["note"]),
+        )
+
+    def _media_thumbnail_output_from_row(
+        self,
+        row: sqlite3.Row,
+    ) -> MediaThumbnailOutput:
+        payload = self._json_dict_from_text(row["payload_json"])
+        return MediaThumbnailOutput(
+            id=row["id"],
+            asset_id=row["asset_id"],
+            source_suggestion_id=row["source_suggestion_id"],
+            image_path=str(payload.get("image_path", payload.get("imagePath"))),
+            timestamp_seconds=float(
+                payload.get("timestamp_seconds", payload.get("timestampSeconds"))
+            ),
+            score=float(payload["score"]),
+            activity_score=float(
+                payload.get("activity_score", payload.get("activityScore"))
+            ),
+            brightness_score=float(
+                payload.get("brightness_score", payload.get("brightnessScore"))
+            ),
+            contrast_score=float(
+                payload.get("contrast_score", payload.get("contrastScore"))
+            ),
+            sharpness_score=float(
+                payload.get("sharpness_score", payload.get("sharpnessScore"))
+            ),
+            note=str(payload["note"]),
+            position=int(row["position"]),
+            selected_at=row["selected_at"],
+        )
+
     def _media_index_artifact_summary_payload(
         self,
         artifact: MediaIndexArtifact,
@@ -2122,6 +2335,8 @@ class SessionStore:
             "energy_peak": artifact.energy_peak,
             "onset_mean": artifact.onset_mean,
             "silence_share": artifact.silence_share,
+            "sample_window_count": artifact.sample_window_count,
+            "suggestion_count": len(artifact.thumbnail_suggestions),
             "note": artifact.note,
         }
 
@@ -2130,7 +2345,7 @@ class SessionStore:
         connection: sqlite3.Connection,
         asset_id: str,
     ) -> MediaIndexArtifactSummary | None:
-        row = connection.execute(
+        audio_row = connection.execute(
             """
             SELECT id, method, summary_json, updated_at
             FROM media_index_artifacts
@@ -2146,25 +2361,102 @@ class SessionStore:
             """,
             (asset_id, MediaIndexArtifactKind.AUDIO_FINGERPRINT.value),
         ).fetchone()
-        if row is None:
+        thumbnail_row = connection.execute(
+            """
+            SELECT id, method, summary_json, updated_at
+            FROM media_index_artifacts
+            WHERE asset_id = ? AND kind = ?
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 1
+            """,
+            (asset_id, MediaIndexArtifactKind.THUMBNAIL_SUGGESTIONS.value),
+        ).fetchone()
+        if audio_row is None and thumbnail_row is None:
             return None
 
-        summary_payload = self._json_dict_from_text(row["summary_json"])
-        return MediaIndexArtifactSummary(
-            latest_audio_fingerprint_artifact_id=row["id"],
-            audio_fingerprint_bucket_count=int(summary_payload.get("bucket_count", 0)),
-            audio_fingerprint_method=MediaIndexArtifactMethod(row["method"]),
-            audio_fingerprint_updated_at=row["updated_at"],
-            bucket_duration_seconds=(
+        summary = MediaIndexArtifactSummary()
+        if audio_row is not None:
+            summary_payload = self._json_dict_from_text(audio_row["summary_json"])
+            summary.latest_audio_fingerprint_artifact_id = audio_row["id"]
+            summary.audio_fingerprint_bucket_count = int(summary_payload.get("bucket_count", 0))
+            summary.audio_fingerprint_method = MediaIndexArtifactMethod(audio_row["method"])
+            summary.audio_fingerprint_updated_at = audio_row["updated_at"]
+            summary.bucket_duration_seconds = (
                 float(summary_payload["bucket_duration_seconds"])
                 if summary_payload.get("bucket_duration_seconds") is not None
                 else None
-            ),
-            confidence_score=(
+            )
+            summary.confidence_score = (
                 float(summary_payload["confidence_score"])
                 if summary_payload.get("confidence_score") is not None
                 else None
-            ),
+            )
+        if thumbnail_row is not None:
+            summary_payload = self._json_dict_from_text(thumbnail_row["summary_json"])
+            summary.latest_thumbnail_suggestion_artifact_id = thumbnail_row["id"]
+            summary.thumbnail_suggestion_count = int(summary_payload.get("suggestion_count", 0))
+            summary.thumbnail_suggestion_method = MediaIndexArtifactMethod(
+                thumbnail_row["method"]
+            )
+            summary.thumbnail_suggestion_updated_at = thumbnail_row["updated_at"]
+        return summary
+
+    def _media_asset_thumbnail_suggestion_set(
+        self,
+        connection: sqlite3.Connection,
+        asset_id: str,
+        source_path: str,
+    ) -> MediaThumbnailSuggestionSet | None:
+        row = connection.execute(
+            """
+            SELECT id, asset_id, job_id, kind, method, summary_json, payload_json,
+                   created_at, updated_at
+            FROM media_index_artifacts
+            WHERE asset_id = ? AND kind = ?
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 1
+            """,
+            (asset_id, MediaIndexArtifactKind.THUMBNAIL_SUGGESTIONS.value),
+        ).fetchone()
+        if row is None:
+            return None
+
+        artifact = self._media_index_artifact_from_row(row)
+        return MediaThumbnailSuggestionSet(
+            method_version=artifact.method.value,
+            generated_at=artifact.updated_at,
+            source_path=source_path,
+            sample_window_count=artifact.sample_window_count or 0,
+            note=artifact.note,
+            suggestions=artifact.thumbnail_suggestions,
+        )
+
+    def _media_asset_thumbnail_output_set(
+        self,
+        connection: sqlite3.Connection,
+        asset_id: str,
+    ) -> MediaThumbnailOutputSet | None:
+        rows = connection.execute(
+            """
+            SELECT id, asset_id, source_suggestion_id, position, payload_json,
+                   selected_at, updated_at
+            FROM media_thumbnail_outputs
+            WHERE asset_id = ?
+            ORDER BY position ASC, updated_at DESC
+            """,
+            (asset_id,),
+        ).fetchall()
+        if not rows:
+            return None
+
+        outputs = [
+            self._media_thumbnail_output_from_row(row)
+            for row in rows
+        ]
+        updated_at = max(output.selected_at for output in outputs)
+        return MediaThumbnailOutputSet(
+            updated_at=updated_at,
+            outputs=outputs,
         )
 
     def _json_dict_from_text(self, value: str | None) -> dict[str, Any]:
@@ -2236,6 +2528,15 @@ class SessionStore:
             feature_summary=feature_summary,
             index_summary=index_summary,
             index_artifact_summary=self._media_asset_index_artifact_summary(
+                connection,
+                row["id"],
+            ),
+            thumbnail_suggestion_set=self._media_asset_thumbnail_suggestion_set(
+                connection,
+                row["id"],
+                source_value,
+            ),
+            thumbnail_output_set=self._media_asset_thumbnail_output_set(
                 connection,
                 row["id"],
             ),

@@ -3,7 +3,7 @@ import type {
   ReviewDecision,
 } from "@highlightsmith/shared-types";
 
-export const sqliteSchemaVersion = 6;
+export const sqliteSchemaVersion = 7;
 
 export const sqliteTables = [
   "project_sessions",
@@ -15,6 +15,7 @@ export const sqliteTables = [
   "media_library_assets",
   "media_index_jobs",
   "media_index_artifacts",
+  "media_thumbnail_outputs",
   "media_alignment_jobs",
   "media_alignment_matches",
   "media_edit_pairs",
@@ -137,6 +138,17 @@ CREATE TABLE IF NOT EXISTS media_index_artifacts (
   updated_at TEXT NOT NULL,
   FOREIGN KEY (asset_id) REFERENCES media_library_assets(id),
   FOREIGN KEY (job_id) REFERENCES media_index_jobs(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_thumbnail_outputs (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  source_suggestion_id TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  selected_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (asset_id) REFERENCES media_library_assets(id)
 );
 
 CREATE TABLE IF NOT EXISTS media_alignment_jobs (

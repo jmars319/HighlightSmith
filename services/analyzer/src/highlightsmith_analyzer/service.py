@@ -211,6 +211,20 @@ def create_media_library_asset_request(
     )
 
 
+def replace_media_thumbnail_outputs_request(
+    asset_id: str,
+    *,
+    selected_suggestion_ids: list[str],
+    database_path: str = DEFAULT_DATABASE_PATH,
+):
+    store = SessionStore(database_path)
+    store.initialize()
+    return store.replace_media_thumbnail_outputs(
+        asset_id,
+        selected_suggestion_ids=selected_suggestion_ids,
+    )
+
+
 def list_media_edit_pairs_request(
     *,
     database_path: str = DEFAULT_DATABASE_PATH,

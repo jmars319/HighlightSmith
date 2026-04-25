@@ -100,11 +100,13 @@ class MediaIndexJobStatus(str, Enum):
 
 class MediaIndexArtifactKind(str, Enum):
     AUDIO_FINGERPRINT = "AUDIO_FINGERPRINT"
+    THUMBNAIL_SUGGESTIONS = "THUMBNAIL_SUGGESTIONS"
 
 
 class MediaIndexArtifactMethod(str, Enum):
     BYTE_SAMPLED_AUDIO_PROXY_V1 = "BYTE_SAMPLED_AUDIO_PROXY_V1"
     DECODED_AUDIO_FINGERPRINT_V1 = "DECODED_AUDIO_FINGERPRINT_V1"
+    FFMPEG_TIMELINE_THUMBNAILS_V1 = "FFMPEG_TIMELINE_THUMBNAILS_V1"
 
 
 class MediaAlignmentJobStatus(str, Enum):
@@ -320,11 +322,61 @@ class MediaIndexAudioBucket:
 
 
 @dataclass
+class MediaThumbnailSuggestion:
+    id: str
+    image_path: str
+    timestamp_seconds: float
+    score: float
+    activity_score: float
+    brightness_score: float
+    contrast_score: float
+    sharpness_score: float
+    note: str
+
+
+@dataclass
+class MediaThumbnailSuggestionSet:
+    method_version: str
+    generated_at: str
+    source_path: str
+    sample_window_count: int
+    note: str
+    suggestions: List[MediaThumbnailSuggestion] = field(default_factory=list)
+
+
+@dataclass
+class MediaThumbnailOutput:
+    id: str
+    asset_id: str
+    source_suggestion_id: str
+    image_path: str
+    timestamp_seconds: float
+    score: float
+    activity_score: float
+    brightness_score: float
+    contrast_score: float
+    sharpness_score: float
+    note: str
+    position: int
+    selected_at: str
+
+
+@dataclass
+class MediaThumbnailOutputSet:
+    updated_at: str
+    outputs: List[MediaThumbnailOutput] = field(default_factory=list)
+
+
+@dataclass
 class MediaIndexArtifactSummary:
     latest_audio_fingerprint_artifact_id: Optional[str] = None
     audio_fingerprint_bucket_count: int = 0
     audio_fingerprint_method: Optional[MediaIndexArtifactMethod] = None
     audio_fingerprint_updated_at: Optional[str] = None
+    latest_thumbnail_suggestion_artifact_id: Optional[str] = None
+    thumbnail_suggestion_count: int = 0
+    thumbnail_suggestion_method: Optional[MediaIndexArtifactMethod] = None
+    thumbnail_suggestion_updated_at: Optional[str] = None
     bucket_duration_seconds: Optional[float] = None
     confidence_score: Optional[float] = None
 
@@ -340,12 +392,14 @@ class MediaIndexArtifact:
     bucket_count: int
     confidence_score: float
     payload_byte_size: int
-    energy_mean: float
-    energy_peak: float
-    onset_mean: float
-    silence_share: float
-    buckets: List[MediaIndexAudioBucket]
     note: str
+    energy_mean: Optional[float] = None
+    energy_peak: Optional[float] = None
+    onset_mean: Optional[float] = None
+    silence_share: Optional[float] = None
+    sample_window_count: Optional[int] = None
+    buckets: List[MediaIndexAudioBucket] = field(default_factory=list)
+    thumbnail_suggestions: List[MediaThumbnailSuggestion] = field(default_factory=list)
     job_id: Optional[str] = None
     created_at: str = ""
     updated_at: str = ""
@@ -381,6 +435,8 @@ class MediaLibraryAsset:
     feature_summary: Optional[ExampleClipFeatureSummary] = None
     index_summary: Optional[MediaIndexSummary] = None
     index_artifact_summary: Optional[MediaIndexArtifactSummary] = None
+    thumbnail_suggestion_set: Optional[MediaThumbnailSuggestionSet] = None
+    thumbnail_output_set: Optional[MediaThumbnailOutputSet] = None
     created_at: str = ""
     updated_at: str = ""
 

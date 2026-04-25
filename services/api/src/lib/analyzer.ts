@@ -18,6 +18,7 @@ import {
   mediaLibraryAssetSchema,
   projectSessionSchema,
   projectSessionSummarySchema,
+  replaceMediaThumbnailOutputsRequestSchema,
   reviewUpdateRequestSchema,
   type AddExampleClipRequest,
   type AnalyzeProjectRequest,
@@ -38,6 +39,7 @@ import {
   type MediaLibraryAsset,
   type ProjectSession,
   type ProjectSessionSummary,
+  type ReplaceMediaThumbnailOutputsRequest,
   type ReviewUpdateRequest,
 } from "@highlightsmith/shared-types";
 
@@ -603,6 +605,24 @@ export async function createMediaLibraryAsset(
     },
     body: JSON.stringify(request),
   });
+  return parseAssetResponse(response);
+}
+
+export async function replaceMediaThumbnailOutputs(
+  assetId: string,
+  input: ReplaceMediaThumbnailOutputsRequest,
+): Promise<MediaLibraryAsset> {
+  const request = replaceMediaThumbnailOutputsRequestSchema.parse(input);
+  const response = await fetchAnalyzer(
+    `/library/assets/${encodeURIComponent(assetId)}/thumbnail-outputs`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+  );
   return parseAssetResponse(response);
 }
 

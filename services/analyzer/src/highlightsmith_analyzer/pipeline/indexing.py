@@ -16,6 +16,7 @@ from ..contracts import (
     MediaIndexArtifactMethod,
     MediaIndexAudioBucket,
     MediaIndexSummary,
+    MediaThumbnailSuggestion,
 )
 from .ingest import inspect_media_with_metadata
 
@@ -28,6 +29,15 @@ DECODED_AUDIO_SAMPLE_WIDTH_BYTES = 2
 MAX_DECODED_AUDIO_BUCKETS = 720
 MAX_DECODED_AUDIO_SECONDS = 14_400.0
 FFMPEG_DECODE_TIMEOUT_SECONDS = 180
+THUMBNAIL_SUGGESTION_VERSION = "FFMPEG_TIMELINE_THUMBNAILS_V1"
+MAX_THUMBNAIL_CANDIDATE_WINDOWS = 12
+MAX_THUMBNAIL_SUGGESTIONS = 4
+MIN_THUMBNAIL_SPACING_SECONDS = 45.0
+THUMBNAIL_ANALYSIS_WIDTH = 160
+THUMBNAIL_ANALYSIS_HEIGHT = 90
+THUMBNAIL_EXPORT_WIDTH = 960
+FFMPEG_FRAME_TIMEOUT_SECONDS = 30
+THUMBNAIL_OUTPUT_ROOT = Path(".local/thumbnail-suggestions")
 
 
 def build_media_index_summary(source_path: str) -> MediaIndexSummary:
@@ -70,20 +80,33 @@ def build_media_index_artifacts(
     job_id: str,
     index_summary: MediaIndexSummary,
 ) -> list[MediaIndexArtifact]:
+    artifacts: list[MediaIndexArtifact] = []
     decoded_audio_artifact = build_decoded_audio_fingerprint_artifact(
         asset_id=asset_id,
         job_id=job_id,
         index_summary=index_summary,
     )
     if decoded_audio_artifact is not None:
-        return [decoded_audio_artifact]
+        artifacts.append(decoded_audio_artifact)
+    else:
+        artifacts.append(
+            build_audio_fingerprint_artifact(
+                asset_id=asset_id,
+                job_id=job_id,
+                index_summary=index_summary,
+            )
+        )
 
-    audio_artifact = build_audio_fingerprint_artifact(
+    thumbnail_artifact = build_thumbnail_suggestion_artifact(
         asset_id=asset_id,
         job_id=job_id,
         index_summary=index_summary,
+        reference_audio_artifact=artifacts[0],
     )
-    return [audio_artifact]
+    if thumbnail_artifact is not None:
+        artifacts.append(thumbnail_artifact)
+
+    return artifacts
 
 
 def build_decoded_audio_fingerprint_artifact(
@@ -235,6 +258,104 @@ def build_audio_fingerprint_artifact(
         ),
         created_at=now,
         updated_at=now,
+    )
+
+
+def build_thumbnail_suggestion_artifact(
+    *,
+    asset_id: str,
+    job_id: str,
+    index_summary: MediaIndexSummary,
+    reference_audio_artifact: MediaIndexArtifact,
+) -> MediaIndexArtifact | None:
+    if not index_summary.has_video or index_summary.kind != "VIDEO":
+        return None
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+
+    candidate_frames = _score_thumbnail_candidate_frames(
+        ffmpeg=ffmpeg,
+        index_summary=index_summary,
+        reference_audio_artifact=reference_audio_artifact,
+    )
+    if not candidate_frames:
+        return None
+
+    selected_frames = _select_thumbnail_candidate_frames(
+        candidate_frames,
+        duration_seconds=index_summary.duration_seconds,
+    )
+    if not selected_frames:
+        return None
+
+    output_directory = THUMBNAIL_OUTPUT_ROOT / asset_id
+    try:
+        output_directory.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+
+    suggestions: list[MediaThumbnailSuggestion] = []
+    generated_at = datetime.now(timezone.utc).isoformat()
+    for suggestion_index, frame in enumerate(selected_frames, start=1):
+        suggestion_timestamp_millis = int(round(float(frame["timestamp_seconds"]) * 1000))
+        output_path = (
+            output_directory
+            / f"{job_id}_{suggestion_index:02d}_{suggestion_timestamp_millis}.jpg"
+        )
+        if not _export_thumbnail_frame(
+            ffmpeg=ffmpeg,
+            source_path=index_summary.source_path,
+            timestamp_seconds=frame["timestamp_seconds"],
+            output_path=output_path,
+        ):
+            continue
+
+        suggestions.append(
+            MediaThumbnailSuggestion(
+                id=f"thumbnail_{asset_id}_{suggestion_timestamp_millis}",
+                image_path=str(output_path.resolve()),
+                timestamp_seconds=round(frame["timestamp_seconds"], 2),
+                score=round(frame["score"], 4),
+                activity_score=round(frame["activity_score"], 4),
+                brightness_score=round(frame["brightness_score"], 4),
+                contrast_score=round(frame["contrast_score"], 4),
+                sharpness_score=round(frame["sharpness_score"], 4),
+                note=str(frame["note"]),
+            )
+        )
+
+    if not suggestions:
+        return None
+
+    payload = [_thumbnail_payload(suggestion) for suggestion in suggestions]
+    payload_byte_size = len(
+        json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    )
+    artifact_id_seed = (
+        f"thumbnail:{asset_id}:{job_id}:{index_summary.source_path}:{generated_at}"
+    )
+
+    return MediaIndexArtifact(
+        id=f"artifact_thumbnail_{hashlib.sha1(artifact_id_seed.encode('utf-8')).hexdigest()[:12]}",
+        asset_id=asset_id,
+        job_id=job_id,
+        kind=MediaIndexArtifactKind.THUMBNAIL_SUGGESTIONS,
+        method=MediaIndexArtifactMethod.FFMPEG_TIMELINE_THUMBNAILS_V1,
+        bucket_duration_seconds=reference_audio_artifact.bucket_duration_seconds,
+        duration_seconds=round(index_summary.duration_seconds, 2),
+        bucket_count=reference_audio_artifact.bucket_count,
+        confidence_score=round(_mean([suggestion.score for suggestion in suggestions]), 4),
+        payload_byte_size=payload_byte_size,
+        sample_window_count=len(candidate_frames),
+        thumbnail_suggestions=suggestions,
+        note=(
+            "Bounded ffmpeg thumbnail suggestions scored from local activity buckets and "
+            "simple visual clarity heuristics."
+        ),
+        created_at=generated_at,
+        updated_at=generated_at,
     )
 
 
@@ -396,6 +517,314 @@ def _build_decoded_audio_bucket(
     )
 
 
+def _score_thumbnail_candidate_frames(
+    *,
+    ffmpeg: str,
+    index_summary: MediaIndexSummary,
+    reference_audio_artifact: MediaIndexArtifact,
+) -> list[dict[str, float | str]]:
+    candidate_windows = _thumbnail_candidate_windows(index_summary, reference_audio_artifact)
+    scored_frames: list[dict[str, float | str]] = []
+    for window in candidate_windows[:MAX_THUMBNAIL_CANDIDATE_WINDOWS]:
+        timestamp_seconds = float(window["timestamp_seconds"])
+        frame_metrics = _analyze_video_frame(
+            ffmpeg=ffmpeg,
+            source_path=index_summary.source_path,
+            timestamp_seconds=timestamp_seconds,
+        )
+        if frame_metrics is None:
+            continue
+
+        activity_score = float(window["activity_score"])
+        brightness_score = float(frame_metrics["brightness_score"])
+        contrast_score = float(frame_metrics["contrast_score"])
+        sharpness_score = float(frame_metrics["sharpness_score"])
+        dark_penalty = float(frame_metrics["dark_penalty"])
+        visual_score = _clamp(
+            (brightness_score * 0.35)
+            + (contrast_score * 0.35)
+            + (sharpness_score * 0.3)
+            - dark_penalty
+        )
+        composite_score = _clamp((activity_score * 0.58) + (visual_score * 0.42))
+
+        scored_frames.append(
+            {
+                "timestamp_seconds": timestamp_seconds,
+                "activity_score": activity_score,
+                "brightness_score": brightness_score,
+                "contrast_score": contrast_score,
+                "sharpness_score": sharpness_score,
+                "score": composite_score,
+                "note": (
+                    f"Activity {round(activity_score * 100)}%, "
+                    f"brightness {round(brightness_score * 100)}%, "
+                    f"contrast {round(contrast_score * 100)}%, "
+                    f"clarity {round(sharpness_score * 100)}%."
+                ),
+            }
+        )
+
+    scored_frames.sort(
+        key=lambda frame: (
+            float(frame["score"]),
+            float(frame["activity_score"]),
+            float(frame["contrast_score"]),
+        ),
+        reverse=True,
+    )
+    return scored_frames
+
+
+def _thumbnail_candidate_windows(
+    index_summary: MediaIndexSummary,
+    reference_audio_artifact: MediaIndexArtifact,
+) -> list[dict[str, float]]:
+    if not reference_audio_artifact.buckets:
+        return _fallback_thumbnail_windows(index_summary.duration_seconds)
+
+    start_guard_seconds = _thumbnail_guard_seconds(index_summary.duration_seconds)
+    end_guard_seconds = _thumbnail_guard_seconds(index_summary.duration_seconds)
+    candidate_windows: list[dict[str, float]] = []
+    for bucket in reference_audio_artifact.buckets:
+        midpoint_seconds = (bucket.start_seconds + bucket.end_seconds) / 2
+        if midpoint_seconds <= start_guard_seconds:
+            continue
+        if midpoint_seconds >= max(index_summary.duration_seconds - end_guard_seconds, 0.0):
+            continue
+
+        activity_score = _clamp(
+            (bucket.energy_score * 0.5)
+            + (bucket.onset_score * 0.3)
+            + (bucket.spectral_flux_score * 0.15)
+            + ((1 - bucket.silence_score) * 0.05)
+        )
+        candidate_windows.append(
+            {
+                "timestamp_seconds": midpoint_seconds,
+                "activity_score": activity_score,
+            }
+        )
+
+    if not candidate_windows:
+        return _fallback_thumbnail_windows(index_summary.duration_seconds)
+
+    candidate_windows.sort(
+        key=lambda window: (
+            float(window["activity_score"]),
+            -abs((index_summary.duration_seconds / 2) - float(window["timestamp_seconds"])),
+        ),
+        reverse=True,
+    )
+    return candidate_windows
+
+
+def _fallback_thumbnail_windows(duration_seconds: float) -> list[dict[str, float]]:
+    if duration_seconds <= 0:
+        return []
+
+    start_guard_seconds = _thumbnail_guard_seconds(duration_seconds, fraction=0.04)
+    end_guard_seconds = _thumbnail_guard_seconds(duration_seconds, fraction=0.04)
+    usable_start = start_guard_seconds
+    usable_end = max(duration_seconds - end_guard_seconds, usable_start + 1.0)
+    step_count = max(MAX_THUMBNAIL_CANDIDATE_WINDOWS, 1)
+    return [
+        {
+            "timestamp_seconds": usable_start
+            + ((usable_end - usable_start) * ((index + 1) / (step_count + 1))),
+            "activity_score": 0.45,
+        }
+        for index in range(step_count)
+    ]
+
+
+def _select_thumbnail_candidate_frames(
+    candidate_frames: list[dict[str, float | str]],
+    *,
+    duration_seconds: float,
+) -> list[dict[str, float | str]]:
+    selected_frames: list[dict[str, float | str]] = []
+    min_spacing_seconds = min(
+        MIN_THUMBNAIL_SPACING_SECONDS,
+        max(duration_seconds / max(MAX_THUMBNAIL_SUGGESTIONS + 1, 1), 1.5),
+    )
+    for frame in candidate_frames:
+        timestamp_seconds = float(frame["timestamp_seconds"])
+        if any(
+            abs(float(existing["timestamp_seconds"]) - timestamp_seconds) < min_spacing_seconds
+            for existing in selected_frames
+        ):
+            continue
+        selected_frames.append(frame)
+        if len(selected_frames) >= MAX_THUMBNAIL_SUGGESTIONS:
+            break
+    return selected_frames
+
+
+def _thumbnail_guard_seconds(
+    duration_seconds: float,
+    *,
+    fraction: float = 0.02,
+) -> float:
+    if duration_seconds <= 0:
+        return 0.0
+    return min(max(duration_seconds * fraction, 8.0), max(duration_seconds / 4, 1.0), 90.0)
+
+
+def _analyze_video_frame(
+    *,
+    ffmpeg: str,
+    source_path: str,
+    timestamp_seconds: float,
+) -> dict[str, float] | None:
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-ss",
+                f"{timestamp_seconds:.2f}",
+                "-i",
+                source_path,
+                "-frames:v",
+                "1",
+                "-vf",
+                (
+                    f"scale={THUMBNAIL_ANALYSIS_WIDTH}:{THUMBNAIL_ANALYSIS_HEIGHT}:"
+                    "force_original_aspect_ratio=decrease,"
+                    f"pad={THUMBNAIL_ANALYSIS_WIDTH}:{THUMBNAIL_ANALYSIS_HEIGHT}:"
+                    "(ow-iw)/2:(oh-ih)/2:black,format=rgb24"
+                ),
+                "-f",
+                "rawvideo",
+                "-",
+            ],
+            capture_output=True,
+            check=False,
+            timeout=FFMPEG_FRAME_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+    expected_size = THUMBNAIL_ANALYSIS_WIDTH * THUMBNAIL_ANALYSIS_HEIGHT * 3
+    if result.returncode != 0 or len(result.stdout) != expected_size:
+        return None
+
+    return _frame_metrics_from_rgb24(result.stdout)
+
+
+def _frame_metrics_from_rgb24(rgb_bytes: bytes) -> dict[str, float]:
+    if not rgb_bytes:
+        return {
+            "brightness_score": 0.0,
+            "contrast_score": 0.0,
+            "sharpness_score": 0.0,
+            "dark_penalty": 0.0,
+        }
+
+    luminance_values: list[float] = []
+    dark_pixels = 0
+    index = 0
+    while index + 2 < len(rgb_bytes):
+        red = rgb_bytes[index]
+        green = rgb_bytes[index + 1]
+        blue = rgb_bytes[index + 2]
+        luminance = (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
+        luminance_values.append(luminance)
+        if luminance < 24:
+            dark_pixels += 1
+        index += 3
+
+    if not luminance_values:
+        return {
+            "brightness_score": 0.0,
+            "contrast_score": 0.0,
+            "sharpness_score": 0.0,
+            "dark_penalty": 0.0,
+        }
+
+    mean_luminance = sum(luminance_values) / len(luminance_values)
+    variance = sum((value - mean_luminance) ** 2 for value in luminance_values) / len(
+        luminance_values
+    )
+    contrast = math.sqrt(variance)
+
+    horizontal_diff = 0.0
+    vertical_diff = 0.0
+    for row in range(THUMBNAIL_ANALYSIS_HEIGHT):
+        row_offset = row * THUMBNAIL_ANALYSIS_WIDTH
+        for column in range(1, THUMBNAIL_ANALYSIS_WIDTH):
+            current_index = row_offset + column
+            previous_index = current_index - 1
+            horizontal_diff += abs(
+                luminance_values[current_index] - luminance_values[previous_index]
+            )
+    for row in range(1, THUMBNAIL_ANALYSIS_HEIGHT):
+        row_offset = row * THUMBNAIL_ANALYSIS_WIDTH
+        previous_row_offset = (row - 1) * THUMBNAIL_ANALYSIS_WIDTH
+        for column in range(THUMBNAIL_ANALYSIS_WIDTH):
+            current_index = row_offset + column
+            previous_index = previous_row_offset + column
+            vertical_diff += abs(
+                luminance_values[current_index] - luminance_values[previous_index]
+            )
+
+    brightness_mean = mean_luminance / 255
+    dark_share = dark_pixels / len(luminance_values)
+    brightness_score = _clamp(1 - (abs(brightness_mean - 0.56) / 0.56))
+    contrast_score = _clamp(contrast / 90)
+    sharpness_score = _clamp(
+        ((horizontal_diff + vertical_diff) / max(len(luminance_values), 1)) / 48
+    )
+    dark_penalty = _clamp(max(dark_share - 0.45, 0.0) * 1.6)
+
+    return {
+        "brightness_score": round(brightness_score, 4),
+        "contrast_score": round(contrast_score, 4),
+        "sharpness_score": round(sharpness_score, 4),
+        "dark_penalty": round(dark_penalty, 4),
+    }
+
+
+def _export_thumbnail_frame(
+    *,
+    ffmpeg: str,
+    source_path: str,
+    timestamp_seconds: float,
+    output_path: Path,
+) -> bool:
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-ss",
+                f"{timestamp_seconds:.2f}",
+                "-i",
+                source_path,
+                "-frames:v",
+                "1",
+                "-vf",
+                f"scale={THUMBNAIL_EXPORT_WIDTH}:-2:force_original_aspect_ratio=decrease",
+                "-q:v",
+                "2",
+                str(output_path),
+            ],
+            capture_output=True,
+            check=False,
+            timeout=FFMPEG_FRAME_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+    return result.returncode == 0 and output_path.exists()
+
+
 def _read_bounded_media_sample(
     source_path: str,
     index: int,
@@ -429,6 +858,20 @@ def _bucket_payload(bucket: MediaIndexAudioBucket) -> dict[str, Any]:
         "spectral_flux_score": bucket.spectral_flux_score,
         "silence_score": bucket.silence_score,
         "fingerprint": bucket.fingerprint,
+    }
+
+
+def _thumbnail_payload(suggestion: MediaThumbnailSuggestion) -> dict[str, Any]:
+    return {
+        "id": suggestion.id,
+        "image_path": suggestion.image_path,
+        "timestamp_seconds": suggestion.timestamp_seconds,
+        "score": suggestion.score,
+        "activity_score": suggestion.activity_score,
+        "brightness_score": suggestion.brightness_score,
+        "contrast_score": suggestion.contrast_score,
+        "sharpness_score": suggestion.sharpness_score,
+        "note": suggestion.note,
     }
 
 

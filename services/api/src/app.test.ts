@@ -362,11 +362,91 @@ describe("api smoke routes", () => {
         audioFingerprintBucketCount: 2,
         audioFingerprintMethod: "BYTE_SAMPLED_AUDIO_PROXY_V1",
         audioFingerprintUpdatedAt: "2026-04-20T12:10:00.000Z",
+        latestThumbnailSuggestionArtifactId: "artifact_thumbnail_001",
+        thumbnailSuggestionCount: 2,
+        thumbnailSuggestionMethod: "FFMPEG_TIMELINE_THUMBNAILS_V1",
+        thumbnailSuggestionUpdatedAt: "2026-04-20T12:10:10.000Z",
         bucketDurationSeconds: 30,
         confidenceScore: 0.18,
       },
+      thumbnailSuggestionSet: {
+        methodVersion: "FFMPEG_TIMELINE_THUMBNAILS_V1",
+        generatedAt: "2026-04-20T12:10:10.000Z",
+        sourcePath: "/tmp/global-clip.mp4",
+        sampleWindowCount: 8,
+        note:
+          "Bounded ffmpeg thumbnail suggestions scored from local activity buckets and simple visual clarity heuristics.",
+        suggestions: [
+          {
+            id: "thumbnail_asset_clip_global_001_11000",
+            imagePath: "/tmp/highlightsmith-thumbnails/asset_clip_global_001_01.jpg",
+            timestampSeconds: 11,
+            score: 0.73,
+            activityScore: 0.68,
+            brightnessScore: 0.7,
+            contrastScore: 0.66,
+            sharpnessScore: 0.61,
+            note: "Activity 68%, brightness 70%, contrast 66%, clarity 61%.",
+          },
+          {
+            id: "thumbnail_asset_clip_global_001_29000",
+            imagePath: "/tmp/highlightsmith-thumbnails/asset_clip_global_001_02.jpg",
+            timestampSeconds: 29,
+            score: 0.69,
+            activityScore: 0.64,
+            brightnessScore: 0.63,
+            contrastScore: 0.67,
+            sharpnessScore: 0.58,
+            note: "Activity 64%, brightness 63%, contrast 67%, clarity 58%.",
+          },
+        ],
+      },
+      thumbnailOutputSet: {
+        updatedAt: "2026-04-20T12:11:00.000Z",
+        outputs: [
+          {
+            id: "thumb_output_001",
+            assetId: "asset_clip_global_001",
+            sourceSuggestionId: "thumbnail_asset_clip_global_001_11000",
+            imagePath: "/tmp/highlightsmith-thumbnails/asset_clip_global_001_01.jpg",
+            timestampSeconds: 11,
+            score: 0.73,
+            activityScore: 0.68,
+            brightnessScore: 0.7,
+            contrastScore: 0.66,
+            sharpnessScore: 0.61,
+            note: "Activity 68%, brightness 70%, contrast 66%, clarity 61%.",
+            position: 0,
+            selectedAt: "2026-04-20T12:11:00.000Z",
+          },
+        ],
+      },
       createdAt: "2026-04-20T12:00:00.000Z",
       updatedAt: "2026-04-20T12:00:00.000Z",
+    };
+    const updatedAsset = {
+      ...asset,
+      thumbnailOutputSet: {
+        updatedAt: "2026-04-20T12:11:30.000Z",
+        outputs: [
+          ...(asset.thumbnailOutputSet?.outputs ?? []),
+          {
+            id: "thumb_output_002",
+            assetId: "asset_clip_global_001",
+            sourceSuggestionId: "thumbnail_asset_clip_global_001_29000",
+            imagePath: "/tmp/highlightsmith-thumbnails/asset_clip_global_001_02.jpg",
+            timestampSeconds: 29,
+            score: 0.69,
+            activityScore: 0.64,
+            brightnessScore: 0.63,
+            contrastScore: 0.67,
+            sharpnessScore: 0.58,
+            note: "Activity 64%, brightness 63%, contrast 67%, clarity 58%.",
+            position: 1,
+            selectedAt: "2026-04-20T12:11:30.000Z",
+          },
+        ],
+      },
     };
     const pair = {
       id: "pair_story_arc_001",
@@ -458,6 +538,24 @@ describe("api smoke routes", () => {
       createdAt: "2026-04-20T12:10:00.000Z",
       updatedAt: "2026-04-20T12:10:00.000Z",
     };
+    const thumbnailArtifact = {
+      id: "artifact_thumbnail_001",
+      assetId: asset.id,
+      jobId: indexJob.id,
+      kind: "THUMBNAIL_SUGGESTIONS",
+      method: "FFMPEG_TIMELINE_THUMBNAILS_V1",
+      bucketDurationSeconds: 30,
+      durationSeconds: 42,
+      bucketCount: 2,
+      confidenceScore: 0.71,
+      payloadByteSize: 420,
+      sampleWindowCount: 8,
+      thumbnailSuggestions: asset.thumbnailSuggestionSet.suggestions,
+      note:
+        "Bounded ffmpeg thumbnail suggestions scored from local activity buckets and simple visual clarity heuristics.",
+      createdAt: "2026-04-20T12:10:10.000Z",
+      updatedAt: "2026-04-20T12:10:10.000Z",
+    };
     const alignmentJob = {
       id: "align_job_001",
       pairId: pair.id,
@@ -528,6 +626,20 @@ describe("api smoke routes", () => {
         return;
       }
 
+      if (
+        request.method === "POST" &&
+        request.url === `/library/assets/${asset.id}/thumbnail-outputs`
+      ) {
+        response.setHeader("content-type", "application/json");
+        response.end(
+          JSON.stringify({
+            status: "updated",
+            asset: updatedAsset,
+          }),
+        );
+        return;
+      }
+
       if (request.method === "GET" && request.url === "/library/pairs") {
         response.setHeader("content-type", "application/json");
         response.end(
@@ -566,7 +678,7 @@ describe("api smoke routes", () => {
         response.end(
           JSON.stringify({
             status: "listed",
-            artifacts: [artifact],
+            artifacts: [thumbnailArtifact, artifact],
           }),
         );
         return;
@@ -580,7 +692,7 @@ describe("api smoke routes", () => {
         response.end(
           JSON.stringify({
             status: "listed",
-            artifacts: [artifact],
+            artifacts: [thumbnailArtifact, artifact],
           }),
         );
         return;
@@ -745,6 +857,16 @@ describe("api smoke routes", () => {
         method: "GET",
         url: "/api/library/index-artifacts",
       });
+      const replaceThumbnailOutputsResponse = await app.inject({
+        method: "POST",
+        url: `/api/library/assets/${asset.id}/thumbnail-outputs`,
+        payload: {
+          selectedSuggestionIds: [
+            "thumbnail_asset_clip_global_001_11000",
+            "thumbnail_asset_clip_global_001_29000",
+          ],
+        },
+      });
       const listAssetIndexArtifactsResponse = await app.inject({
         method: "GET",
         url: `/api/library/assets/${asset.id}/index-artifacts`,
@@ -792,6 +914,7 @@ describe("api smoke routes", () => {
       assert.equal(createPairResponse.statusCode, 200);
       assert.equal(listIndexJobsResponse.statusCode, 200);
       assert.equal(listIndexArtifactsResponse.statusCode, 200);
+      assert.equal(replaceThumbnailOutputsResponse.statusCode, 200);
       assert.equal(listAssetIndexArtifactsResponse.statusCode, 200);
       assert.equal(listAlignmentJobsResponse.statusCode, 200);
       assert.equal(listAlignmentMatchesResponse.statusCode, 200);
@@ -808,6 +931,10 @@ describe("api smoke routes", () => {
       const createdPair = createPairResponse.json() as { id: string };
       const listedJobs = listIndexJobsResponse.json() as Array<{ id: string }>;
       const listedArtifacts = listIndexArtifactsResponse.json() as Array<{ id: string }>;
+      const replacedThumbnailOutputsAsset = replaceThumbnailOutputsResponse.json() as {
+        id: string;
+        thumbnailOutputSet?: { outputs: Array<{ id: string }> };
+      };
       const listedAssetArtifacts = listAssetIndexArtifactsResponse.json() as Array<{ id: string }>;
       const listedAlignmentJobs = listAlignmentJobsResponse.json() as Array<{ id: string }>;
       const listedAlignmentMatches = listAlignmentMatchesResponse.json() as Array<{ id: string }>;
@@ -829,8 +956,19 @@ describe("api smoke routes", () => {
       assert.equal(listedPairs[0]?.id, pair.id);
       assert.equal(createdPair.id, pair.id);
       assert.equal(listedJobs[0]?.id, indexJob.id);
-      assert.equal(listedArtifacts[0]?.id, artifact.id);
-      assert.equal(listedAssetArtifacts[0]?.id, artifact.id);
+      assert.equal(replacedThumbnailOutputsAsset.id, asset.id);
+      assert.equal(
+        replacedThumbnailOutputsAsset.thumbnailOutputSet?.outputs.length,
+        2,
+      );
+      assert.deepEqual(
+        listedArtifacts.map((listedArtifact) => listedArtifact.id).sort(),
+        [artifact.id, thumbnailArtifact.id].sort(),
+      );
+      assert.deepEqual(
+        listedAssetArtifacts.map((listedArtifact) => listedArtifact.id).sort(),
+        [artifact.id, thumbnailArtifact.id].sort(),
+      );
       assert.equal(listedAlignmentJobs[0]?.id, alignmentJob.id);
       assert.equal(listedAlignmentMatches[0]?.id, alignmentMatch.id);
       assert.equal(listedPairAlignmentMatches[0]?.id, alignmentMatch.id);

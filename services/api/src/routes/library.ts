@@ -6,6 +6,7 @@ import {
   createMediaEditPairRequestSchema,
   createMediaIndexJobRequestSchema,
   createMediaLibraryAssetRequestSchema,
+  replaceMediaThumbnailOutputsRequestSchema,
 } from "@highlightsmith/shared-types";
 import {
   AnalyzerBridgeError,
@@ -15,6 +16,7 @@ import {
   createMediaEditPair,
   createMediaIndexJob,
   createMediaLibraryAsset,
+  replaceMediaThumbnailOutputs,
   requestMediaAlignmentJobs,
   requestMediaAlignmentMatches,
   requestMediaEditPairs,
@@ -74,6 +76,51 @@ export const libraryRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
   });
+
+  fastify.post(
+    "/api/library/assets/:assetId/thumbnail-outputs",
+    async (request, reply) => {
+      const params = request.params as { assetId?: string };
+      if (!params.assetId) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          message: "assetId is required",
+        });
+      }
+
+      const parsedRequest = replaceMediaThumbnailOutputsRequestSchema.safeParse(
+        request.body,
+      );
+      if (!parsedRequest.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          message:
+            parsedRequest.error.issues[0]?.message ?? "Invalid request body",
+        });
+      }
+
+      try {
+        const asset = await replaceMediaThumbnailOutputs(
+          params.assetId,
+          parsedRequest.data,
+        );
+        return reply.code(200).send(asset);
+      } catch (error) {
+        if (error instanceof AnalyzerBridgeError) {
+          const statusCode = error.statusCode >= 500 ? 502 : error.statusCode;
+          return reply.code(statusCode).send({
+            error: "thumbnail_output_update_failed",
+            message: error.message,
+          });
+        }
+
+        return reply.code(500).send({
+          error: "thumbnail_output_update_failed",
+          message: "Unexpected analyzer bridge failure",
+        });
+      }
+    },
+  );
 
   fastify.get("/api/library/pairs", async (_request, reply) => {
     try {

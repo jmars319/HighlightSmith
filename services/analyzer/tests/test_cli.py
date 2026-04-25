@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import shutil
 import struct
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -187,7 +189,7 @@ class AnalyzerScaffoldTests(unittest.TestCase):
             self.assertEqual(vod_index_result.status.value, "SUCCEEDED")
             self.assertEqual(edit_index_result.status.value, "SUCCEEDED")
             self.assertEqual(len(jobs), 2)
-            self.assertEqual(len(artifacts), 2)
+            self.assertGreaterEqual(len(artifacts), 2)
             self.assertEqual(alignment_result.status.value, "SUCCEEDED")
             self.assertEqual(len(alignment_jobs), 1)
             self.assertGreaterEqual(len(alignment_matches), 1)
@@ -206,6 +208,24 @@ class AnalyzerScaffoldTests(unittest.TestCase):
                 stored_vod_asset.index_artifact_summary.audio_fingerprint_bucket_count,
                 0,
             )
+            thumbnail_artifacts = [
+                artifact
+                for artifact in artifacts
+                if artifact.kind.value == "THUMBNAIL_SUGGESTIONS"
+            ]
+            if thumbnail_artifacts:
+                self.assertIsNotNone(stored_vod_asset.thumbnail_suggestion_set)
+                assert stored_vod_asset.thumbnail_suggestion_set is not None
+                self.assertGreaterEqual(
+                    len(stored_vod_asset.thumbnail_suggestion_set.suggestions),
+                    1,
+                )
+                self.assertTrue(
+                    all(
+                        Path(suggestion.image_path).exists()
+                        for suggestion in stored_vod_asset.thumbnail_suggestion_set.suggestions
+                    )
+                )
             self.assertEqual(pairs[0].id, pair.id)
             self.assertEqual(pairs[0].vod_asset_id, vod_asset.id)
             self.assertEqual(pairs[0].edit_asset_id, edit_asset.id)
@@ -215,6 +235,84 @@ class AnalyzerScaffoldTests(unittest.TestCase):
             self.assertEqual(
                 pairs[0].alignment_segments[1].kind.value,
                 "PROVISIONAL_REMOVED_POOL",
+            )
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg unavailable on this machine")
+    def test_real_video_index_can_persist_thumbnail_suggestions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            media_path = Path(temp_dir) / "thumbnail-source.mp4"
+            result = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=size=640x360:rate=30:duration=6",
+                    "-c:v",
+                    "mpeg4",
+                    str(media_path),
+                ],
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr.decode("utf-8", errors="ignore"))
+
+            asset = create_media_library_asset_request(
+                asset_type="VOD",
+                scope="GLOBAL",
+                source_type="LOCAL_FILE_PATH",
+                source_value=str(media_path),
+                title="Thumbnail source",
+                database_path=database_path,
+            )
+
+            store = SessionStore(database_path)
+            job = store.create_media_index_job(asset.id)
+            completed_job = run_media_index_job_inline(
+                job.id,
+                database_path=database_path,
+            )
+
+            self.assertEqual(completed_job.status.value, "SUCCEEDED")
+            stored_asset = next(
+                candidate_asset
+                for candidate_asset in store.list_media_library_assets()
+                if candidate_asset.id == asset.id
+            )
+            self.assertIsNotNone(stored_asset.thumbnail_suggestion_set)
+            assert stored_asset.thumbnail_suggestion_set is not None
+            self.assertGreaterEqual(
+                len(stored_asset.thumbnail_suggestion_set.suggestions),
+                1,
+            )
+            self.assertTrue(
+                all(
+                    Path(suggestion.image_path).exists()
+                    for suggestion in stored_asset.thumbnail_suggestion_set.suggestions
+                )
+            )
+            selected_suggestion_ids = [
+                suggestion.id
+                for suggestion in stored_asset.thumbnail_suggestion_set.suggestions[:2]
+            ]
+            updated_asset = store.replace_media_thumbnail_outputs(
+                asset.id,
+                selected_suggestion_ids=selected_suggestion_ids,
+            )
+            self.assertIsNotNone(updated_asset.thumbnail_output_set)
+            assert updated_asset.thumbnail_output_set is not None
+            self.assertEqual(
+                len(updated_asset.thumbnail_output_set.outputs),
+                len(selected_suggestion_ids),
+            )
+            self.assertEqual(
+                [output.source_suggestion_id for output in updated_asset.thumbnail_output_set.outputs],
+                selected_suggestion_ids,
             )
 
     def test_decoded_audio_fingerprint_can_be_built_from_pcm(self) -> None:

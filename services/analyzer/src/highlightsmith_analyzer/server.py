@@ -22,6 +22,7 @@ from .service import (
     create_profile_request,
     cancel_media_index_job_request,
     create_media_index_job_request,
+    replace_media_thumbnail_outputs_request,
     list_media_edit_pairs_request,
     list_media_alignment_jobs_request,
     list_media_alignment_matches_request,
@@ -553,6 +554,69 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if request_path.startswith("/library/assets/") and request_path.endswith("/thumbnail-outputs"):
+            asset_id = self._asset_id_from_thumbnail_outputs_path(request_path)
+            if not asset_id:
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_request",
+                        "message": "assetId is required",
+                    },
+                )
+                return
+
+            payload = self._read_json_body()
+            selected_suggestion_ids = payload.get("selectedSuggestionIds")
+            if selected_suggestion_ids is None:
+                selected_suggestion_ids = []
+            if not isinstance(selected_suggestion_ids, list):
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_request",
+                        "message": "selectedSuggestionIds must be an array",
+                    },
+                )
+                return
+
+            try:
+                asset = replace_media_thumbnail_outputs_request(
+                    asset_id,
+                    selected_suggestion_ids=[
+                        str(suggestion_id).strip()
+                        for suggestion_id in selected_suggestion_ids
+                    ],
+                    database_path=self._database_path_from_payload(payload),
+                )
+            except KeyError as error:
+                self._send_json(
+                    404,
+                    {
+                        "error": "not_found",
+                        "message": str(error),
+                    },
+                )
+                return
+            except ValueError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": "thumbnail_output_update_failed",
+                        "message": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "status": "updated",
+                    "asset": _convert(asset),
+                },
+            )
+            return
+
         if request_path == "/library/pairs":
             payload = self._read_json_body()
             try:
@@ -918,6 +982,11 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
     def _asset_id_from_index_artifacts_path(self, request_path: str) -> str:
         asset_path = request_path.removeprefix("/library/assets/")
         asset_id, _, _ = asset_path.partition("/index-artifacts")
+        return unquote(asset_id).strip()
+
+    def _asset_id_from_thumbnail_outputs_path(self, request_path: str) -> str:
+        asset_path = request_path.removeprefix("/library/assets/")
+        asset_id, _, _ = asset_path.partition("/thumbnail-outputs")
         return unquote(asset_id).strip()
 
     def _pair_id_from_alignment_jobs_path(self, request_path: str) -> str:
