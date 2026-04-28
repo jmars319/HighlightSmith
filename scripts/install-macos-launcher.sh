@@ -7,24 +7,24 @@ section "Install macOS Launcher"
 require_cmd mkdir
 require_cmd chmod
 require_cmd cp
-require_cmd open
 require_path "apps/desktopapp/src-tauri/icons/icon.icns"
-require_path "Launch HighlightSmith.command"
+require_path "scripts/launch-hs.sh"
 
-launcher_name="${HIGHLIGHTSMITH_LAUNCHER_NAME:-HighlightSmith Launcher}"
+launcher_name="${HIGHLIGHTSMITH_LAUNCHER_NAME:-HighlightSmith}"
 launcher_bundle_id="${HIGHLIGHTSMITH_LAUNCHER_BUNDLE_ID:-com.highlightsmith.launcher}"
 launcher_install_dir="${HOME}/Applications"
 launcher_app_name="${launcher_name}.app"
 launcher_app_path="${launcher_install_dir}/${launcher_app_name}"
+legacy_launcher_app_path="${launcher_install_dir}/HighlightSmith Launcher.app"
 icon_source_path="${REPO_ROOT}/apps/desktopapp/src-tauri/icons/icon.icns"
-command_path="${REPO_ROOT}/Launch HighlightSmith.command"
+launcher_script_path="${REPO_ROOT}/scripts/launch-hs.sh"
 launch_services_register="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/highlightsmith-launcher.XXXXXX")"
 tmp_app_path="${tmp_dir}/${launcher_app_name}"
 macos_dir="${tmp_app_path}/Contents/MacOS"
 resources_dir="${tmp_app_path}/Contents/Resources"
 launcher_exec_path="${macos_dir}/HighlightSmithLauncher"
-command_path_quoted=""
+launcher_script_path_quoted=""
 
 cleanup() {
   rm -rf "${tmp_dir}"
@@ -34,13 +34,13 @@ trap cleanup EXIT
 
 mkdir -p "${launcher_install_dir}"
 mkdir -p "${macos_dir}" "${resources_dir}"
-printf -v command_path_quoted '%q' "${command_path}"
+printf -v launcher_script_path_quoted '%q' "${launcher_script_path}"
 
 cat >"${launcher_exec_path}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec /usr/bin/open -a Terminal ${command_path_quoted}
+exec bash ${launcher_script_path_quoted}
 EOF
 chmod +x "${launcher_exec_path}"
 
@@ -83,6 +83,11 @@ if [[ -e "${launcher_app_path}" ]]; then
   rm -rf "${launcher_app_path}"
 fi
 
+if [[ "${legacy_launcher_app_path}" != "${launcher_app_path}" ]] && [[ -e "${legacy_launcher_app_path}" ]]; then
+  info "Removing legacy launcher name"
+  rm -rf "${legacy_launcher_app_path}"
+fi
+
 mv "${tmp_app_path}" "${launcher_app_path}"
 touch "${launcher_app_path}"
 
@@ -96,4 +101,4 @@ fi
 
 success "Installed ${launcher_app_name}"
 note "Location: ${launcher_app_path}"
-info "Search for “HighlightSmith Launcher” in Spotlight or open it from ~/Applications."
+info "Search for “HighlightSmith” in Spotlight or open it from ~/Applications."

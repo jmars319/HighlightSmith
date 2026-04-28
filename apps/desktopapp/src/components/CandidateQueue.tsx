@@ -40,6 +40,7 @@ type CandidateQueueProps = {
   onPresentationModeChange: (value: ProfilePresentationMode) => void;
   selectedCandidateVisibleInQueue: boolean;
   onSelectCandidate: (candidateId: string) => void;
+  onPreviewCandidate: (candidateId: string) => void;
   onSelectNextPending: () => void;
   isStrongMatchFallback: boolean;
 };
@@ -72,6 +73,7 @@ export function CandidateQueue({
   onPresentationModeChange,
   selectedCandidateVisibleInQueue,
   onSelectCandidate,
+  onPreviewCandidate,
   onSelectNextPending,
   isStrongMatchFallback,
 }: CandidateQueueProps) {
@@ -273,6 +275,19 @@ export function CandidateQueue({
                   secondaryText={`${plainDescription.summary}${plainDescription.detail ? ` ${plainDescription.detail}` : ""}`}
                   selected={isSelected}
                 />
+                <div className="candidate-list-item-actions">
+                  <button
+                    className="button-secondary candidate-preview-button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectCandidate(candidate.id);
+                      onPreviewCandidate(candidate.id);
+                    }}
+                    type="button"
+                  >
+                    View moment
+                  </button>
+                </div>
               </div>
             );
           })}

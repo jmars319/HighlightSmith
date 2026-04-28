@@ -54,6 +54,8 @@ That runs environment checks and installs workspace dependencies.
 
 ```bash
 pnpm install:launcher
+pnpm launch:hs
+pnpm stop:hs
 pnpm dev:hs
 pnpm dev:desktop
 pnpm dev:web
@@ -63,9 +65,11 @@ pnpm dev:api
 pnpm dev:both
 ```
 
-`install:launcher` installs a real macOS app bundle at `~/Applications/HighlightSmith Launcher.app` that opens the same local desktop stack.
-`dev:hs` starts the exact local desktop stack: analyzer, then API, then the Tauri desktop app after both health checks pass.
-On macOS, you can also double-click `Launch HighlightSmith.command` in the repo root to start the same desktop stack from Finder.
+`install:launcher` installs a real macOS app bundle at `~/Applications/HighlightSmith.app` that starts HighlightSmith without leaving Terminal open.
+`launch:hs` reuses or starts the local analyzer + API services in the background, rebuilds the desktop app only when its source has changed, and opens the compiled Tauri app.
+`stop:hs` stops the background analyzer, API, and tracked desktop app process started by the launcher.
+`dev:hs` remains the live development stack: analyzer, then API, then the Tauri dev app after both health checks pass.
+On macOS, you can also double-click `Launch HighlightSmith.command` in the repo root to run the same no-terminal launcher flow from Finder.
 `dev:both` starts analyzer + API + webapp together as the easiest multi-surface development loop from the repo root.
 The API bridge currently runs directly from TypeScript with `tsx`.
 `dev:desktop` remains the primary product-development loop.

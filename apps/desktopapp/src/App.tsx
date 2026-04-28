@@ -76,6 +76,10 @@ import {
 import { LayoutShell, TranscriptSnippetBlock } from "@highlightsmith/ui";
 import { CandidateDetail } from "./components/CandidateDetail";
 import { CandidateQueue } from "./components/CandidateQueue";
+import {
+  MomentPreviewModal,
+  type MomentPreviewMode,
+} from "./components/MomentPreviewModal";
 import { SessionOverview } from "./components/SessionOverview";
 import { CandidateTimeline } from "./components/CandidateTimeline";
 import { ProfileWorkspace } from "./components/ProfileWorkspace";
@@ -142,6 +146,10 @@ export default function App() {
     useState<ProfilePresentationMode>("ALL_CANDIDATES");
   const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>({});
   const [selectedMediaPath, setSelectedMediaPath] = useState("");
+  const [momentPreviewState, setMomentPreviewState] = useState<{
+    candidateId: string;
+    mode: MomentPreviewMode;
+  } | null>(null);
   const [analysisProfileId, setAnalysisProfileId] = useState(defaultProfileId);
   const [analysisTitle, setAnalysisTitle] = useState("");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -333,6 +341,14 @@ export default function App() {
 
   const selectedDecision = selectedCandidate
     ? decisionsByCandidateId[selectedCandidate.id]
+    : undefined;
+  const previewCandidate = momentPreviewState
+    ? sessionCandidates.find(
+        (candidate) => candidate.id === momentPreviewState.candidateId,
+      ) ?? null
+    : null;
+  const previewDecision = previewCandidate
+    ? decisionsByCandidateId[previewCandidate.id]
     : undefined;
   const selectedCandidateVisibleInQueue = selectedCandidate
     ? queueCandidates.some((candidate) => candidate.id === selectedCandidate.id)
@@ -764,6 +780,14 @@ export default function App() {
   }, [apiBaseUrl, selectedProfileId]);
 
   useEffect(() => {
+    if (activePage === "candidate-review") {
+      return;
+    }
+
+    setMomentPreviewState(null);
+  }, [activePage]);
+
+  useEffect(() => {
     if (!projectSession) {
       return;
     }
@@ -871,6 +895,12 @@ export default function App() {
         return;
       }
 
+      if (normalizedKey === "v") {
+        event.preventDefault();
+        handleOpenMomentPreview(selectedCandidate?.id ?? null);
+        return;
+      }
+
       if (normalizedKey === "n") {
         event.preventDefault();
         handleSelectNextPending();
@@ -910,10 +940,12 @@ export default function App() {
     handleAccept,
     handleExpandResolution,
     handleExpandSetup,
+    handleOpenMomentPreview,
     handleReject,
     handleSelectNextPending,
     handleSelectNextVisible,
     handleSelectPreviousVisible,
+    selectedCandidate?.id,
   ]);
 
   async function handlePickMedia() {
@@ -1322,6 +1354,25 @@ export default function App() {
     });
   }
 
+  function handleOpenMomentPreview(
+    candidateId: string | null,
+    mode: MomentPreviewMode = "SUGGESTED_SEGMENT",
+  ) {
+    if (!candidateId) {
+      return;
+    }
+
+    setSelectedCandidateId(candidateId);
+    setMomentPreviewState({
+      candidateId,
+      mode,
+    });
+  }
+
+  function handleCloseMomentPreview() {
+    setMomentPreviewState(null);
+  }
+
   function applyProjectSession(
     nextSession: ProjectSession,
     options: {
@@ -1389,6 +1440,7 @@ export default function App() {
     setAnalysisProfileId(nextSession.profileId);
     setSelectedProfileId(nextSession.profileId);
     setAnalysisTitle(nextSession.title);
+    setMomentPreviewState(null);
     if (!options.preserveFilters) {
       setSearchValue("");
       setBandFilter("ALL");
@@ -2039,6 +2091,9 @@ export default function App() {
             onSelectNextPending={handleSelectNextPending}
             onBandFilterChange={setBandFilter}
             onPresentationModeChange={setPresentationMode}
+            onPreviewCandidate={(candidateId) =>
+              handleOpenMomentPreview(candidateId)
+            }
             onReviewQueueModeChange={handleReviewQueueModeChange}
             onSearchChange={handleSearchChange}
             onSelectCandidate={handleSelectCandidate}
@@ -2058,8 +2113,18 @@ export default function App() {
             candidate={selectedCandidate}
             candidateCount={sessionCandidates.length}
             candidateIndex={Math.max(selectedCandidateIndex, 0)}
+            canPreview={Boolean(projectSession?.mediaSource.path)}
             decision={selectedDecision}
             exportPreview={timestampPreview}
+            onPreviewDetectedMoment={() =>
+              handleOpenMomentPreview(
+                selectedCandidate?.id ?? null,
+                "DETECTED_MOMENT",
+              )
+            }
+            onPreviewSuggestedSegment={() =>
+              handleOpenMomentPreview(selectedCandidate?.id ?? null)
+            }
             profileMatchingSummary={profileMatchingSummary}
             selectedCandidateVisibleInQueue={selectedCandidateVisibleInQueue}
             transcript={projectSession?.transcript ?? []}
@@ -2191,6 +2256,10 @@ export default function App() {
               <span>Jump to the next undecided moment</span>
             </li>
             <li>
+              <strong>V</strong>
+              <span>Open the selected moment in the video player</span>
+            </li>
+            <li>
               <strong>J / L</strong>
               <span>Move to the previous or next visible moment</span>
             </li>
@@ -2257,6 +2326,16 @@ export default function App() {
           totalCount={sessionCandidates.length}
         />
         {renderDesktopPage()}
+        <MomentPreviewModal
+          apiBaseUrl={apiBaseUrl}
+          candidate={previewCandidate}
+          decision={previewDecision}
+          initialMode={momentPreviewState?.mode ?? "SUGGESTED_SEGMENT"}
+          isOpen={activePage === "candidate-review" && previewCandidate !== null}
+          mediaDurationSeconds={projectSession?.mediaSource.durationSeconds ?? 0}
+          mediaPath={projectSession?.mediaSource.path ?? selectedMediaPath}
+          onClose={handleCloseMomentPreview}
+        />
       </LayoutShell>
     </div>
   );

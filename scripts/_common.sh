@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+prepend_path_if_dir() {
+  local dir="$1"
+
+  [[ -d "${dir}" ]] || return 0
+  case ":${PATH:-}:" in
+    *":${dir}:"*) ;;
+    *)
+      PATH="${dir}${PATH:+:${PATH}}"
+      ;;
+  esac
+}
+
+prepend_path_if_dir "${HOME}/.cargo/bin"
+prepend_path_if_dir "${HOME}/.local/bin"
+prepend_path_if_dir "/opt/homebrew/opt/node@22/bin"
+prepend_path_if_dir "/opt/homebrew/bin"
+prepend_path_if_dir "/opt/homebrew/sbin"
+prepend_path_if_dir "/usr/local/bin"
+prepend_path_if_dir "/usr/local/sbin"
+export PATH
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 

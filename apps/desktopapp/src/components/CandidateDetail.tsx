@@ -35,10 +35,13 @@ type CandidateDetailProps = {
   profileMatchingSummary: ProfileMatchingSummary;
   selectedCandidateVisibleInQueue: boolean;
   visibleCandidateCount: number;
+  canPreview: boolean;
   onAccept: () => void;
   onReject: () => void;
   onExpandSetup: () => void;
   onExpandResolution: () => void;
+  onPreviewDetectedMoment: () => void;
+  onPreviewSuggestedSegment: () => void;
   onOpenNextPendingSession: () => void;
   onSelectPreviousVisible: () => void;
   onSelectNextVisible: () => void;
@@ -65,10 +68,13 @@ export function CandidateDetail({
   profileMatchingSummary,
   selectedCandidateVisibleInQueue,
   visibleCandidateCount,
+  canPreview,
   onAccept,
   onReject,
   onExpandSetup,
   onExpandResolution,
+  onPreviewDetectedMoment,
+  onPreviewSuggestedSegment,
   onOpenNextPendingSession,
   onSelectPreviousVisible,
   onSelectNextVisible,
@@ -200,6 +206,33 @@ export function CandidateDetail({
           ) : null}
         </article>
       </div>
+
+      <section className="review-panel preview-launch-panel">
+        <div className="section-title-row">
+          <h3>Watch this moment</h3>
+          <span className="review-status-copy">
+            Open the source video at this exact spot.
+          </span>
+        </div>
+        <div className="action-row">
+          <button
+            className="button-secondary"
+            disabled={!canPreview}
+            onClick={onPreviewSuggestedSegment}
+            type="button"
+          >
+            View suggested clip
+          </button>
+          <button
+            className="button-secondary"
+            disabled={!canPreview}
+            onClick={onPreviewDetectedMoment}
+            type="button"
+          >
+            View detected moment
+          </button>
+        </div>
+      </section>
 
       <section className="review-panel review-panel-primary">
         <div className="section-title-row">
