@@ -41,21 +41,20 @@ export function SessionOverview({
   );
   const selectedCandidateCopy =
     candidateCount === 0
-      ? "No candidates found"
+      ? "No moments found"
       : selectedCandidateIndex >= 0
-        ? `Candidate ${selectedCandidateIndex + 1} selected`
-        : "Review queue ready";
+        ? `Moment ${selectedCandidateIndex + 1} selected`
+        : "Review ready";
 
   return (
     <section className="session-overview-panel glass-panel">
       <div className="session-overview-header">
         <div>
-          <p className="eyebrow">Analysis output</p>
+          <p className="eyebrow">Current session</p>
           <h2>{session.title}</h2>
           <p className="session-overview-copy">
-            Local session for {session.mediaSource.fileName}. HighlightSmith
-            returned {candidateCount} candidate
-            {candidateCount === 1 ? "" : "s"} for review.
+            {session.mediaSource.fileName} • {formatLongTime(session.mediaSource.durationSeconds)}
+            {" • "}scanned {formatTimestamp(session.updatedAt)}
           </p>
         </div>
         <div className="session-overview-badges">
@@ -70,72 +69,20 @@ export function SessionOverview({
         </div>
       </div>
 
-      <div className="session-overview-grid">
+      <div className="session-overview-strip">
         <article className="session-overview-card">
-          <span className="detail-label">Source recording</span>
-          <strong>{session.mediaSource.fileName}</strong>
-          <p className="session-overview-path">{session.mediaSource.path}</p>
-          <p>
-            {formatLongTime(session.mediaSource.durationSeconds)} •{" "}
-            {session.mediaSource.kind.toLowerCase()} •{" "}
-            {session.mediaSource.format}
-          </p>
-        </article>
-
-        <article className="session-overview-card">
-          <span className="detail-label">Profile</span>
-          <strong>{profile.name}</strong>
-          <p>{profile.description}</p>
-          <p>{profileMatchingSummary.note}</p>
-          <p>
-            {profileMatchingSummary.usableLocalExampleCount} usable local
-            example
-            {profileMatchingSummary.usableLocalExampleCount === 1
-              ? ""
-              : "s"} • {profileMatchingSummary.referenceOnlyExampleCount}{" "}
-            reference-only
-          </p>
-        </article>
-
-        <article className="session-overview-card">
-          <span className="detail-label">Analyzed</span>
-          <strong>{formatTimestamp(session.createdAt)}</strong>
-          <p>Updated {formatTimestamp(session.updatedAt)}</p>
-        </article>
-
-        <article
-          className={`session-overview-card coverage ${analysisCoverageTone(session.analysisCoverage)}`}
-        >
-          <div className="section-title-row">
-            <span className="detail-label">Analysis coverage</span>
-            <span
-              className={`analysis-coverage-pill ${analysisCoverageTone(session.analysisCoverage)}`}
-            >
-              {formatAnalysisCoverageBand(session.analysisCoverage.band)}
-            </span>
-          </div>
-          <strong>{sessionQualitySummary}</strong>
-          <p>{session.analysisCoverage.note}</p>
-          {session.analysisCoverage.flags.length > 0 ? (
-            <div className="analysis-coverage-flag-row">
-              {session.analysisCoverage.flags.map((flag) => (
-                <span className="analysis-coverage-flag" key={flag}>
-                  {formatAnalysisCoverageFlag(flag)}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </article>
-
-        <article className="session-overview-card">
-          <span className="detail-label">Candidate output</span>
+          <span className="detail-label">Review progress</span>
           <strong>
-            {candidateCount} candidate{candidateCount === 1 ? "" : "s"}
+            {candidateCount === 0
+              ? "No moments to review"
+              : pendingCount === 0
+                ? "Everything reviewed"
+                : `${pendingCount} still need review`}
           </strong>
           <p>
             {candidateCount === 0
-              ? "Analysis returned no strong signals for this session."
-              : `${pendingCount} pending • ${acceptedCount} accepted • ${rejectedCount} rejected`}
+              ? "HS did not find any strong signals in this video."
+              : `${acceptedCount} kept • ${rejectedCount} skipped • ${candidateCount} total moments`}
           </p>
         </article>
 
@@ -144,29 +91,88 @@ export function SessionOverview({
           <strong>{selectedCandidateCopy}</strong>
           <p>
             {pendingCount === 0
-              ? "This session is fully reviewed."
-              : `${pendingCount} candidate${pendingCount === 1 ? "" : "s"} still need decisions.`}
+              ? "Use the completion card below to export or move on."
+              : "Keep moving through the queue until the remaining moments have decisions."}
+          </p>
+        </article>
+
+        <article className="session-overview-card">
+          <span className="detail-label">Reference profile</span>
+          <strong>{profile.name}</strong>
+          <p>{profileMatchingSummary.note}</p>
+          <p>
+            {profileMatchingSummary.usableLocalExampleCount} usable local
+            reference
+            {profileMatchingSummary.usableLocalExampleCount === 1 ? "" : "s"}
           </p>
         </article>
       </div>
 
-      {session.mediaSource.ingestNotes.length > 0 ? (
-        <article className="session-overview-alert">
-          <span className="detail-label">Ingest notes</span>
-          <ul className="plain-list session-overview-note-list">
-            {session.mediaSource.ingestNotes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
-        </article>
-      ) : null}
+      <details className="utility-block internal-details session-overview-details">
+        <summary className="internal-details-summary">
+          <span>More scan details</span>
+          <span className="queue-count">Optional</span>
+        </summary>
+
+        <div className="session-overview-grid">
+          <article className="session-overview-card">
+            <span className="detail-label">Video</span>
+            <strong>{session.mediaSource.fileName}</strong>
+            <p className="session-overview-path">{session.mediaSource.path}</p>
+            <p>
+              {session.mediaSource.kind.toLowerCase()} • {session.mediaSource.format}
+            </p>
+          </article>
+
+          <article className="session-overview-card">
+            <span className="detail-label">Scanned</span>
+            <strong>{formatTimestamp(session.createdAt)}</strong>
+            <p>Updated {formatTimestamp(session.updatedAt)}</p>
+          </article>
+
+          <article
+            className={`session-overview-card coverage ${analysisCoverageTone(session.analysisCoverage)}`}
+          >
+            <div className="section-title-row">
+              <span className="detail-label">Scan quality</span>
+              <span
+                className={`analysis-coverage-pill ${analysisCoverageTone(session.analysisCoverage)}`}
+              >
+                {formatAnalysisCoverageBand(session.analysisCoverage.band)}
+              </span>
+            </div>
+            <strong>{sessionQualitySummary}</strong>
+            <p>{session.analysisCoverage.note}</p>
+            {session.analysisCoverage.flags.length > 0 ? (
+              <div className="analysis-coverage-flag-row">
+                {session.analysisCoverage.flags.map((flag) => (
+                  <span className="analysis-coverage-flag" key={flag}>
+                    {formatAnalysisCoverageFlag(flag)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </article>
+        </div>
+
+        {session.mediaSource.ingestNotes.length > 0 ? (
+          <article className="session-overview-alert">
+            <span className="detail-label">Scan notes</span>
+            <ul className="plain-list session-overview-note-list">
+              {session.mediaSource.ingestNotes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </article>
+        ) : null}
+      </details>
 
       {candidateCount === 0 ? (
         <article className="session-overview-alert empty">
-          <span className="detail-label">Sparse output</span>
+          <span className="detail-label">No strong moments found</span>
           <p>
-            No candidates found. Review the ingest notes, confirm the input
-            file, or rerun with a different profile.
+            Review the scan notes, confirm the input file, or try a different
+            reference profile.
           </p>
         </article>
       ) : null}

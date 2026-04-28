@@ -3,11 +3,21 @@ from __future__ import annotations
 import threading
 from datetime import datetime, timezone
 
-from .contracts import ProjectSession, ReviewAction, ReviewDecision, Settings, TimeRange
+from .contracts import (
+    MediaLibraryAssetType,
+    ProjectSession,
+    ReviewAction,
+    ReviewDecision,
+    Settings,
+    TimeRange,
+)
 from .pipeline.alignment import build_audio_proxy_alignment_matches
 from .pipeline.indexing import build_media_index_artifacts, build_media_index_summary
 from .pipeline.orchestrator import analyze_media
-from .pipeline.profile_matching import build_profile_match
+from .pipeline.profile_matching import (
+    build_local_example_feature_summary,
+    build_profile_match,
+)
 from .storage.session_store import SessionStore
 
 DEFAULT_DATABASE_PATH = ".local/highlightsmith.sqlite3"
@@ -346,7 +356,40 @@ def _run_media_index_job(job_id: str, database_path: str):
         if store.media_index_job_is_cancelled(job_id):
             return store.cancel_media_index_job(job_id)
 
-        return store.complete_media_index_job(job_id, result)
+        feature_summary = None
+        asset_status_detail = None
+        if (
+            asset.asset_type == MediaLibraryAssetType.EDIT
+            and asset.profile_id is not None
+        ):
+            store.update_media_index_job_progress(
+                job_id,
+                progress=0.88,
+                status_detail=(
+                    "Index ready. Building longform edit reference summary for future matching."
+                ),
+            )
+            try:
+                feature_summary = build_local_example_feature_summary(
+                    asset.source_value,
+                    Settings(),
+                )
+                asset_status_detail = (
+                    "Media index ready. This profile-scoped edit can now act as a "
+                    "longform reference for future VOD matching."
+                )
+            except Exception as error:  # pragma: no cover - defensive local-media guard
+                asset_status_detail = (
+                    "Media index ready, but HighlightSmith could not build this "
+                    f"edit's longform reference summary yet: {error}"
+                )
+
+        return store.complete_media_index_job(
+            job_id,
+            result,
+            feature_summary=feature_summary,
+            asset_status_detail=asset_status_detail,
+        )
     except Exception as error:  # pragma: no cover - defensive background guard
         return store.fail_media_index_job(job_id, str(error))
 

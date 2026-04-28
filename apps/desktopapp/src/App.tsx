@@ -73,7 +73,6 @@ import {
   type ProjectSessionSummary,
   type ReplaceMediaThumbnailOutputsRequest,
 } from "@highlightsmith/shared-types";
-import { sqliteSchemaVersion, sqliteTables } from "@highlightsmith/storage";
 import { LayoutShell, TranscriptSnippetBlock } from "@highlightsmith/ui";
 import { CandidateDetail } from "./components/CandidateDetail";
 import { CandidateQueue } from "./components/CandidateQueue";
@@ -97,9 +96,7 @@ type DesktopPage =
   | "projects"
   | "new-analysis"
   | "candidate-review"
-  | "candidate-detail"
-  | "profiles"
-  | "settings";
+  | "profiles";
 type AnalysisReadiness = {
   canAnalyze: boolean;
   statusLabel: string;
@@ -107,17 +104,23 @@ type AnalysisReadiness = {
   detail: string;
   tone: "ready" | "blocked";
 };
+type StartGuide = {
+  statusLabel: string;
+  headline: string;
+  detail: string;
+  steps: string[];
+  ctaLabel: string | null;
+  ctaAction: "references" | "pick-media" | null;
+};
 type ThemeMode = "dark" | "light";
 
 const lastSessionIdStorageKey = "highlightsmith.desktop.last-session-id";
 const themeModeStorageKey = "highlightsmith.desktop.theme-mode";
 const desktopPages: Array<{ id: DesktopPage; label: string }> = [
-  { id: "projects", label: "Projects" },
-  { id: "new-analysis", label: "New Analysis" },
-  { id: "candidate-review", label: "Candidate Review" },
-  { id: "candidate-detail", label: "Candidate Detail" },
-  { id: "profiles", label: "Profiles" },
-  { id: "settings", label: "Settings" },
+  { id: "new-analysis", label: "Start" },
+  { id: "candidate-review", label: "Review" },
+  { id: "profiles", label: "References" },
+  { id: "projects", label: "Backlog" },
 ];
 
 export default function App() {
@@ -134,7 +137,7 @@ export default function App() {
   const [searchValue, setSearchValue] = useState("");
   const [bandFilter, setBandFilter] = useState<FilterValue>("ALL");
   const [reviewQueueMode, setReviewQueueMode] =
-    useState<ReviewQueueMode>("ALL");
+    useState<ReviewQueueMode>("ONLY_PENDING");
   const [presentationMode, setPresentationMode] =
     useState<ProfilePresentationMode>("ALL_CANDIDATES");
   const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>({});
@@ -200,6 +203,14 @@ export default function App() {
   const normalizedSelectedMediaPath = selectedMediaPath.trim();
   const availableProfiles = profiles;
   const hasPersistedProfiles = availableProfiles.length > 0;
+  const hasSavedSessions = projectSummaries.length > 0;
+  const hasReferenceMaterial =
+    availableProfiles.some((profile) => profile.exampleClips.length > 0) ||
+    mediaLibraryAssets.some(
+      (asset) =>
+        asset.scope === "PROFILE" &&
+        (asset.assetType === "CLIP" || asset.assetType === "EDIT"),
+    );
   const selectedDraftProfile = resolveProfile(
     availableProfiles,
     analysisProfileId,
@@ -217,6 +228,14 @@ export default function App() {
       isLoadingProfiles,
     },
   );
+  const startGuide = buildStartGuide({
+    hasPersistedProfiles,
+    hasReferenceMaterial,
+    hasSavedSessions,
+    hasSelectedVideo: Boolean(normalizedSelectedMediaPath),
+  });
+  const showStartGuide =
+    !hasSavedSessions || !hasPersistedProfiles || !hasReferenceMaterial;
   const analysisSourceName = normalizedSelectedMediaPath
     ? extractSourceName(normalizedSelectedMediaPath)
     : null;
@@ -400,8 +419,8 @@ export default function App() {
 
         setProjectsError(
           error instanceof Error
-            ? `Unable to load persisted sessions: ${error.message}`
-            : "Unable to load persisted sessions",
+            ? `Unable to load saved sessions: ${error.message}`
+            : "Unable to load saved sessions",
         );
       } finally {
         if (!isCancelled) {
@@ -558,8 +577,8 @@ export default function App() {
 
         setProfileLibraryError(
           error instanceof Error
-            ? `Unable to load media index jobs: ${error.message}`
-            : "Unable to load media index jobs",
+            ? `Unable to load background activity: ${error.message}`
+            : "Unable to load background activity",
         );
       } finally {
         if (!isCancelled) {
@@ -811,6 +830,92 @@ export default function App() {
     };
   }, [apiBaseUrl]);
 
+  useEffect(() => {
+    if (activePage !== "candidate-review") {
+      return;
+    }
+
+    function handleReviewKeydown(event: KeyboardEvent) {
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
+      if (event.key === "/") {
+        const searchInput = document.getElementById(
+          "review-search-input",
+        ) as HTMLInputElement | null;
+        if (!searchInput) {
+          return;
+        }
+
+        event.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+        return;
+      }
+
+      const normalizedKey = event.key.toLowerCase();
+      if (normalizedKey === "k") {
+        event.preventDefault();
+        handleAccept();
+        return;
+      }
+
+      if (normalizedKey === "x") {
+        event.preventDefault();
+        handleReject();
+        return;
+      }
+
+      if (normalizedKey === "n") {
+        event.preventDefault();
+        handleSelectNextPending();
+        return;
+      }
+
+      if (normalizedKey === "j") {
+        event.preventDefault();
+        handleSelectPreviousVisible();
+        return;
+      }
+
+      if (normalizedKey === "l") {
+        event.preventDefault();
+        handleSelectNextVisible();
+        return;
+      }
+
+      if (event.key === "[") {
+        event.preventDefault();
+        handleExpandSetup();
+        return;
+      }
+
+      if (event.key === "]") {
+        event.preventDefault();
+        handleExpandResolution();
+      }
+    }
+
+    window.addEventListener("keydown", handleReviewKeydown);
+    return () => {
+      window.removeEventListener("keydown", handleReviewKeydown);
+    };
+  }, [
+    activePage,
+    handleAccept,
+    handleExpandResolution,
+    handleExpandSetup,
+    handleReject,
+    handleSelectNextPending,
+    handleSelectNextVisible,
+    handleSelectPreviousVisible,
+  ]);
+
   async function handlePickMedia() {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
@@ -872,7 +977,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Unexpected profile creation failure while contacting the local API",
+          : "Something went wrong while creating the profile.",
       );
       throw error;
     } finally {
@@ -931,7 +1036,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Unexpected example clip save failure while contacting the local API",
+          : "Something went wrong while saving the clip.",
       );
       throw error;
     } finally {
@@ -955,7 +1060,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Unexpected media library save failure while contacting the local API",
+          : "Something went wrong while saving the media reference.",
       );
       throw error;
     } finally {
@@ -975,7 +1080,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Unexpected VOD/edit pair save failure while contacting the local API",
+          : "Something went wrong while saving the VOD/edit comparison.",
       );
       throw error;
     } finally {
@@ -995,7 +1100,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Unexpected media index job failure while contacting the local API",
+          : "Something went wrong while starting background analysis.",
       );
       throw error;
     } finally {
@@ -1027,7 +1132,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Unexpected thumbnail output update failure while contacting the local API",
+          : "Something went wrong while updating thumbnail picks.",
       );
       throw error;
     } finally {
@@ -1053,7 +1158,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Unexpected media index cancellation failure while contacting the local API",
+          : "Something went wrong while cancelling the background job.",
       );
       throw error;
     } finally {
@@ -1080,7 +1185,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Unexpected media alignment job failure while contacting the local API",
+          : "Something went wrong while starting the VOD/edit comparison.",
       );
       throw error;
     } finally {
@@ -1107,7 +1212,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Unexpected media alignment cancellation failure while contacting the local API",
+          : "Something went wrong while cancelling the comparison job.",
       );
       throw error;
     } finally {
@@ -1355,7 +1460,7 @@ export default function App() {
       setAnalysisError(
         error instanceof Error
           ? error.message
-          : "Unexpected analysis failure while contacting the local API",
+          : "Something went wrong while starting the scan.",
       );
     } finally {
       setIsAnalyzing(false);
@@ -1379,7 +1484,7 @@ export default function App() {
       setProjectsError(
         error instanceof Error
           ? error.message
-          : "Unexpected session load failure while contacting the local API",
+          : "Something went wrong while opening the session.",
       );
     }
   }
@@ -1448,13 +1553,13 @@ export default function App() {
         <section className="desktop-placeholder-grid">
           {isLoadingProjects ? (
             <article className="utility-block">
-              <span className="detail-label">Project sessions</span>
-              <h2>Loading persisted backlog sessions...</h2>
+              <span className="detail-label">Backlog</span>
+              <h2>Loading saved review sessions...</h2>
             </article>
           ) : null}
           {projectsError ? (
             <article className="utility-block">
-              <span className="detail-label">Project sessions</span>
+              <span className="detail-label">Backlog</span>
               <p className="analysis-error">{projectsError}</p>
             </article>
           ) : null}
@@ -1462,11 +1567,10 @@ export default function App() {
           !projectsError &&
           projectSummaries.length === 0 ? (
             <article className="utility-block">
-              <span className="detail-label">Project sessions</span>
-              <h2>No persisted sessions yet</h2>
+              <span className="detail-label">Backlog</span>
+              <h2>No saved review sessions yet</h2>
               <p>
-                Run a local analysis to create the first real backlog session in
-                SQLite.
+                Scan a video to create your first review session.
               </p>
             </article>
           ) : null}
@@ -1476,20 +1580,20 @@ export default function App() {
             <article className="utility-block backlog-shortcut-card">
               <div className="panel-header">
                 <div>
-                  <span className="detail-label">Backlog throughput</span>
+                  <span className="detail-label">Backlog</span>
                   <h2>
                     {nextPendingSession
-                      ? "Resume the next useful incomplete session"
-                      : "Backlog review is currently clear"}
+                      ? "Continue the next session that still needs decisions"
+                      : "Your backlog is clear"}
                   </h2>
                   <p>
                     {nextPendingSession
-                      ? `${pendingSessionCount} sessions still have pending candidates.`
-                      : "Every persisted session currently has decisions for all candidates."}
+                      ? `${pendingSessionCount} saved session${pendingSessionCount === 1 ? "" : "s"} still have undecided moments.`
+                      : "Every saved session currently has decisions for all suggested moments."}
                   </p>
                 </div>
                 <span className="queue-count">
-                  {pendingSessionCount} pending sessions
+                  {pendingSessionCount} open
                 </span>
               </div>
               <div className="action-row">
@@ -1501,7 +1605,7 @@ export default function App() {
                     }}
                     type="button"
                   >
-                    Open next pending session
+                    Continue next session
                   </button>
                 ) : (
                   <button
@@ -1509,14 +1613,14 @@ export default function App() {
                     onClick={() => setActivePage("new-analysis")}
                     type="button"
                   >
-                    Analyze another local VOD
+                    Scan another video
                   </button>
                 )}
               </div>
               <p className="project-summary-cta">
                 {nextPendingSession
-                  ? `${nextPendingSession.sessionTitle} • ${nextPendingSession.pendingCount} pending • updated ${formatSummaryTimestamp(nextPendingSession.updatedAt)}`
-                  : "Use New Analysis to add the next backlog session."}
+                  ? `${nextPendingSession.sessionTitle} • ${nextPendingSession.pendingCount} undecided • updated ${formatSummaryTimestamp(nextPendingSession.updatedAt)}`
+                  : "Use Start to add the next review session."}
               </p>
             </article>
           ) : null}
@@ -1543,7 +1647,7 @@ export default function App() {
                 type="button"
               >
                 <div className="project-summary-top">
-                  <span className="detail-label">Project session</span>
+                  <span className="detail-label">Saved session</span>
                   <div className="project-summary-badges">
                     <span
                       className={`session-state-pill ${sessionReviewState.toLowerCase().replace("_", "-")}`}
@@ -1580,9 +1684,9 @@ export default function App() {
                   </p>
                 </div>
                 <p>
-                  {summary.candidateCount} candidates • {summary.acceptedCount}{" "}
-                  accepted • {summary.rejectedCount} rejected •{" "}
-                  {summary.pendingCount} pending
+                  {summary.candidateCount} moments • {summary.acceptedCount}{" "}
+                  kept • {summary.rejectedCount} skipped •{" "}
+                  {summary.pendingCount} undecided
                 </p>
                 <p
                   className={`project-summary-coverage ${analysisCoverageTone(summary.analysisCoverage)}`}
@@ -1590,7 +1694,7 @@ export default function App() {
                   {buildProjectCoverageCopy(summary)}
                 </p>
                 <p>
-                  Profile {profile.name} • updated{" "}
+                  Reference profile {profile.name} • updated{" "}
                   {formatSummaryTimestamp(summary.updatedAt)}
                 </p>
                 <p className="project-summary-cta">
@@ -1609,11 +1713,11 @@ export default function App() {
           <article className="utility-block analysis-primary-card">
             <div className="panel-header analysis-primary-header">
               <div>
-                <span className="detail-label">Analysis launch</span>
-                <h2>Analyze a local backlog VOD</h2>
+                <span className="detail-label">Start</span>
+                <h2>Scan a video</h2>
                 <p>
-                  Stage one local recording, confirm the profile and session
-                  title, then open the returned session directly into review.
+                  Choose one local video, pick the reference profile you want
+                  HS to lean on, and open the results directly into review.
                 </p>
               </div>
               <button
@@ -1624,13 +1728,13 @@ export default function App() {
                 }}
                 type="button"
               >
-                Choose Local Recording
+                Choose video
               </button>
             </div>
 
             <div className="analysis-form">
               <label className="search-block">
-                <span className="input-label">Local media path</span>
+                <span className="input-label">Video file</span>
                 <input
                   className="search-input"
                   disabled={isAnalyzing}
@@ -1659,7 +1763,7 @@ export default function App() {
 
               <div className="analysis-inline-grid">
                 <label className="search-block">
-                  <span className="input-label">Profile</span>
+                  <span className="input-label">Reference profile</span>
                   <select
                     className="search-input"
                     disabled={isAnalyzing || !hasPersistedProfiles}
@@ -1678,22 +1782,22 @@ export default function App() {
                     ) : (
                       <option value="">
                         {isLoadingProfiles
-                          ? "Loading persisted profiles..."
-                          : "No persisted profiles available"}
+                          ? "Loading saved profiles..."
+                          : "No saved profiles yet"}
                       </option>
                     )}
                   </select>
                   <small className="analysis-field-note">
                     {hasPersistedProfiles
-                      ? "Profiles come from the persisted local library."
+                      ? "Profiles help HS lean toward the kinds of moments you usually keep."
                       : isLoadingProfiles
-                        ? "Waiting for persisted profiles from the local API."
-                        : "No persisted profiles are available yet."}
+                        ? "Loading saved profiles."
+                        : "Create a profile first so HS has some direction."}
                   </small>
                 </label>
 
                 <label className="search-block">
-                  <span className="input-label">Session title</span>
+                  <span className="input-label">Session name</span>
                   <input
                     className="search-input"
                     disabled={isAnalyzing}
@@ -1706,35 +1810,34 @@ export default function App() {
                     value={analysisTitle}
                   />
                   <small className="analysis-field-note">
-                    Leave blank to reuse the source file name as the session
-                    title.
+                    Leave this blank if the file name is already good enough.
                   </small>
                 </label>
               </div>
 
               <div className="analysis-summary-grid analysis-summary-grid-compact">
                 <article className="analysis-summary-card">
-                  <span className="detail-label">Selected source</span>
+                  <span className="detail-label">Video</span>
                   <strong>
-                    {analysisSourceName ?? "No local recording staged"}
+                    {analysisSourceName ?? "No video chosen"}
                   </strong>
                   <p className="analysis-summary-path">
                     {normalizedSelectedMediaPath ||
-                      "Choose a supported local VOD path or use the file picker."}
+                      "Choose a supported local video path or use the file picker."}
                   </p>
                 </article>
                 <article className="analysis-summary-card">
-                  <span className="detail-label">Profile</span>
+                  <span className="detail-label">Reference profile</span>
                   <strong>{selectedDraftProfile.name}</strong>
                   <p>{selectedDraftProfile.description}</p>
                 </article>
                 <article className="analysis-summary-card">
-                  <span className="detail-label">Session title</span>
+                  <span className="detail-label">Session name</span>
                   <strong>{analysisTitlePreview}</strong>
                   <p>
                     {analysisTitle.trim()
-                      ? "Using your custom session title."
-                      : "Blank titles fall back to the source file name."}
+                      ? "Using your custom name."
+                      : "Using the file name by default."}
                   </p>
                 </article>
               </div>
@@ -1748,13 +1851,10 @@ export default function App() {
                   }}
                   type="button"
                 >
-                  {isAnalyzing
-                    ? "Analyzing local VOD..."
-                    : "Run Local Analysis"}
+                  {isAnalyzing ? "Scanning video..." : "Scan video"}
                 </button>
                 <p className="analysis-support-copy">
-                  HighlightSmith will create one persisted session and open it
-                  directly into timeline, queue, and detail review.
+                  HS will open a review queue as soon as the scan finishes.
                 </p>
               </div>
 
@@ -1770,7 +1870,7 @@ export default function App() {
             >
               <div className="analysis-readiness-header">
                 <div>
-                  <span className="detail-label">Launch readiness</span>
+                  <span className="detail-label">Ready to scan</span>
                   <strong>{analysisLaunchState.headline}</strong>
                   <p className="analysis-readiness-copy">
                     {analysisLaunchState.detail}
@@ -1784,92 +1884,77 @@ export default function App() {
               </div>
             </article>
 
+            {showStartGuide ? (
+              <article className="utility-block analysis-onboarding-card">
+                <div className="panel-header">
+                  <div>
+                    <span className="detail-label">{startGuide.statusLabel}</span>
+                    <h2>{startGuide.headline}</h2>
+                    <p>{startGuide.detail}</p>
+                  </div>
+                </div>
+                <ol className="plain-list ordered analysis-step-list">
+                  {startGuide.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+                {startGuide.ctaLabel ? (
+                  <div className="action-row">
+                    <button
+                      className="button-secondary"
+                      onClick={() => {
+                        if (startGuide.ctaAction === "references") {
+                          setActivePage("profiles");
+                          return;
+                        }
+
+                        if (startGuide.ctaAction === "pick-media") {
+                          void handlePickMedia();
+                        }
+                      }}
+                      type="button"
+                    >
+                      {startGuide.ctaLabel}
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            ) : null}
+
+            {isAnalyzing ? (
+              <article className="analysis-readiness-card ready">
+                <div className="analysis-readiness-header">
+                  <div>
+                    <span className="detail-label">Scan in progress</span>
+                    <strong>HS is scanning this video locally</strong>
+                    <p className="analysis-readiness-copy">
+                      Large files can take a bit. Keep this window open and HS
+                      will jump straight into Review when the scan finishes.
+                    </p>
+                  </div>
+                  <span className="analysis-readiness-pill ready">Working</span>
+                </div>
+              </article>
+            ) : null}
+
             <article className="utility-block">
-              <span className="detail-label">What happens next</span>
+              <span className="detail-label">What HS does next</span>
               <ol className="plain-list ordered">
-                <li>Desktop sends the local file path to the API bridge.</li>
-                <li>
-                  The analyzer inspects the file and persists one session in
-                  SQLite.
-                </li>
-                <li>
-                  The returned session opens directly into timeline, queue, and
-                  detail review.
-                </li>
+                <li>HS scans the video locally.</li>
+                <li>It builds a queue of likely moments worth checking.</li>
+                <li>You jump straight into review and decide what is worth keeping.</li>
               </ol>
-              <p>Local API target: {apiBaseUrl}/api/projects/analyze</p>
               {projectSession ? (
                 <p>
                   Loaded session: {projectSession.title} •{" "}
-                  {projectSession.candidates.length} candidates •{" "}
-                  {activeSessionReviewStateLabel ?? "Pending"}
+                  {projectSession.candidates.length} moments •{" "}
+                  {activeSessionReviewStateLabel ?? "Needs review"}
                 </p>
               ) : (
-                <p>No analyzer-backed session loaded yet.</p>
+                <p>No saved review session is open yet.</p>
               )}
             </article>
           </div>
-        </section>
-      );
-    }
-
-    if (activePage === "candidate-detail") {
-      return (
-        <section className="desktop-review-stack">
-          {projectSession && activeSessionReviewState ? (
-            <SessionOverview
-              acceptedCount={acceptedCount}
-              pendingCount={pendingReviewCount}
-              profile={currentProfile}
-              profileMatchingSummary={profileMatchingSummary}
-              rejectedCount={rejectedCount}
-              reviewStateLabel={activeSessionReviewStateLabel ?? "Pending"}
-              reviewStateTone={activeSessionReviewState}
-              selectedCandidateIndex={selectedCandidateIndex}
-              session={projectSession}
-            />
-          ) : null}
-          <CandidateTimeline
-            candidates={sessionCandidates}
-            decisionsByCandidateId={decisionsByCandidateId}
-            durationSeconds={projectSession?.mediaSource.durationSeconds ?? 0}
-            onSelectCandidate={handleSelectCandidate}
-            selectedCandidateId={selectedCandidate?.id ?? null}
-          />
-          <CandidateDetail
-            candidate={selectedCandidate}
-            candidateCount={sessionCandidates.length}
-            candidateIndex={Math.max(selectedCandidateIndex, 0)}
-            decision={selectedDecision}
-            exportPreview={timestampPreview}
-            presentationMode={presentationMode}
-            profileMatchingSummary={profileMatchingSummary}
-            reviewQueueMode={reviewQueueMode}
-            selectedCandidateVisibleInQueue={selectedCandidateVisibleInQueue}
-            transcript={projectSession?.transcript ?? []}
-            pendingCount={pendingReviewCount}
-            nextPendingSession={nextPendingSession}
-            labelDraft={
-              selectedCandidate ? (labelDrafts[selectedCandidate.id] ?? "") : ""
-            }
-            onAccept={handleAccept}
-            onExpandResolution={handleExpandResolution}
-            onExpandSetup={handleExpandSetup}
-            isSavingReview={isSavingReview}
-            onLabelChange={handleLabelChange}
-            onOpenNextPendingSession={() => {
-              void handleOpenNextPendingSession();
-            }}
-            onSelectNextVisible={handleSelectNextVisible}
-            onSelectPreviousVisible={handleSelectPreviousVisible}
-            onReject={handleReject}
-            onSaveLabel={handleSaveLabel}
-            onSelectNextPending={handleSelectNextPending}
-            onReturnToProjects={handleReturnToProjects}
-            profile={currentProfile}
-            reviewError={reviewError}
-            visibleCandidateCount={queueCandidates.length}
-          />
         </section>
       );
     }
@@ -1916,32 +2001,6 @@ export default function App() {
       );
     }
 
-    if (activePage === "settings") {
-      return (
-        <section className="desktop-placeholder-grid">
-          <article className="utility-block">
-            <span className="detail-label">Current analyzer defaults</span>
-            <p>
-              Offline only:{" "}
-              {String(projectSession?.settings.runOfflineOnly ?? true)} • micro
-              window {projectSession?.settings.microWindowSeconds ?? 2}s •
-              candidate window{" "}
-              {projectSession?.settings.candidateWindowMinSeconds ?? 15}-
-              {projectSession?.settings.candidateWindowMaxSeconds ?? 45}s
-            </p>
-          </article>
-          <article className="utility-block">
-            <span className="detail-label">Storage direction</span>
-            <p>
-              SQLite schema v{sqliteSchemaVersion} with {sqliteTables.length}{" "}
-              planned tables. Desktop review actions now persist through the
-              local analyzer-backed SQLite session store.
-            </p>
-          </article>
-        </section>
-      );
-    }
-
     return (
       <section className="desktop-review-stack">
         {projectSession && activeSessionReviewState ? (
@@ -1957,19 +2016,24 @@ export default function App() {
             session={projectSession}
           />
         ) : null}
-        <CandidateTimeline
-          candidates={sessionCandidates}
-          decisionsByCandidateId={decisionsByCandidateId}
-          durationSeconds={projectSession?.mediaSource.durationSeconds ?? 0}
-          onSelectCandidate={handleSelectCandidate}
-          selectedCandidateId={selectedCandidate?.id ?? null}
-        />
+        <details className="utility-block internal-details review-timeline-details">
+          <summary className="internal-details-summary">
+            <span>Video map</span>
+            <span className="queue-count">Optional</span>
+          </summary>
+          <CandidateTimeline
+            candidates={sessionCandidates}
+            decisionsByCandidateId={decisionsByCandidateId}
+            durationSeconds={projectSession?.mediaSource.durationSeconds ?? 0}
+            onSelectCandidate={handleSelectCandidate}
+            selectedCandidateId={selectedCandidate?.id ?? null}
+          />
+        </details>
         <div className="desktop-review-grid">
           <CandidateQueue
             bandFilter={bandFilter}
             candidates={queueCandidates}
             decisionsByCandidateId={decisionsByCandidateId}
-            deferredSearchValue={deferredSearchValue}
             isStrongMatchFallback={isStrongMatchFallback}
             matchingCandidateCount={searchFilteredCandidates.length}
             onSelectNextPending={handleSelectNextPending}
@@ -1996,9 +2060,7 @@ export default function App() {
             candidateIndex={Math.max(selectedCandidateIndex, 0)}
             decision={selectedDecision}
             exportPreview={timestampPreview}
-            presentationMode={presentationMode}
             profileMatchingSummary={profileMatchingSummary}
-            reviewQueueMode={reviewQueueMode}
             selectedCandidateVisibleInQueue={selectedCandidateVisibleInQueue}
             transcript={projectSession?.transcript ?? []}
             pendingCount={pendingReviewCount}
@@ -2021,11 +2083,141 @@ export default function App() {
             onSelectNextPending={handleSelectNextPending}
             onReturnToProjects={handleReturnToProjects}
             profile={currentProfile}
+            jsonPreview={jsonPreview}
             reviewError={reviewError}
             visibleCandidateCount={queueCandidates.length}
           />
         </div>
       </section>
+    );
+  }
+
+  function renderDesktopAside() {
+    if (activePage === "new-analysis") {
+      return (
+        <div className="desktop-aside-stack">
+          <article className="utility-block">
+            <span className="detail-label">Before you scan</span>
+            <p>Choose one local video file.</p>
+            <p>Pick the profile that best matches what you want HS to favor.</p>
+            <p>Give the session a name only if the file name is not enough.</p>
+          </article>
+          <article className="utility-block">
+            <span className="detail-label">Why profiles matter</span>
+            <p>
+              Profiles give HS examples of the kinds of moments you usually keep.
+            </p>
+            <p>
+              Reusable clips help with short moments. Indexed edits help with
+              longer-form style and pacing.
+            </p>
+          </article>
+        </div>
+      );
+    }
+
+    if (activePage === "projects") {
+      return (
+        <div className="desktop-aside-stack">
+          <article className="utility-block">
+            <span className="detail-label">Backlog snapshot</span>
+            <p>
+              {projectSummaries.length} saved session
+              {projectSummaries.length === 1 ? "" : "s"} total
+            </p>
+            <p>
+              {pendingSessionCount} session
+              {pendingSessionCount === 1 ? "" : "s"} still need review
+            </p>
+          </article>
+          <article className="utility-block">
+            <span className="detail-label">Next up</span>
+            <p>
+              {nextPendingSession
+                ? `${nextPendingSession.sessionTitle} • ${nextPendingSession.pendingCount} undecided`
+                : "Nothing is waiting right now."}
+            </p>
+          </article>
+        </div>
+      );
+    }
+
+    if (activePage === "profiles") {
+      return (
+        <div className="desktop-aside-stack">
+          <article className="utility-block">
+            <span className="detail-label">Start simple</span>
+            <p>Create or choose one profile.</p>
+            <p>Add an edited video if you want longform reference material.</p>
+            <p>Add reusable clips only when they teach something specific.</p>
+          </article>
+          <article className="utility-block">
+            <span className="detail-label">Optional tools</span>
+            <p>
+              VOD/edit audits and background job history are useful, but they are
+              secondary to building a clean reference library.
+            </p>
+          </article>
+        </div>
+      );
+    }
+
+    return (
+      <div className="desktop-aside-stack">
+        <article className="utility-block">
+          <span className="detail-label">Current video</span>
+          <p>{selectedMediaPath || "No video selected yet."}</p>
+          <p>
+            {sessionCandidates.length} suggested moment
+            {sessionCandidates.length === 1 ? "" : "s"} • {acceptedCount} kept
+          </p>
+          <p>
+            {pendingReviewCount} undecided • {rejectedCount} skipped
+          </p>
+        </article>
+        <article className="utility-block">
+          <span className="detail-label">Keyboard shortcuts</span>
+          <ul className="plain-list review-shortcut-list">
+            <li>
+              <strong>K</strong>
+              <span>Keep the current moment</span>
+            </li>
+            <li>
+              <strong>X</strong>
+              <span>Skip the current moment</span>
+            </li>
+            <li>
+              <strong>N</strong>
+              <span>Jump to the next undecided moment</span>
+            </li>
+            <li>
+              <strong>J / L</strong>
+              <span>Move to the previous or next visible moment</span>
+            </li>
+            <li>
+              <strong>[ / ]</strong>
+              <span>Lengthen the clip start or ending by 2 seconds</span>
+            </li>
+            <li>
+              <strong>/</strong>
+              <span>Focus the queue search box</span>
+            </li>
+          </ul>
+        </article>
+        <TranscriptSnippetBlock
+          heading="Current transcript focus"
+          text={
+            selectedCandidate?.transcriptSnippet ??
+            "Select a moment to inspect its transcript context."
+          }
+        />
+        {pendingReviewCount === 0 ? (
+          <article className="utility-block">
+            <span className="detail-label">Export</span>
+            <p>Export actions are available in the session completion card.</p>
+          </article>
+        ) : null}
+      </div>
     );
   }
 
@@ -2037,52 +2229,19 @@ export default function App() {
       <LayoutShell
         activeId={activePage}
         appName="HighlightSmith"
-        aside={
-          <div className="desktop-aside-stack">
-            <article className="utility-block">
-              <span className="detail-label">Current source</span>
-              <p>{selectedMediaPath || "No local recording selected yet."}</p>
-              <p>
-                {sessionCandidates.length} candidates • {acceptedCount} accepted
-              </p>
-            </article>
-            <TranscriptSnippetBlock
-              heading="Current transcript focus"
-              text={
-                selectedCandidate?.transcriptSnippet ??
-                "Select a candidate to inspect transcript context."
-              }
-            />
-            <article className="utility-block">
-              <span className="detail-label">Export preview</span>
-              <details>
-                <summary>Timestamp export</summary>
-                <pre>
-                  {timestampPreview ||
-                    "Run an analysis to generate export data."}
-                </pre>
-              </details>
-              <details>
-                <summary>JSON candidate export</summary>
-                <pre>
-                  {jsonPreview || "Run an analysis to generate export data."}
-                </pre>
-              </details>
-            </article>
-          </div>
-        }
+        aside={renderDesktopAside()}
         navItems={desktopPages}
         onSelect={(pageId) => setActivePage(pageId as DesktopPage)}
-        subtitle="Local-first analysis launch, session review, and backlog clearing."
-        title="Desktop Review"
+        subtitle="Scan long videos, review likely moments quickly, and build references from your own edits."
+        title="Creator Workspace"
       >
         <ShellHeader
           activeSessionStateLabel={
             activeSessionReviewStateLabel
               ? activeSessionReviewStateLabel
               : normalizedSelectedMediaPath
-                ? "Local VOD staged for analysis"
-                : "Choose a local file or reopen a backlog session."
+                ? "Video staged for scanning"
+                : "Choose a video or reopen a saved session."
           }
           acceptedCount={acceptedCount}
           currentProfileLabel={currentProfile.name}
@@ -2093,9 +2252,7 @@ export default function App() {
           }
           pendingCount={pendingReviewCount}
           rejectedCount={rejectedCount}
-          selectedMediaPath={
-            selectedMediaPath || "No local recording selected yet."
-          }
+          selectedMediaPath={selectedMediaPath || "No video selected yet."}
           themeMode={themeMode}
           totalCount={sessionCandidates.length}
         />
@@ -2132,8 +2289,8 @@ function buildAnalysisLaunchState(
   if (options.isLoadingProfiles) {
     return {
       canAnalyze: false,
-      detail: "Waiting for the persisted profile library from the local API.",
-      headline: "Loading profiles",
+      detail: "Waiting for your saved profiles.",
+      headline: "Loading reference profiles",
       statusLabel: "Loading",
       tone: "blocked",
     };
@@ -2142,9 +2299,9 @@ function buildAnalysisLaunchState(
   if (!options.hasPersistedProfiles) {
     return {
       canAnalyze: false,
-      detail: "Create or load a persisted clip profile before starting analysis.",
-      headline: "No profiles available",
-      statusLabel: "Needs profile",
+      detail: "Create a profile first so HS has some idea what to favor.",
+      headline: "No reference profile yet",
+      statusLabel: "Add profile",
       tone: "blocked",
     };
   }
@@ -2152,9 +2309,9 @@ function buildAnalysisLaunchState(
   if (!sourcePath) {
     return {
       canAnalyze: false,
-      detail: "Choose a supported local recording before starting analysis.",
-      headline: "Select a local recording",
-      statusLabel: "Needs source",
+      detail: "Choose a supported local video before starting.",
+      headline: "Choose a video",
+      statusLabel: "Add video",
       tone: "blocked",
     };
   }
@@ -2163,7 +2320,7 @@ function buildAnalysisLaunchState(
     return {
       canAnalyze: false,
       detail: `Unsupported media extension. Use one of: ${supportedInputExtensions.join(", ")}`,
-      headline: "Unsupported input type",
+      headline: "Unsupported file type",
       statusLabel: "Fix input",
       tone: "blocked",
     };
@@ -2171,9 +2328,8 @@ function buildAnalysisLaunchState(
 
   return {
     canAnalyze: true,
-    detail:
-      "Desktop will send this local file path to the API bridge, then open the persisted analyzer session directly into review.",
-    headline: "Ready to analyze locally",
+    detail: "HS can scan this video now and open a review queue when it finishes.",
+    headline: "Ready to scan",
     statusLabel: "Ready",
     tone: "ready",
   };
@@ -2483,7 +2639,7 @@ async function fetchMediaIndexJobs(
     `${apiBaseUrl}/api/library/index-jobs`,
     apiBaseUrl,
     undefined,
-    "Unable to load media index jobs.",
+    "Unable to load background activity.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2496,7 +2652,7 @@ async function fetchMediaIndexJobs(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Media index job list load failed",
+        : "Background activity could not be loaded",
     );
   }
 
@@ -2517,7 +2673,7 @@ async function createMediaIndexJobEntry(
         "content-type": "application/json",
       },
     },
-    "Unable to start media index job.",
+    "Unable to start background analysis.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2530,7 +2686,7 @@ async function createMediaIndexJobEntry(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Media index job create failed",
+        : "Background analysis could not be started",
     );
   }
 
@@ -2551,7 +2707,7 @@ async function cancelMediaIndexJobEntry(
         "content-type": "application/json",
       },
     },
-    "Unable to cancel media index job.",
+    "Unable to cancel background analysis.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2564,7 +2720,7 @@ async function cancelMediaIndexJobEntry(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Media index job cancel failed",
+        : "Background analysis could not be cancelled",
     );
   }
 
@@ -2731,7 +2887,7 @@ async function fetchProjectSummaries(
     `${apiBaseUrl}/api/projects`,
     apiBaseUrl,
     undefined,
-    "Unable to load persisted sessions.",
+    "Unable to load saved sessions.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2855,14 +3011,14 @@ function formatSessionReviewState(
 function buildSessionOpenLabel(summary: ProjectSessionSummary): string {
   const sessionReviewState = deriveSessionReviewState(summary);
   if (sessionReviewState === "REVIEWED") {
-    return "Open reviewed session";
+    return "Open session";
   }
 
   if (sessionReviewState === "IN_PROGRESS") {
-    return "Resume review";
+    return "Continue review";
   }
 
-  return "Start review";
+  return "Start reviewing";
 }
 
 function resolveProfile(
@@ -2875,7 +3031,7 @@ function resolveProfile(
       name: "Profile unavailable",
       label: profileId,
       description:
-        "Profile metadata is unavailable locally. Reload the persisted profile library from the local API.",
+        "This profile is missing locally. Refresh the saved profile library.",
       createdAt: "",
       updatedAt: "",
       state: "ACTIVE",
@@ -2987,4 +3143,91 @@ function formatSummaryTimestamp(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function buildStartGuide(input: {
+  hasPersistedProfiles: boolean;
+  hasReferenceMaterial: boolean;
+  hasSavedSessions: boolean;
+  hasSelectedVideo: boolean;
+}): StartGuide {
+  if (!input.hasPersistedProfiles) {
+    return {
+      statusLabel: "First setup",
+      headline: "Create your first profile",
+      detail:
+        "Profiles give HS a starting point for the kinds of moments you usually keep.",
+      steps: [
+        "Open References and create one profile.",
+        "Add a couple of reusable clips or one finished edit.",
+        "Come back here to scan a video into review.",
+      ],
+      ctaLabel: "Open References",
+      ctaAction: "references",
+    };
+  }
+
+  if (!input.hasReferenceMaterial) {
+    return {
+      statusLabel: input.hasSavedSessions ? "Reference refresh" : "First setup",
+      headline: "Add a few examples before the first serious scan",
+      detail:
+        "HS gets more useful once it can lean on a small library of clips or one finished edit.",
+      steps: [
+        "Add 2-3 reusable clips that feel representative.",
+        "Add one finished edited video if you have one.",
+        "Then scan a longer video and review the moments HS suggests.",
+      ],
+      ctaLabel: "Add references",
+      ctaAction: "references",
+    };
+  }
+
+  if (!input.hasSelectedVideo) {
+    return {
+      statusLabel: input.hasSavedSessions ? "Next scan" : "Ready",
+      headline: input.hasSavedSessions
+        ? "Choose the next video to scan"
+        : "Pick the first video you want to scan",
+      detail:
+        "Once you choose a local file, HS can build a review queue and open the results directly into Review.",
+      steps: [
+        "Choose one local video file.",
+        "Confirm the reference profile you want HS to lean on.",
+        "Start the scan and go straight into review.",
+      ],
+      ctaLabel: "Choose video",
+      ctaAction: "pick-media",
+    };
+  }
+
+  return {
+    statusLabel: input.hasSavedSessions ? "Ready" : "First scan",
+    headline: input.hasSavedSessions
+      ? "This scan is ready to run"
+      : "You are ready for the first scan",
+    detail:
+      "Start with one video, let HS build the review queue, then make keep or skip decisions in Review.",
+    steps: [
+      "Run the scan from the main action on the left.",
+      "Check the first few suggested moments in Review.",
+      "Keep building references as you learn what HS should favor.",
+    ],
+    ctaLabel: null,
+    ctaAction: null,
+  };
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return (
+    target.isContentEditable ||
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select"
+  );
 }

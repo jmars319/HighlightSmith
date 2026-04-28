@@ -25,50 +25,31 @@ export function ShellHeader({
   onPickMedia,
   onToggleTheme,
 }: ShellHeaderProps) {
-  return (
-    <header className="hero-panel">
-      <div>
-        <p className="eyebrow">Desktop backlog workstation</p>
-        <h1 className="hero-title">Review long-form recordings locally</h1>
-        <p className="hero-copy">
-          Run one local VOD through analysis, inspect suggested moments, and
-          keep final editorial control while working through a backlog.
-        </p>
-      </div>
+  const selectedVideoLabel = selectedMediaPath
+    ? extractFileLabel(selectedMediaPath)
+    : "No video chosen";
+  const reviewProgressLabel =
+    totalCount === 0
+      ? "No review yet"
+      : pendingCount === 0
+        ? "Review complete"
+        : `${pendingCount} still need review`;
 
-      <div className="hero-meta">
-        <div className="stat-card">
-          <span className="stat-label">Profile</span>
-          <strong>{currentProfileLabel}</strong>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Session</span>
-          <strong>{currentSessionLabel}</strong>
-          <p>{activeSessionStateLabel}</p>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Review progress</span>
-          <strong>
-            {totalCount === 0
-              ? "No queue loaded"
-              : `${totalCount - pendingCount}/${totalCount} reviewed`}
-          </strong>
-          <p>
-            {acceptedCount} accepted • {rejectedCount} rejected • {pendingCount}{" "}
-            pending
+  return (
+    <header className="workspace-header glass-panel">
+      <div className="workspace-header-main">
+        <div>
+          <p className="eyebrow">HighlightSmith</p>
+          <h1 className="workspace-title">Clip review workspace</h1>
+          <p className="workspace-copy">
+            Scan one video, review likely moments quickly, and keep the full
+            process on your own machine.
           </p>
         </div>
-        <div className="stat-card path-card">
-          <span className="stat-label">Current source</span>
-          <strong>{selectedMediaPath}</strong>
-        </div>
+
         <div className="hero-actions">
-          <button
-            className="button-primary"
-            onClick={onPickMedia}
-            type="button"
-          >
-            Select Local Recording
+          <button className="button-primary" onClick={onPickMedia} type="button">
+            Choose video
           </button>
           <button
             aria-label={
@@ -84,6 +65,40 @@ export function ShellHeader({
           </button>
         </div>
       </div>
+
+      <div className="workspace-status-grid">
+        <div className="stat-card compact">
+          <span className="stat-label">Current video</span>
+          <strong>{selectedVideoLabel}</strong>
+          <p>{selectedMediaPath || "Choose a file to start a scan."}</p>
+        </div>
+        <div className="stat-card compact">
+          <span className="stat-label">Reference profile</span>
+          <strong>{currentProfileLabel}</strong>
+          <p>{activeSessionStateLabel}</p>
+        </div>
+        <div className="stat-card compact">
+          <span className="stat-label">Review progress</span>
+          <strong>{reviewProgressLabel}</strong>
+          <p>
+            {acceptedCount} kept • {rejectedCount} skipped • {pendingCount} left
+          </p>
+        </div>
+        <div className="stat-card compact">
+          <span className="stat-label">Current session</span>
+          <strong>{currentSessionLabel}</strong>
+          <p>
+            {totalCount === 0
+              ? "No review queue loaded yet."
+              : `${totalCount} total suggested moments`}
+          </p>
+        </div>
+      </div>
     </header>
   );
+}
+
+function extractFileLabel(path: string): string {
+  const normalizedPath = path.replace(/\\/g, "/");
+  return normalizedPath.split("/").pop() || path;
 }

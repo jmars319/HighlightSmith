@@ -11,6 +11,7 @@ from pathlib import Path
 from highlightsmith_analyzer.contracts import (
     AnalysisCoverage,
     AnalysisCoverageBand,
+    ExampleReferenceKind,
     MediaIndexSummary,
     Settings,
 )
@@ -27,8 +28,10 @@ from highlightsmith_analyzer.pipeline.indexing import (
 from highlightsmith_analyzer.service import (
     analyze_request,
     apply_review_update,
+    create_profile_request,
     create_media_edit_pair_request,
     create_media_library_asset_request,
+    list_profile_examples_request,
     run_media_alignment_job_inline,
     list_session_summaries_request,
     load_session_request,
@@ -158,6 +161,12 @@ class AnalyzerScaffoldTests(unittest.TestCase):
             self.assertEqual(pair.status.value, "INCOMPLETE")
 
             store = SessionStore(database_path)
+            with self.assertRaisesRegex(
+                ValueError,
+                "Cannot start media alignment yet",
+            ):
+                store.create_media_alignment_job(pair_id=pair.id)
+
             vod_index_job = store.create_media_index_job(vod_asset.id)
             edit_index_job = store.create_media_index_job(edit_asset.id)
             vod_index_result = run_media_index_job_inline(
@@ -236,6 +245,57 @@ class AnalyzerScaffoldTests(unittest.TestCase):
                 pairs[0].alignment_segments[1].kind.value,
                 "PROVISIONAL_REMOVED_POOL",
             )
+
+    def test_profile_scoped_edit_indexes_into_longform_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            edit_path = Path(temp_dir) / "profile-edit.mp4"
+            edit_path.write_bytes(b"profile-edit-fixture" * 512)
+
+            profile = create_profile_request(
+                "Editorial style",
+                database_path=database_path,
+            )
+            edit_asset = create_media_library_asset_request(
+                asset_type="EDIT",
+                scope="PROFILE",
+                profile_id=profile.id,
+                source_type="LOCAL_FILE_PATH",
+                source_value=str(edit_path),
+                title="Profile edit",
+                database_path=database_path,
+            )
+
+            store = SessionStore(database_path)
+            index_job = store.create_media_index_job(edit_asset.id)
+            run_media_index_job_inline(
+                index_job.id,
+                database_path=database_path,
+            )
+
+            listed_examples = list_profile_examples_request(
+                profile.id,
+                database_path=database_path,
+            )
+            self.assertEqual(len(listed_examples), 1)
+            self.assertEqual(listed_examples[0].id, edit_asset.id)
+            self.assertEqual(
+                listed_examples[0].reference_kind,
+                ExampleReferenceKind.PROFILE_EDIT,
+            )
+            self.assertIsNotNone(listed_examples[0].feature_summary)
+            self.assertIn(
+                "longform reference",
+                listed_examples[0].status_detail or "",
+            )
+
+            loaded_profile = store.load_profile(profile.id)
+            self.assertEqual(len(loaded_profile.example_clips), 1)
+            self.assertEqual(
+                loaded_profile.example_clips[0].reference_kind,
+                ExampleReferenceKind.PROFILE_EDIT,
+            )
+            self.assertEqual(loaded_profile.example_clips[0].id, edit_asset.id)
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg unavailable on this machine")
     def test_real_video_index_can_persist_thumbnail_suggestions(self) -> None:

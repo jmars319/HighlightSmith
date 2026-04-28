@@ -211,6 +211,41 @@ button {
   box-shadow: var(--shadow);
 }
 
+.workspace-header {
+  border-radius: 28px;
+  padding: 18px 22px;
+  animation: rise 520ms ease-out both;
+}
+
+.workspace-header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.workspace-title {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  line-height: 1;
+  max-width: 14ch;
+  text-wrap: balance;
+}
+
+.workspace-copy {
+  max-width: 46ch;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.workspace-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
 .hero-panel {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
@@ -276,6 +311,10 @@ h3 {
   padding: 14px 16px;
   background: var(--surface-card);
   border: 1px solid var(--surface-card-border);
+}
+
+.stat-card.compact {
+  padding: 12px 14px;
 }
 
 .hero-meta .hero-actions {
@@ -441,6 +480,25 @@ h3 {
   align-content: start;
 }
 
+.reference-primary-grid,
+.advanced-tools-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.reference-primary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reference-primary-grid > .utility-block,
+.advanced-tools-stack > .utility-block {
+  margin-top: 0;
+}
+
+.reference-step-list {
+  margin-top: 14px;
+}
+
 .profile-card-list,
 .profile-example-list {
   display: grid;
@@ -487,6 +545,10 @@ h3 {
 
 .profile-example-source {
   word-break: break-word;
+}
+
+.asset-card-details {
+  margin-top: 14px;
 }
 
 .thumbnail-suggestion-grid {
@@ -579,6 +641,15 @@ h3 {
 
 .analysis-summary-grid-compact {
   margin-top: 6px;
+}
+
+.analysis-onboarding-card,
+.advanced-activity-banner {
+  margin-top: 0;
+}
+
+.analysis-step-list {
+  margin-top: 14px;
 }
 
 .analysis-primary-actions {
@@ -675,6 +746,13 @@ h3 {
 .session-overview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.session-overview-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-top: 16px;
 }
@@ -854,6 +932,14 @@ h3 {
 
 .session-overview-alert {
   margin-top: 16px;
+}
+
+.advanced-lab-section {
+  margin-top: 0;
+}
+
+.advanced-lab-section > .utility-block {
+  margin-top: 14px;
 }
 
 .session-overview-alert.empty {
@@ -1079,6 +1165,10 @@ h3 {
   grid-column: 1 / -1;
 }
 
+.review-context-card {
+  margin-top: 0;
+}
+
 .breakdown-list {
   display: grid;
   gap: 12px;
@@ -1132,6 +1222,35 @@ h3 {
   justify-content: end;
   gap: 10px;
   align-items: center;
+}
+
+.review-panel-primary .hs-block {
+  margin-top: 12px;
+}
+
+.review-panel-primary .action-row {
+  margin-top: 12px;
+}
+
+.review-label-editor {
+  margin-top: 14px;
+}
+
+.completion-export-details,
+.nested-export-details {
+  margin-top: 14px;
+}
+
+.review-shortcut-list {
+  margin-top: 10px;
+}
+
+.review-shortcut-list strong {
+  min-width: 52px;
+}
+
+.review-timeline-details .timeline-panel {
+  margin-top: 0;
 }
 
 .timeline-panel,
@@ -1439,7 +1558,10 @@ summary {
 @media (max-width: 1280px) {
   .analysis-summary-grid,
   .session-overview-grid,
-  .detail-grid {
+  .session-overview-strip,
+  .detail-grid,
+  .reference-primary-grid,
+  .workspace-status-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1453,11 +1575,20 @@ summary {
     padding: 18px;
   }
 
+  .workspace-header {
+    padding: 18px;
+  }
+
+  .workspace-header-main {
+    align-items: stretch;
+  }
+
   .hero-panel {
     grid-template-columns: 1fr;
     padding: 24px;
   }
 
+  .workspace-status-grid,
   .hero-meta,
   .analysis-launch-layout,
   .analysis-inline-grid {

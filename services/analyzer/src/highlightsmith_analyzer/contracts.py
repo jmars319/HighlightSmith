@@ -68,6 +68,11 @@ class ExampleClipSourceType(str, Enum):
     LOCAL_FILE_PATH = "LOCAL_FILE_PATH"
 
 
+class ExampleReferenceKind(str, Enum):
+    CLIP = "CLIP"
+    PROFILE_EDIT = "PROFILE_EDIT"
+
+
 class ExampleClipStatus(str, Enum):
     REFERENCE_ONLY = "REFERENCE_ONLY"
     LOCAL_FILE_AVAILABLE = "LOCAL_FILE_AVAILABLE"
@@ -411,6 +416,7 @@ class ExampleClip:
     profile_id: str
     source_type: ExampleClipSourceType
     source_value: str
+    reference_kind: ExampleReferenceKind = ExampleReferenceKind.CLIP
     title: Optional[str] = None
     note: Optional[str] = None
     status: ExampleClipStatus = ExampleClipStatus.REFERENCE_ONLY

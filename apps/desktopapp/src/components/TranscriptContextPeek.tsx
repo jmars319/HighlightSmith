@@ -21,7 +21,7 @@ export function TranscriptContextPeek({
           <div>
             <h3>Transcript context</h3>
             <p className="context-summary-copy">
-              Select a candidate to inspect setup, payoff, and aftermath.
+              Select a moment to inspect setup, payoff, and aftermath.
             </p>
           </div>
         </div>
@@ -46,8 +46,8 @@ export function TranscriptContextPeek({
     },
     {
       id: "inside",
-      label: "Inside window",
-      emptyCopy: "No transcript chunk overlaps this candidate window.",
+      label: "Inside moment",
+      emptyCopy: "No transcript chunk overlaps this moment.",
       chunks: context.inside,
     },
     {
@@ -64,8 +64,8 @@ export function TranscriptContextPeek({
         <div>
           <h3>Transcript context</h3>
           <p className="context-summary-copy">
-            Nearest transcript chunks around the selected candidate. This is for
-            review context, not transcript editing.
+            Closest transcript chunks around the selected moment. This is for
+            review context only.
           </p>
         </div>
         <span className="queue-count">{totalContextChunks} chunks</span>
@@ -105,12 +105,12 @@ export function TranscriptContextPeek({
             ) : section.id === "inside" && candidate.transcriptSnippet ? (
               <article className="context-chunk fallback">
                 <div className="context-chunk-top">
-                  <span>Candidate snippet</span>
+                  <span>Saved moment snippet</span>
                 </div>
                 <p>{candidate.transcriptSnippet}</p>
                 <small>
-                  No stored transcript chunk overlaps this window, so the
-                  candidate snippet returned by analysis is shown instead.
+                  No stored transcript chunk overlaps this moment, so HS is
+                  showing the snippet it saved during analysis instead.
                 </small>
               </article>
             ) : (
@@ -122,8 +122,8 @@ export function TranscriptContextPeek({
 
       {totalContextChunks === 0 && transcript.length === 0 ? (
         <p className="context-summary-copy">
-          No transcript chunks were stored for this session, so context review
-          is limited to the candidate snippet returned by analysis.
+          No transcript chunks were saved for this session, so context review is
+          limited to the snippet HS saved during analysis.
         </p>
       ) : null}
     </section>

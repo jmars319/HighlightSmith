@@ -268,6 +268,20 @@ describe("domain helpers", () => {
     assert.equal(defaultReviewQueueMode(session), "ALL");
   });
 
+  it("defaults fresh sessions to pending mode so review starts with undecided moments", () => {
+    const session = createMockProjectSession();
+
+    assert.equal(defaultReviewQueueMode(session), "ONLY_PENDING");
+    assert.deepEqual(
+      filterCandidatesByReviewMode(
+        session.candidates,
+        session,
+        defaultReviewQueueMode(session),
+      ).map((candidate) => candidate.id),
+      session.candidates.map((candidate) => candidate.id),
+    );
+  });
+
   it("builds honest placeholder profile matching state without hiding candidates", () => {
     const session = createMockProjectSession();
     const profile = {
@@ -287,6 +301,7 @@ describe("domain helpers", () => {
           profileId: "profile_dry_humor",
           sourceType: "TWITCH_CLIP_URL" as const,
           sourceValue: "https://clips.twitch.tv/example",
+          referenceKind: "CLIP" as const,
           status: "REFERENCE_ONLY" as const,
           createdAt: "2026-04-11T00:00:00.000Z",
           updatedAt: "2026-04-11T00:00:00.000Z",

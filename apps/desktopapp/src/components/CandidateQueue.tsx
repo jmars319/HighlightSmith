@@ -31,7 +31,6 @@ type CandidateQueueProps = {
   totalCandidateCount: number;
   matchingCandidateCount: number;
   searchValue: string;
-  deferredSearchValue: string;
   onSearchChange: (value: string) => void;
   bandFilter: ConfidenceBand | "ALL";
   onBandFilterChange: (value: ConfidenceBand | "ALL") => void;
@@ -64,7 +63,6 @@ export function CandidateQueue({
   totalCandidateCount,
   matchingCandidateCount,
   searchValue,
-  deferredSearchValue,
   onSearchChange,
   bandFilter,
   onBandFilterChange,
@@ -87,11 +85,11 @@ export function CandidateQueue({
       <div className="panel-header">
         <div>
           <p className="eyebrow">Review queue</p>
-          <h2>Candidate windows</h2>
+          <h2>Suggested moments</h2>
           <p className="queue-summary-copy">
             {reviewQueueMode === "ONLY_PENDING"
-              ? `${candidates.length} pending in queue • ${hiddenReviewedCount} reviewed hidden`
-              : `${pendingCount} pending • ${reviewedCount} reviewed`}
+              ? `${candidates.length} undecided right now • ${hiddenReviewedCount} already decided and hidden`
+              : `${pendingCount} undecided • ${reviewedCount} already decided`}
           </p>
         </div>
         <div className="queue-tools">
@@ -104,115 +102,129 @@ export function CandidateQueue({
             onClick={onSelectNextPending}
             type="button"
           >
-            Next pending
+            Next undecided
           </button>
         </div>
       </div>
 
-      <label className="search-block">
-        <span className="input-label">Search transcript / labels</span>
-        <input
-          aria-label="Search candidate transcripts"
-          className="search-input"
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search transcript, labels, or descriptions"
-          type="search"
-          value={searchValue}
-        />
-        <small>Deferred query: {deferredSearchValue || "none"}</small>
-      </label>
+      <details className="internal-details">
+        <summary className="internal-details-summary">
+          <span>Find or filter moments</span>
+          <span className="queue-count">
+            {searchValue ||
+            bandFilter !== "ALL" ||
+            reviewQueueMode === "ALL" ||
+            presentationMode !== "ALL_CANDIDATES"
+              ? "Active"
+              : "Optional"}
+          </span>
+        </summary>
 
-      <div className="filter-row">
-        <button
-          className={
-            presentationMode === "ALL_CANDIDATES"
-              ? "filter-chip active"
-              : "filter-chip"
-          }
-          onClick={() => onPresentationModeChange("ALL_CANDIDATES")}
-          type="button"
-        >
-          All candidates
-        </button>
-        <button
-          className={
-            presentationMode === "PROFILE_VIEW"
-              ? "filter-chip active"
-              : "filter-chip"
-          }
-          onClick={() => onPresentationModeChange("PROFILE_VIEW")}
-          type="button"
-        >
-          Profile view
-        </button>
-        <button
-          className={
-            presentationMode === "STRONG_MATCHES"
-              ? "filter-chip active"
-              : "filter-chip"
-          }
-          onClick={() => onPresentationModeChange("STRONG_MATCHES")}
-          type="button"
-        >
-          Strong matches
-        </button>
-      </div>
+        <label className="search-block">
+          <span className="input-label">Search moments</span>
+          <input
+            aria-label="Search moments"
+            className="search-input"
+            id="review-search-input"
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search transcript, labels, or descriptions"
+            type="search"
+            value={searchValue}
+          />
+        </label>
 
-      <div className="queue-profile-context">
-        <p className="queue-summary-copy">
-          {profile.name} • {profileMatchingSummary.note}
-        </p>
-        {isStrongMatchFallback ? (
-          <p className="queue-summary-copy">
-            No strong profile matches have been assessed yet, so this view still
-            shows the full candidate set.
-          </p>
-        ) : null}
-      </div>
-
-      <div className="filter-row">
-        <button
-          className={
-            reviewQueueMode === "ONLY_PENDING"
-              ? "filter-chip active"
-              : "filter-chip"
-          }
-          disabled={pendingCount === 0}
-          onClick={() => onReviewQueueModeChange("ONLY_PENDING")}
-          type="button"
-        >
-          Only pending ({pendingCount})
-        </button>
-        <button
-          className={
-            reviewQueueMode === "ALL" ? "filter-chip active" : "filter-chip"
-          }
-          onClick={() => onReviewQueueModeChange("ALL")}
-          type="button"
-        >
-          All ({totalCandidateCount})
-        </button>
-      </div>
-
-      <div className="filter-row">
-        {filters.map((filterValue) => (
+        <div className="filter-row">
           <button
-            key={filterValue}
             className={
-              filterValue === bandFilter ? "filter-chip active" : "filter-chip"
+              reviewQueueMode === "ONLY_PENDING"
+                ? "filter-chip active"
+                : "filter-chip"
             }
-            onClick={() => onBandFilterChange(filterValue)}
+            disabled={pendingCount === 0}
+            onClick={() => onReviewQueueModeChange("ONLY_PENDING")}
             type="button"
           >
-            {filterValue}
+            Needs review ({pendingCount})
           </button>
-        ))}
-      </div>
+          <button
+            className={
+              reviewQueueMode === "ALL" ? "filter-chip active" : "filter-chip"
+            }
+            onClick={() => onReviewQueueModeChange("ALL")}
+            type="button"
+          >
+            All moments ({totalCandidateCount})
+          </button>
+        </div>
+
+        <div className="filter-row">
+          <button
+            className={
+              presentationMode === "ALL_CANDIDATES"
+                ? "filter-chip active"
+                : "filter-chip"
+            }
+            onClick={() => onPresentationModeChange("ALL_CANDIDATES")}
+            type="button"
+          >
+            Everything
+          </button>
+          <button
+            className={
+              presentationMode === "PROFILE_VIEW"
+                ? "filter-chip active"
+                : "filter-chip"
+            }
+            onClick={() => onPresentationModeChange("PROFILE_VIEW")}
+            type="button"
+          >
+            Match this profile
+          </button>
+          <button
+            className={
+              presentationMode === "STRONG_MATCHES"
+                ? "filter-chip active"
+                : "filter-chip"
+            }
+            onClick={() => onPresentationModeChange("STRONG_MATCHES")}
+            type="button"
+          >
+            Strongest profile fits
+          </button>
+        </div>
+
+        <div className="queue-profile-context">
+          <p className="queue-summary-copy">
+            {profile.name} • {profileMatchingSummary.note}
+          </p>
+          {isStrongMatchFallback ? (
+            <p className="queue-summary-copy">
+              HS does not have enough strong profile evidence yet, so this still
+              shows the full set of suggested moments.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="filter-row">
+          {filters.map((filterValue) => (
+            <button
+              key={filterValue}
+              className={
+                filterValue === bandFilter ? "filter-chip active" : "filter-chip"
+              }
+              onClick={() => onBandFilterChange(filterValue)}
+              type="button"
+            >
+              {filterValue}
+            </button>
+          ))}
+        </div>
+      </details>
 
       {!selectedCandidateVisibleInQueue ? (
         <p className="queue-summary-copy">
-          The current selection is outside this queue view. Timeline and detail
-          stay focused until you choose another candidate.
+          The current moment is hidden by your current filters, but the detail
+          panel stays locked on it until you choose another one.
         </p>
       ) : null}
 
@@ -221,10 +233,10 @@ export function CandidateQueue({
           <span className="detail-label">Queue state</span>
           <p>
             {totalCandidateCount === 0
-              ? "No candidates found. Analysis returned no strong signals for this session."
+              ? "No moments found. HS did not find any strong signals in this video."
               : reviewQueueMode === "ONLY_PENDING"
-                ? "No pending candidates match the current search and confidence filters."
-                : "No candidates match the current search and confidence filters."}
+                ? "Nothing still needing review matches the current search and filters."
+                : "No moments match the current search and filters."}
           </p>
         </article>
       ) : (
@@ -255,7 +267,7 @@ export function CandidateQueue({
               >
                 <CandidateCard
                   candidate={candidate}
-                  footerText={`Score ${percentage(candidate.scoreEstimate)} • ${formatSeconds(candidate.candidateWindow.startSeconds)} to ${formatSeconds(candidate.candidateWindow.endSeconds)} • ${decision?.action ?? "PENDING"}${profileMatchLabel ? ` • ${profileMatchLabel}` : ""}${reviewTag ? ` • ${formatReviewTagLabel(reviewTag)}` : ""}`}
+                  footerText={`Score ${percentage(candidate.scoreEstimate)} • ${formatSeconds(candidate.candidateWindow.startSeconds)} to ${formatSeconds(candidate.candidateWindow.endSeconds)} • ${formatDecisionState(decision?.action)}${profileMatchLabel ? ` • ${profileMatchLabel}` : ""}${reviewTag ? ` • ${formatReviewTagLabel(reviewTag)}` : ""}`}
                   label={resolveCandidateLabel(candidate, decision)}
                   onSelect={() => onSelectCandidate(candidate.id)}
                   secondaryText={`${plainDescription.summary}${plainDescription.detail ? ` ${plainDescription.detail}` : ""}`}
@@ -278,12 +290,26 @@ function formatProfileMatchBadge(
   }
 
   if (profileMatch.strength === "STRONG") {
-    return "Strong heuristic match";
+    return "Strong local match";
   }
 
   if (profileMatch.strength === "POSSIBLE") {
-    return "Possible heuristic match";
+    return "Possible local match";
   }
 
-  return "Weak heuristic match";
+  return "Weaker local match";
+}
+
+function formatDecisionState(
+  action: ReviewDecision["action"] | undefined,
+): string {
+  if (action === "ACCEPT") {
+    return "Kept";
+  }
+
+  if (action === "REJECT") {
+    return "Skipped";
+  }
+
+  return "Undecided";
 }

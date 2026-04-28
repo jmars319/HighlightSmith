@@ -105,7 +105,7 @@ export function useReviewState({
       setReviewError(
         error instanceof Error
           ? error.message
-          : "Unexpected review persistence failure while contacting the local API",
+          : "Something went wrong while saving your decision.",
       );
     } finally {
       setIsSavingReview(false);

@@ -5,6 +5,9 @@ type ReviewControlsProps = {
   onReject?: () => void;
   onRetime?: () => void;
   onRelabel?: () => void;
+  blockLabel?: string;
+  showTimingAction?: boolean;
+  showLabelEditor?: boolean;
   disabled?: boolean;
 };
 
@@ -15,33 +18,40 @@ export function ReviewControls({
   onReject,
   onRetime,
   onRelabel,
+  blockLabel = "Moment controls",
+  showTimingAction = true,
+  showLabelEditor = true,
   disabled = false,
 }: ReviewControlsProps) {
   return (
     <section className="hs-block">
-      <span className="hs-block-label">Review controls</span>
+      <span className="hs-block-label">{blockLabel}</span>
       <div className="hs-controls-row hs-controls-row-actions">
         <button disabled={disabled} onClick={onAccept} type="button">
-          Accept
+          Keep
         </button>
         <button disabled={disabled} onClick={onReject} type="button">
-          Reject
+          Skip
         </button>
-        <button disabled={disabled} onClick={onRetime} type="button">
-          Adjust
-        </button>
+        {showTimingAction ? (
+          <button disabled={disabled} onClick={onRetime} type="button">
+            Adjust timing
+          </button>
+        ) : null}
       </div>
-      <div className="hs-controls-row hs-controls-row-label">
-        <input
-          disabled={disabled}
-          onChange={(event) => onLabelChange(event.target.value)}
-          type="text"
-          value={labelDraft}
-        />
-        <button disabled={disabled} onClick={onRelabel} type="button">
-          Save label
-        </button>
-      </div>
+      {showLabelEditor ? (
+        <div className="hs-controls-row hs-controls-row-label">
+          <input
+            disabled={disabled}
+            onChange={(event) => onLabelChange(event.target.value)}
+            type="text"
+            value={labelDraft}
+          />
+          <button disabled={disabled} onClick={onRelabel} type="button">
+            Rename moment
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

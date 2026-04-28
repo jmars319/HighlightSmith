@@ -151,3 +151,26 @@ run_step() {
 
   fail "${description} failed with exit code ${exit_code}"
 }
+
+wait_for_http() {
+  local service_name="$1"
+  local url="$2"
+  local timeout_seconds="${3:-30}"
+  local sleep_seconds="${4:-1}"
+  local elapsed_seconds=0
+
+  info "Waiting for ${service_name}"
+  note "Health URL: ${url}"
+
+  while (( elapsed_seconds < timeout_seconds )); do
+    if curl --silent --fail --max-time 2 "${url}" >/dev/null 2>&1; then
+      success "${service_name} is ready"
+      return 0
+    fi
+
+    sleep "${sleep_seconds}"
+    elapsed_seconds=$(( elapsed_seconds + sleep_seconds ))
+  done
+
+  fail "${service_name} did not become ready within ${timeout_seconds}s"
+}

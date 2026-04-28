@@ -33,9 +33,9 @@ export function CandidateTimeline({
   if (candidates.length === 0) {
     return (
       <section className="timeline-panel glass-panel empty-state">
-        <p className="eyebrow">Session markers</p>
-        <h2>No candidates found</h2>
-        <p>Analysis returned no strong signals for this session.</p>
+        <p className="eyebrow">Video map</p>
+        <h2>No moments found</h2>
+        <p>HS did not find any strong moments in this session.</p>
       </section>
     );
   }
@@ -53,14 +53,14 @@ export function CandidateTimeline({
     <section className="timeline-panel glass-panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Session markers</p>
-          <h2>Candidate timeline</h2>
+          <p className="eyebrow">Video map</p>
+          <h2>Moment timeline</h2>
           <p className="timeline-summary-copy">
-            {candidates.length} markers across {formatLongTime(durationSeconds)} •{" "}
-            {demotedCount} flagged for closer review
+            {candidates.length} suggested moments across{" "}
+            {formatLongTime(durationSeconds)} • {demotedCount} need a closer look
           </p>
         </div>
-        <span className="queue-count">{laneCount} lanes</span>
+        <span className="queue-count">{laneCount} tracks</span>
       </div>
 
       <div className="timeline-ruler">
@@ -146,7 +146,9 @@ export function CandidateTimeline({
         <div className="section-title-row">
           <h3>{selectedCandidate.editableLabel}</h3>
           <span className="decision-pill">
-            {decisionsByCandidateId[selectedCandidate.id]?.action ?? "PENDING"}
+            {formatDecisionState(
+              decisionsByCandidateId[selectedCandidate.id]?.action,
+            )}
           </span>
         </div>
         <p className="timeline-focus-copy">
@@ -158,11 +160,12 @@ export function CandidateTimeline({
           </p>
         ) : null}
         <p>
-          Window {formatLongTime(selectedCandidate.candidateWindow.startSeconds)} to{" "}
+          Detected moment{" "}
+          {formatLongTime(selectedCandidate.candidateWindow.startSeconds)} to{" "}
           {formatLongTime(selectedCandidate.candidateWindow.endSeconds)}
         </p>
         <p>
-          Suggested segment {formatLongTime(selectedCandidate.suggestedSegment.startSeconds)} to{" "}
+          Suggested clip {formatLongTime(selectedCandidate.suggestedSegment.startSeconds)} to{" "}
           {formatLongTime(selectedCandidate.suggestedSegment.endSeconds)}
         </p>
         {selectedCandidate.reviewTags.length > 0 ? (
@@ -175,7 +178,7 @@ export function CandidateTimeline({
           </div>
         ) : (
           <p className="timeline-focus-copy">
-            No manual-review flags on this candidate.
+            No extra review flags on this moment.
           </p>
         )}
       </article>
@@ -232,4 +235,18 @@ function percentageOf(value: number, total: number): number {
   }
 
   return (value / total) * 100;
+}
+
+function formatDecisionState(
+  action: ReviewDecision["action"] | undefined,
+): string {
+  if (action === "ACCEPT") {
+    return "Kept";
+  }
+
+  if (action === "REJECT") {
+    return "Skipped";
+  }
+
+  return "Undecided";
 }

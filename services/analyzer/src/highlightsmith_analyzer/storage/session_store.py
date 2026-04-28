@@ -22,6 +22,7 @@ from ..contracts import (
     ContentProfile,
     ExampleClip,
     ExampleClipFeatureSummary,
+    ExampleReferenceKind,
     ExampleClipSourceType,
     ExampleClipStatus,
     FeatureWindow,
@@ -633,9 +634,10 @@ class SessionStore:
             connection.row_factory = sqlite3.Row
             connection.executescript(SCHEMA_SQL)
             self._ensure_column(connection, "example_clips", "summary_json", "TEXT")
+            self._ensure_media_library_asset_columns(connection)
             self._seed_system_profiles(connection)
             self._ensure_profile_exists(connection, profile_id)
-            examples = self._example_clips_for_profile(connection, profile_id)
+            examples = self._profile_reference_examples(connection, profile_id)
             connection.commit()
             return examples
 
@@ -1333,6 +1335,9 @@ class SessionStore:
         self,
         job_id: str,
         result: MediaIndexSummary,
+        *,
+        feature_summary: ExampleClipFeatureSummary | None = None,
+        asset_status_detail: str | None = None,
     ) -> MediaIndexJob:
         now = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self.database_path) as connection:
@@ -1364,12 +1369,14 @@ class SessionStore:
             connection.execute(
                 """
                 UPDATE media_library_assets
-                SET status = ?, status_detail = ?, index_summary_json = ?, updated_at = ?
+                SET status = ?, status_detail = ?, summary_json = ?, index_summary_json = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     ExampleClipStatus.LOCAL_FILE_AVAILABLE.value,
-                    "Media index ready for matching and VOD/edit comparison.",
+                    asset_status_detail
+                    or "Media index ready for matching and VOD/edit comparison.",
+                    self._to_json(feature_summary) if feature_summary else None,
                     result_json,
                     now,
                     job.asset_id,
@@ -1550,6 +1557,19 @@ class SessionStore:
             if active_row is not None:
                 return self._media_alignment_job_from_row(active_row)
 
+            source_asset = self._load_media_library_asset(
+                connection,
+                normalized_source_asset_id,
+            )
+            query_asset = self._load_media_library_asset(
+                connection,
+                normalized_query_asset_id,
+            )
+            self._ensure_media_alignment_prerequisites(
+                source_asset=source_asset,
+                query_asset=query_asset,
+            )
+
             connection.execute(
                 """
                 INSERT INTO media_alignment_jobs (
@@ -1573,6 +1593,38 @@ class SessionStore:
             )
             connection.commit()
             return self._load_media_alignment_job(connection, job_id)
+
+    def _ensure_media_alignment_prerequisites(
+        self,
+        *,
+        source_asset: MediaLibraryAsset,
+        query_asset: MediaLibraryAsset,
+    ) -> None:
+        missing_requirements: list[str] = []
+        for asset, role_label in (
+            (source_asset, "source VOD"),
+            (query_asset, "edited video"),
+        ):
+            asset_label = asset.title or asset.id
+            if asset.index_summary is None:
+                missing_requirements.append(
+                    f'{role_label} "{asset_label}" has not been indexed yet'
+                )
+                continue
+
+            if not asset.index_artifact_summary or not (
+                asset.index_artifact_summary.latest_audio_fingerprint_artifact_id
+            ):
+                missing_requirements.append(
+                    f'{role_label} "{asset_label}" does not have an audio fingerprint artifact yet'
+                )
+
+        if missing_requirements:
+            raise ValueError(
+                "Cannot start media alignment yet. "
+                + "; ".join(missing_requirements)
+                + ". Run Index media for both assets first."
+            )
 
     def claim_media_alignment_job(self, job_id: str) -> MediaAlignmentJob | None:
         now = datetime.now(timezone.utc).isoformat()
@@ -1928,7 +1980,7 @@ class SessionStore:
     ) -> ContentProfile:
         signal_weights = json.loads(row["signal_weights_json"])
         example_clips = (
-            self._example_clips_for_profile(connection, row["id"])
+            self._profile_reference_examples(connection, row["id"])
             if connection is not None
             else []
         )
@@ -1950,6 +2002,19 @@ class SessionStore:
             example_clips=example_clips,
         )
 
+    def _profile_reference_examples(
+        self,
+        connection: sqlite3.Connection,
+        profile_id: str,
+    ) -> list[ExampleClip]:
+        examples = self._example_clips_for_profile(connection, profile_id)
+        edit_examples = self._profile_edit_assets_as_examples(connection, profile_id)
+        return sorted(
+            examples + edit_examples,
+            key=lambda example: (example.updated_at, example.created_at),
+            reverse=True,
+        )
+
     def _example_clips_for_profile(
         self,
         connection: sqlite3.Connection,
@@ -1966,6 +2031,71 @@ class SessionStore:
             (profile_id,),
         ).fetchall()
         return [self._example_clip_from_row(connection, row) for row in rows]
+
+    def _profile_edit_assets_as_examples(
+        self,
+        connection: sqlite3.Connection,
+        profile_id: str,
+    ) -> list[ExampleClip]:
+        rows = connection.execute(
+            """
+            SELECT id, profile_id, source_type, source_value, title, note,
+                   status, status_detail, summary_json, created_at, updated_at
+            FROM media_library_assets
+            WHERE profile_id = ? AND asset_type = 'EDIT'
+            ORDER BY updated_at DESC, created_at DESC
+            """,
+            (profile_id,),
+        ).fetchall()
+        return [self._profile_edit_asset_as_example_clip(connection, row) for row in rows]
+
+    def _profile_edit_asset_as_example_clip(
+        self,
+        connection: sqlite3.Connection,
+        row: sqlite3.Row,
+    ) -> ExampleClip:
+        source_type = ExampleClipSourceType(row["source_type"])
+        source_value = row["source_value"]
+        status = ExampleClipStatus(row["status"])
+        status_detail = row["status_detail"]
+        feature_summary = self._example_feature_summary_from_json(row["summary_json"])
+
+        if source_type in {
+            ExampleClipSourceType.LOCAL_FILE_PATH,
+            ExampleClipSourceType.LOCAL_FILE_UPLOAD,
+        }:
+            path = Path(source_value).expanduser()
+            if not path.exists():
+                status = ExampleClipStatus.MISSING_LOCAL_FILE
+                status_detail = (
+                    "Profile-scoped edit asset was saved, but the local file is not currently available."
+                )
+                feature_summary = None
+            elif feature_summary:
+                status_detail = (
+                    "Indexed profile edit is active as a longform reference for future VOD matching."
+                )
+            else:
+                status_detail = (
+                    "Profile-scoped edit is saved, but it still needs indexing before it can act "
+                    "as a longform matching reference."
+                )
+
+        title = row["title"] or "Profile edit reference"
+        return ExampleClip(
+            id=row["id"],
+            profile_id=row["profile_id"],
+            source_type=source_type,
+            source_value=source_value,
+            reference_kind=ExampleReferenceKind.PROFILE_EDIT,
+            title=f"Edit reference • {title}",
+            note=row["note"],
+            status=status,
+            status_detail=status_detail,
+            feature_summary=feature_summary,
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
 
     def _example_clip_from_row(
         self,
@@ -2029,6 +2159,7 @@ class SessionStore:
             profile_id=row["profile_id"],
             source_type=source_type,
             source_value=source_value,
+            reference_kind=ExampleReferenceKind.CLIP,
             title=row["title"],
             note=row["note"],
             status=status,

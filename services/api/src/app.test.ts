@@ -192,6 +192,7 @@ describe("api smoke routes", () => {
       profileId: profile.id,
       sourceType: "TWITCH_CLIP_URL",
       sourceValue: "https://clips.twitch.tv/example",
+      referenceKind: "CLIP",
       title: "Dry payoff example",
       note: "Hold for deadpan timing.",
       status: "REFERENCE_ONLY",

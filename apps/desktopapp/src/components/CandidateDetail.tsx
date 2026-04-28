@@ -1,8 +1,8 @@
+import { useState } from "react";
 import type {
   CandidateWindow,
   ContentProfile,
   ProfileMatchingSummary,
-  ProfilePresentationMode,
   ProjectSessionSummary,
   ReviewDecision,
   TranscriptChunk,
@@ -11,7 +11,6 @@ import {
   describeCandidatePlainly,
   describeReasonCodePlainly,
   resolveCandidateProfileMatch,
-  type ReviewQueueMode,
 } from "@highlightsmith/domain";
 import {
   ConfidenceBadge,
@@ -28,12 +27,11 @@ type CandidateDetailProps = {
   profile: ContentProfile;
   transcript: TranscriptChunk[];
   exportPreview: string;
+  jsonPreview: string;
   candidateIndex: number;
   candidateCount: number;
   pendingCount: number;
   nextPendingSession: ProjectSessionSummary | null;
-  reviewQueueMode: ReviewQueueMode;
-  presentationMode: ProfilePresentationMode;
   profileMatchingSummary: ProfileMatchingSummary;
   selectedCandidateVisibleInQueue: boolean;
   visibleCandidateCount: number;
@@ -59,12 +57,11 @@ export function CandidateDetail({
   profile,
   transcript,
   exportPreview,
+  jsonPreview,
   candidateIndex,
   candidateCount,
   pendingCount,
   nextPendingSession,
-  reviewQueueMode,
-  presentationMode,
   profileMatchingSummary,
   selectedCandidateVisibleInQueue,
   visibleCandidateCount,
@@ -83,19 +80,19 @@ export function CandidateDetail({
   isSavingReview,
   reviewError,
 }: CandidateDetailProps) {
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
   if (!candidate) {
     return (
       <section className="detail-panel glass-panel empty-state">
-        <p className="eyebrow">Candidate detail</p>
+        <p className="eyebrow">Selected moment</p>
         <h2>
-          {candidateCount === 0
-            ? "No candidates found"
-            : "No candidate selected"}
+          {candidateCount === 0 ? "No moments found" : "No moment selected"}
         </h2>
         <p>
           {candidateCount === 0
-            ? "Analysis returned no strong signals for this session."
-            : "Select a candidate window to inspect its reasons and suggested clip boundaries."}
+            ? "HS did not find any strong moments in this session."
+            : "Select a moment to inspect why HS flagged it and where the clip boundaries land."}
         </p>
       </section>
     );
@@ -105,36 +102,47 @@ export function CandidateDetail({
   const profileMatch = resolveCandidateProfileMatch(candidate, profile);
   const plainDescription = describeCandidatePlainly(candidate);
 
+  async function handleCopyExport(
+    format: "timestamps" | "json",
+    value: string,
+  ) {
+    if (!value) {
+      setCopyFeedback(`No ${format} export is ready yet.`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyFeedback(
+        format === "timestamps"
+          ? "Copied timestamps."
+          : "Copied JSON export.",
+      );
+    } catch {
+      setCopyFeedback("Copy failed on this machine.");
+    }
+  }
+
   return (
     <section className="detail-panel glass-panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Candidate detail</p>
+          <p className="eyebrow">Selected moment</p>
           <h2>{decision?.label ?? candidate.editableLabel}</h2>
           <p className="detail-progress-copy">
-            Candidate {candidateIndex + 1} of {candidateCount} • {pendingCount}{" "}
-            pending
+            Moment {candidateIndex + 1} of {candidateCount} • {pendingCount}{" "}
+            undecided
           </p>
-          <p className="detail-mode-copy">
-            Queue mode:{" "}
-            {reviewQueueMode === "ONLY_PENDING"
-              ? "Only pending"
-              : "All candidates"}
-            {!selectedCandidateVisibleInQueue
-              ? " • current selection is outside the queue view"
-              : ""}
-          </p>
-          <p className="detail-mode-copy">
-            Presentation:{" "}
-            {presentationMode === "ALL_CANDIDATES"
-              ? "All candidates"
-              : presentationMode === "PROFILE_VIEW"
-                ? "Profile view"
-                : "Strong matches"}
-          </p>
+          {!selectedCandidateVisibleInQueue ? (
+            <p className="detail-mode-copy">
+              This moment is hidden by the current queue filters.
+            </p>
+          ) : null}
         </div>
         <div className="detail-header-meta">
-          <span className="decision-pill">{decision?.action ?? "PENDING"}</span>
+          <span className="decision-pill">
+            {formatDecisionState(decision?.action)}
+          </span>
           <ConfidenceBadge band={candidate.confidenceBand} />
         </div>
       </div>
@@ -151,7 +159,7 @@ export function CandidateDetail({
 
       <div className="detail-grid">
         <article className="detail-card">
-          <span className="detail-label">Window</span>
+          <span className="detail-label">Detected moment</span>
           <strong>
             {formatLongTime(candidate.candidateWindow.startSeconds)} to{" "}
             {formatLongTime(candidate.candidateWindow.endSeconds)}
@@ -163,7 +171,7 @@ export function CandidateDetail({
         </article>
 
         <article className="detail-card">
-          <span className="detail-label">Suggested segment</span>
+          <span className="detail-label">Suggested clip</span>
           <strong>
             {formatLongTime(activeSegment.startSeconds)} to{" "}
             {formatLongTime(activeSegment.endSeconds)}
@@ -175,7 +183,7 @@ export function CandidateDetail({
         </article>
 
         <article className="detail-card narrative-card">
-          <span className="detail-label">Plain-English read</span>
+          <span className="detail-label">Why HS flagged this</span>
           <strong>{plainDescription.summary}</strong>
           <p>
             {plainDescription.detail ??
@@ -191,35 +199,100 @@ export function CandidateDetail({
             </div>
           ) : null}
         </article>
+      </div>
 
-        <article className="detail-card">
-          <span className="detail-label">Profile context</span>
+      <section className="review-panel review-panel-primary">
+        <div className="section-title-row">
+          <h3>Your decision</h3>
+          <span className="review-status-copy">
+            {decision?.action === "ACCEPT"
+              ? "Marked to keep"
+              : decision?.action === "REJECT"
+                ? "Marked to skip"
+                : "Still undecided"}
+          </span>
+        </div>
+
+        <ReviewControls
+          blockLabel="Quick decision"
+          disabled={isSavingReview}
+          labelDraft={labelDraft}
+          onAccept={onAccept}
+          onLabelChange={onLabelChange}
+          onReject={onReject}
+          onRelabel={onSaveLabel}
+          onRetime={onExpandSetup}
+          showLabelEditor={false}
+          showTimingAction={false}
+        />
+
+        <div className="action-row">
+          <button
+            className="button-secondary"
+            disabled={visibleCandidateCount === 0}
+            onClick={onSelectPreviousVisible}
+            type="button"
+          >
+            Previous moment
+          </button>
+          <button
+            className="button-secondary"
+            disabled={isSavingReview || pendingCount === 0}
+            onClick={onSelectNextPending}
+            type="button"
+          >
+            Next undecided
+          </button>
+          <button
+            className="button-secondary"
+            disabled={visibleCandidateCount === 0}
+            onClick={onSelectNextVisible}
+            type="button"
+          >
+            Next moment
+          </button>
+        </div>
+
+        {isSavingReview ? (
+          <p className="review-status">Saving your decision...</p>
+        ) : null}
+        {reviewError ? <p className="review-error">{reviewError}</p> : null}
+      </section>
+
+      <details className="utility-block internal-details">
+        <summary className="internal-details-summary">
+          <span>Context and reference details</span>
+          <span className="queue-count">Optional</span>
+        </summary>
+
+        <article className="detail-card review-context-card">
+          <span className="detail-label">Reference context</span>
           <strong>{profile.name}</strong>
           <p>{profileMatch.note}</p>
           <p>
             Match state {formatProfileMatchStatus(profileMatch.status)} •{" "}
             {profileMatchingSummary.usableLocalExampleCount} usable local
-            example
+            reference
             {profileMatchingSummary.usableLocalExampleCount === 1
               ? ""
-              : "s"} • {profileMatchingSummary.referenceOnlyExampleCount}{" "}
-            reference-only
+              : "s"} • {profileMatchingSummary.referenceOnlyExampleCount} saved
+            without local media
           </p>
           {profileMatch.similarityScore !== undefined ? (
             <p>
-              Heuristic score {percentage(profileMatch.similarityScore)} •{" "}
-              {profileMatch.comparedExampleCount} local example
+              Local similarity {percentage(profileMatch.similarityScore)} •{" "}
+              {profileMatch.comparedExampleCount} local reference
               {profileMatch.comparedExampleCount === 1 ? "" : "s"} compared
             </p>
           ) : null}
         </article>
-      </div>
 
-      <TranscriptContextPeek candidate={candidate} transcript={transcript} />
+        <TranscriptContextPeek candidate={candidate} transcript={transcript} />
+      </details>
 
       <details className="breakdown-panel internal-details">
         <summary className="internal-details-summary">
-          <span>Internal scoring details</span>
+          <span>Advanced scoring details</span>
           <span className="score-pill">
             {percentage(candidate.scoreEstimate)}
           </span>
@@ -264,10 +337,10 @@ export function CandidateDetail({
       profileMatch.limitingFactors.length > 0 ? (
         <section className="breakdown-panel">
           <div className="section-title-row">
-            <h3>Profile match evidence</h3>
+            <h3>Why this fits the current profile</h3>
             <span className="eyebrow">
               {profileMatch.method === "LOCAL_FILE_HEURISTIC"
-                ? "Local-file heuristic"
+                ? "Local reference match"
                 : "Match unavailable"}
             </span>
           </div>
@@ -297,8 +370,61 @@ export function CandidateDetail({
             <span className="session-state-pill reviewed">Complete</span>
           </div>
           <p className="review-status-copy">
-            Every candidate in this session now has a decision.
+            Every moment in this session now has a decision.
           </p>
+          {exportPreview ? (
+            <details className="internal-details completion-export-details">
+              <summary className="internal-details-summary">
+                <span>Export kept moments</span>
+                <span className="queue-count">Ready</span>
+              </summary>
+              <div className="action-row">
+                <button
+                  className="button-secondary"
+                  onClick={() => {
+                    void handleCopyExport("timestamps", exportPreview);
+                  }}
+                  type="button"
+                >
+                  Copy timestamps
+                </button>
+                {jsonPreview ? (
+                  <button
+                    className="button-secondary"
+                    onClick={() => {
+                      void handleCopyExport("json", jsonPreview);
+                    }}
+                    type="button"
+                  >
+                    Copy JSON
+                  </button>
+                ) : null}
+              </div>
+              {copyFeedback ? (
+                <p className="review-status-copy">{copyFeedback}</p>
+              ) : null}
+              <details className="internal-details nested-export-details">
+                <summary className="internal-details-summary">
+                  <span>Timestamp preview</span>
+                  <span className="queue-count">Optional</span>
+                </summary>
+                <pre>{exportPreview}</pre>
+              </details>
+              {jsonPreview ? (
+                <details className="internal-details nested-export-details">
+                  <summary className="internal-details-summary">
+                    <span>JSON preview</span>
+                    <span className="queue-count">Optional</span>
+                  </summary>
+                  <pre>{jsonPreview}</pre>
+                </details>
+              ) : null}
+            </details>
+          ) : (
+            <p className="review-status-copy">
+              No kept moments yet to export from this session.
+            </p>
+          )}
           <div className="action-row">
             {nextPendingSession ? (
               <button
@@ -306,7 +432,7 @@ export function CandidateDetail({
                 onClick={onOpenNextPendingSession}
                 type="button"
               >
-                Open next pending session
+                Continue with next session
               </button>
             ) : null}
             <button
@@ -314,72 +440,31 @@ export function CandidateDetail({
               onClick={onReturnToProjects}
               type="button"
             >
-              Back to projects
+              Return to backlog
             </button>
           </div>
           <p className="review-status-copy">
             {nextPendingSession
-              ? `${nextPendingSession.sessionTitle} • ${nextPendingSession.pendingCount} pending`
-              : "All persisted backlog sessions are currently fully reviewed."}
+              ? `${nextPendingSession.sessionTitle} • ${nextPendingSession.pendingCount} undecided`
+              : "All saved review sessions are currently fully reviewed."}
           </p>
         </section>
       ) : null}
 
-      <section className="review-panel">
-        <div className="section-title-row">
-          <h3>Review actions</h3>
-          <span className="review-status-copy">
-            {decision?.action === "ACCEPT"
-              ? "Accepted for follow-up"
-              : decision?.action === "REJECT"
-                ? "Rejected for now"
-                : "Still pending review"}
-          </span>
-        </div>
-
-        <ReviewControls
-          disabled={isSavingReview}
-          labelDraft={labelDraft}
-          onAccept={onAccept}
-          onLabelChange={onLabelChange}
-          onReject={onReject}
-          onRelabel={onSaveLabel}
-          onRetime={onExpandSetup}
-        />
+      <details className="utility-block internal-details">
+        <summary className="internal-details-summary">
+          <span>Adjust clip or rename</span>
+          <span className="queue-count">Optional</span>
+        </summary>
 
         <div className="action-row">
           <button
             className="button-secondary"
-            disabled={visibleCandidateCount === 0}
-            onClick={onSelectPreviousVisible}
+            disabled={isSavingReview}
+            onClick={onExpandSetup}
             type="button"
           >
-            Previous in queue
-          </button>
-          <button
-            className="button-secondary"
-            disabled={visibleCandidateCount === 0}
-            onClick={onSelectNextVisible}
-            type="button"
-          >
-            Next in queue
-          </button>
-          {pendingCount > 0 ? (
-            <button
-              className="button-secondary"
-              onClick={onReturnToProjects}
-              type="button"
-            >
-              Back to projects
-            </button>
-          ) : null}
-          <button
-            className="button-secondary"
-            disabled={isSavingReview || pendingCount === 0}
-            onClick={onSelectNextPending}
-            type="button"
-          >
-            Jump to next pending
+            Lengthen opening by 2s
           </button>
           <button
             className="button-secondary"
@@ -387,23 +472,32 @@ export function CandidateDetail({
             onClick={onExpandResolution}
             type="button"
           >
-            Add 2s resolution
+            Lengthen ending by 2s
+          </button>
+          {pendingCount > 0 ? (
+            <button
+              className="button-secondary"
+              onClick={onReturnToProjects}
+              type="button"
+            >
+              Return to backlog
+            </button>
+          ) : null}
+        </div>
+
+        <div className="hs-controls-row hs-controls-row-label review-label-editor">
+          <input
+            disabled={isSavingReview}
+            onChange={(event) => onLabelChange(event.target.value)}
+            type="text"
+            value={labelDraft}
+          />
+          <button disabled={isSavingReview} onClick={onSaveLabel} type="button">
+            Rename moment
           </button>
         </div>
+      </details>
 
-        {isSavingReview ? (
-          <p className="review-status">Saving review update...</p>
-        ) : null}
-        {reviewError ? <p className="review-error">{reviewError}</p> : null}
-      </section>
-
-      <section className="export-panel">
-        <div className="section-title-row">
-          <h3>Export preview</h3>
-          <span className="eyebrow">Accepted + pending candidates</span>
-        </div>
-        <pre>{exportPreview || "No accepted candidates yet."}</pre>
-      </section>
     </section>
   );
 }
@@ -412,16 +506,30 @@ function formatProfileMatchStatus(
   status: ReturnType<typeof resolveCandidateProfileMatch>["status"],
 ): string {
   if (status === "EXAMPLE_COMPARISON") {
-    return "Example comparison";
+    return "Reference comparison";
   }
 
   if (status === "HEURISTIC") {
-    return "Heuristic";
+    return "Local match";
   }
 
   if (status === "PLACEHOLDER") {
-    return "Placeholder";
+    return "Reference pending";
   }
 
-  return "Unassessed";
+  return "No match data";
+}
+
+function formatDecisionState(
+  action: ReviewDecision["action"] | undefined,
+): string {
+  if (action === "ACCEPT") {
+    return "Kept";
+  }
+
+  if (action === "REJECT") {
+    return "Skipped";
+  }
+
+  return "Undecided";
 }

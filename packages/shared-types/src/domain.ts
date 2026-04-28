@@ -166,6 +166,8 @@ export const exampleClipSourceTypeSchema = z.enum([
   "LOCAL_FILE_PATH",
 ]);
 
+export const exampleReferenceKindSchema = z.enum(["CLIP", "PROFILE_EDIT"]);
+
 export const exampleClipStatusSchema = z.enum([
   "REFERENCE_ONLY",
   "LOCAL_FILE_AVAILABLE",
@@ -370,6 +372,7 @@ export const exampleClipSchema = z.object({
   profileId: z.string(),
   sourceType: exampleClipSourceTypeSchema,
   sourceValue: z.string(),
+  referenceKind: exampleReferenceKindSchema.default("CLIP"),
   title: z.string().optional(),
   note: z.string().optional(),
   status: exampleClipStatusSchema.default("REFERENCE_ONLY"),
@@ -618,6 +621,7 @@ export type SuggestedSegment = z.infer<typeof suggestedSegmentSchema>;
 export type CandidateWindow = z.infer<typeof candidateWindowSchema>;
 export type ReviewDecision = z.infer<typeof reviewDecisionSchema>;
 export type ExampleClipSourceType = z.infer<typeof exampleClipSourceTypeSchema>;
+export type ExampleReferenceKind = z.infer<typeof exampleReferenceKindSchema>;
 export type ExampleClipStatus = z.infer<typeof exampleClipStatusSchema>;
 export type MediaLibraryAssetType = z.infer<
   typeof mediaLibraryAssetTypeSchema

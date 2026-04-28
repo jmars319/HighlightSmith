@@ -53,6 +53,7 @@ That runs environment checks and installs workspace dependencies.
 ## Run Surfaces And Services
 
 ```bash
+pnpm dev:hs
 pnpm dev:desktop
 pnpm dev:web
 pnpm dev:mobile
@@ -61,6 +62,7 @@ pnpm dev:api
 pnpm dev:both
 ```
 
+`dev:hs` starts the exact local desktop stack: analyzer, then API, then the Tauri desktop app after both health checks pass.
 `dev:both` starts analyzer + API + webapp together as the easiest multi-surface development loop from the repo root.
 The API bridge currently runs directly from TypeScript with `tsx`.
 `dev:desktop` remains the primary product-development loop.

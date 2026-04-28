@@ -247,7 +247,7 @@ export function buildProfileMatchingSummary(
       unavailableLocalExampleCount,
       ready: false,
       method: "NONE",
-      note: "Add local example clips to turn on profile-aware matching.",
+      note: "Add local example clips or indexed profile edits to turn on profile-aware matching.",
     };
   }
 
@@ -264,7 +264,7 @@ export function buildProfileMatchingSummary(
       unavailableLocalExampleCount,
       ready: true,
       method: "LOCAL_FILE_HEURISTIC",
-      note: `Local-file heuristic matching is active from ${usableLocalExampleCount} usable example${usableLocalExampleCount === 1 ? "" : "s"}.${ignoredReferenceCopy}`,
+      note: `Local-file heuristic matching is active from ${usableLocalExampleCount} usable local reference${usableLocalExampleCount === 1 ? "" : "s"}.${ignoredReferenceCopy}`,
     };
   }
 
@@ -277,7 +277,7 @@ export function buildProfileMatchingSummary(
       unavailableLocalExampleCount,
       ready: false,
       method: "NONE",
-      note: "This profile only has URL/reference examples right now. Matching is local-file-only in this build.",
+      note: "This profile only has URL/reference sources right now. Matching is local-file-only in this build.",
     };
   }
 
@@ -289,7 +289,7 @@ export function buildProfileMatchingSummary(
     unavailableLocalExampleCount,
     ready: false,
     method: "NONE",
-    note: "Local example references are saved, but none are currently usable for matching. Check the file path and local summary readiness.",
+    note: "Local reference sources are saved, but none are currently usable for matching. Check the file path and local summary readiness.",
   };
 }
 
@@ -574,11 +574,7 @@ export function defaultReviewQueueMode(
     isCandidatePending(session, candidate.id),
   ).length;
 
-  if (pendingCount === 0) {
-    return "ALL";
-  }
-
-  return pendingCount < session.candidates.length ? "ONLY_PENDING" : "ALL";
+  return pendingCount === 0 ? "ALL" : "ONLY_PENDING";
 }
 
 export function filterCandidatesByReviewMode(

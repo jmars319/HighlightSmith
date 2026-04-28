@@ -7,27 +7,26 @@ Desktopapp is the primary product surface in V1.
 It is the default place for:
 
 - local media selection
-- analysis launch
-- profile-aware review
-- backlog decision-making
-- trust-sensitive candidate inspection
+- video scanning
+- moment review
+- reference-guided decision-making
+- saved-session follow-up
 
 ## Responsibilities
 
 - local project/session creation
 - local media selection
-- analysis launch control
-- candidate review UI
-- candidate detail inspection
-- accept / reject / adjust / relabel flow
+- scan launch control
+- moment review UI
+- moment detail inspection
+- keep / skip / adjust / rename flow
 - export entrypoint
 
-## Current State
+## Current Navigation
 
-The scaffold includes placeholder screens for:
+The desktop app centers on four task areas:
 
-- Projects
-- New Analysis
-- Candidate Review
-- Candidate Detail
-- Settings
+- Start
+- Review
+- References
+- Backlog

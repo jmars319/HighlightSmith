@@ -26,12 +26,12 @@ export async function fetchWithLocalApiMessage(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(
-        `${failurePrefix} The local API at ${apiBaseUrl} did not respond within ${Math.ceil(timeoutMs / 1000)}s.`,
+        `${failurePrefix} HS could not reach its local service at ${apiBaseUrl} within ${Math.ceil(timeoutMs / 1000)}s.`,
       );
     }
 
     throw new Error(
-      `${failurePrefix} Unable to reach the local API at ${apiBaseUrl}. Start the API bridge and analyzer, then try again.`,
+      `${failurePrefix} HS could not reach its local service at ${apiBaseUrl}. Start the local backend, then try again.`,
     );
   } finally {
     window.clearTimeout(timeoutId);
