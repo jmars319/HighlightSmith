@@ -1878,6 +1878,22 @@ summary {
   color: var(--tone-success-text);
 }
 
+.settings-file-choice {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--surface-input-border);
+  border-radius: 16px;
+  background: var(--surface-recessed);
+}
+
+.settings-file-value {
+  color: var(--text-strong);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .settings-details-body {
   margin-top: 12px;
 }

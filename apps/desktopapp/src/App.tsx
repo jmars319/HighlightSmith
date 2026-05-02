@@ -118,6 +118,7 @@ type StartGuide = {
 };
 type ThemeMode = "dark" | "light";
 type SettingsSectionId = "profile-setup" | "appearance" | "window-behavior";
+type PulseRuntimeStatus = "checking" | "starting" | "ready" | "slow";
 type DesktopNavItem = { id: DesktopPage; label: string };
 type ProfileLibraryChangedPayload = {
   profileId?: string;
@@ -238,6 +239,8 @@ function DesktopApp() {
   const deferredSearchValue = useDeferredValue(searchValue);
   const apiBaseUrl =
     import.meta.env.VITE_VAEXCORE_PULSE_API_BASE_URL ?? "http://127.0.0.1:4010";
+  const pulseRuntimeStatus = usePulseRuntimeStatus(apiBaseUrl);
+  const isPulseReady = isPulseRuntimeReady(pulseRuntimeStatus);
   const sessionCandidates = projectSession?.candidates ?? [];
   const normalizedSelectedMediaPath = selectedMediaPath.trim();
   const availableProfiles = profiles;
@@ -264,6 +267,7 @@ function DesktopApp() {
     {
       hasPersistedProfiles,
       isLoadingProfiles,
+      pulseRuntimeStatus,
     },
   );
   const startGuide = buildStartGuide({
@@ -273,7 +277,8 @@ function DesktopApp() {
     hasSelectedVideo: Boolean(normalizedSelectedMediaPath),
   });
   const showStartGuide =
-    !hasSavedSessions || !hasPersistedProfiles || !hasReferenceMaterial;
+    isPulseReady &&
+    (!hasSavedSessions || !hasPersistedProfiles || !hasReferenceMaterial);
   const analysisSourceName = normalizedSelectedMediaPath
     ? extractSourceName(normalizedSelectedMediaPath)
     : null;
@@ -471,6 +476,12 @@ function DesktopApp() {
   }, [themeMode]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      setIsLoadingProjects(false);
+      setProjectsError(null);
+      return;
+    }
+
     let isCancelled = false;
 
     async function loadProjectSummaries() {
@@ -516,9 +527,15 @@ function DesktopApp() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, isPulseReady]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      setIsLoadingProfiles(false);
+      setProfileLibraryError(null);
+      return;
+    }
+
     let isCancelled = false;
 
     async function loadProfiles() {
@@ -563,10 +580,10 @@ function DesktopApp() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, isPulseReady]);
 
   useEffect(() => {
-    if (!isTauriRuntime()) {
+    if (!isTauriRuntime() || !isPulseReady) {
       return;
     }
 
@@ -656,9 +673,14 @@ function DesktopApp() {
       isSubscribed = false;
       unlistenProfileLibrary?.();
     };
-  }, [apiBaseUrl, selectedProfileId]);
+  }, [apiBaseUrl, isPulseReady, selectedProfileId]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      setIsLoadingMediaLibraryAssets(false);
+      return;
+    }
+
     let isCancelled = false;
 
     async function loadMediaLibraryAssets() {
@@ -693,9 +715,14 @@ function DesktopApp() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, isPulseReady]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      setIsLoadingMediaEditPairs(false);
+      return;
+    }
+
     let isCancelled = false;
 
     async function loadMediaEditPairs() {
@@ -730,9 +757,14 @@ function DesktopApp() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, isPulseReady]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      setIsLoadingMediaIndexJobs(false);
+      return;
+    }
+
     let isCancelled = false;
 
     async function loadMediaIndexJobs() {
@@ -767,9 +799,13 @@ function DesktopApp() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, isPulseReady]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      return;
+    }
+
     const hasActiveIndexJobs = mediaIndexJobs.some(
       (job) => job.status === "QUEUED" || job.status === "RUNNING",
     );
@@ -805,9 +841,14 @@ function DesktopApp() {
       isCancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [apiBaseUrl, mediaIndexJobs]);
+  }, [apiBaseUrl, isPulseReady, mediaIndexJobs]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      setIsLoadingMediaAlignmentJobs(false);
+      return;
+    }
+
     let isCancelled = false;
 
     async function loadMediaAlignmentState() {
@@ -846,9 +887,13 @@ function DesktopApp() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, isPulseReady]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      return;
+    }
+
     const hasActiveAlignmentJobs = mediaAlignmentJobs.some(
       (job) => job.status === "QUEUED" || job.status === "RUNNING",
     );
@@ -884,9 +929,14 @@ function DesktopApp() {
       isCancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [apiBaseUrl, mediaAlignmentJobs]);
+  }, [apiBaseUrl, isPulseReady, mediaAlignmentJobs]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      setIsLoadingProfileExamples(false);
+      return;
+    }
+
     const profileId = selectedProfileId;
     if (!profileId) {
       setSelectedProfileExamples([]);
@@ -939,7 +989,7 @@ function DesktopApp() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl, selectedProfileId]);
+  }, [apiBaseUrl, isPulseReady, selectedProfileId]);
 
   useEffect(() => {
     if (activePage === "candidate-review") {
@@ -969,6 +1019,10 @@ function DesktopApp() {
   }, [projectSession, queueCandidates, reviewQueueMode, selectedCandidate?.id]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      return;
+    }
+
     const lastSessionId = window.localStorage.getItem(lastSessionIdStorageKey);
     if (!lastSessionId) {
       return;
@@ -1003,8 +1057,8 @@ function DesktopApp() {
 
         setAnalysisError(
           error instanceof Error
-            ? `Unable to restore the last local session: ${error.message}`
-            : "Unable to restore the last local session",
+            ? `Unable to restore the last session: ${error.message}`
+            : "Unable to restore the last session",
         );
       }
     }
@@ -1014,7 +1068,7 @@ function DesktopApp() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, isPulseReady]);
 
   useEffect(() => {
     if (activePage !== "candidate-review") {
@@ -1652,7 +1706,7 @@ function DesktopApp() {
           },
           body: JSON.stringify(request),
         },
-        "Unable to start local analysis.",
+        "Unable to start scan.",
         localApiTimeouts.analysis,
       );
 
@@ -1667,7 +1721,7 @@ function DesktopApp() {
         throw new Error(
           payload && "message" in payload && payload.message
             ? payload.message
-            : "Analysis request failed",
+            : "Scan request failed",
         );
       }
 
@@ -1915,7 +1969,7 @@ function DesktopApp() {
                   {buildProjectCoverageCopy(summary)}
                 </p>
                 <p>
-                  Reference profile {profile.name} • updated{" "}
+                  Profile {profile.name} • updated{" "}
                   {formatSummaryTimestamp(summary.updatedAt)}
                 </p>
                 <p className="project-summary-cta">
@@ -1956,7 +2010,7 @@ function DesktopApp() {
                   onClick={() => openSettingsWindowFromUi("profile-setup")}
                   type="button"
                 >
-                  Profile Setup
+                  Set up profile
                 </button>
               </div>
             </div>
@@ -1992,7 +2046,7 @@ function DesktopApp() {
 
               <div className="analysis-inline-grid">
                 <label className="search-block">
-                  <span className="input-label">Reference profile</span>
+                  <span className="input-label">Profile</span>
                   <select
                     className="search-input"
                     disabled={isAnalyzing || !hasPersistedProfiles}
@@ -2054,7 +2108,7 @@ function DesktopApp() {
                   </p>
                 </article>
                 <article className="analysis-summary-card">
-                  <span className="detail-label">Reference profile</span>
+                  <span className="detail-label">Profile</span>
                   <strong>{selectedDraftProfile.name}</strong>
                   <p>{selectedDraftProfile.description}</p>
                 </article>
@@ -2647,14 +2701,14 @@ const profileSourceTypeOptions: Array<{
   hint: string;
 }> = [
   {
-    id: "LOCAL_FILE_PATH",
-    label: "Paste local path",
-    hint: "Paste a path to a short clip on this Mac.",
+    id: "LOCAL_FILE_UPLOAD",
+    label: "Choose clip file",
+    hint: "Choose a short clip from this Mac.",
   },
   {
-    id: "LOCAL_FILE_UPLOAD",
-    label: "Choose local file",
-    hint: "Choose a short clip from this Mac.",
+    id: "LOCAL_FILE_PATH",
+    label: "Paste file path",
+    hint: "Paste the full path to a short clip on this Mac.",
   },
   {
     id: "TWITCH_CLIP_URL",
@@ -2676,6 +2730,8 @@ const localProfileSourceTypeOptions = profileSourceTypeOptions.filter(
 function CompactProfileSetupSettingsSection() {
   const apiBaseUrl =
     import.meta.env.VITE_VAEXCORE_PULSE_API_BASE_URL ?? "http://127.0.0.1:4010";
+  const pulseRuntimeStatus = usePulseRuntimeStatus(apiBaseUrl);
+  const isPulseReady = isPulseRuntimeReady(pulseRuntimeStatus);
   const [profiles, setProfiles] = useState<ClipProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
     null,
@@ -2699,12 +2755,12 @@ function CompactProfileSetupSettingsSection() {
   const [profileName, setProfileName] = useState("");
   const [profileDescription, setProfileDescription] = useState("");
   const [sourceType, setSourceType] =
-    useState<ExampleClipSourceType>("LOCAL_FILE_PATH");
+    useState<ExampleClipSourceType>("LOCAL_FILE_UPLOAD");
   const [sourceValue, setSourceValue] = useState("");
   const [exampleTitle, setExampleTitle] = useState("");
   const [exampleNote, setExampleNote] = useState("");
   const [editSourceType, setEditSourceType] =
-    useState<ExampleClipSourceType>("LOCAL_FILE_PATH");
+    useState<ExampleClipSourceType>("LOCAL_FILE_UPLOAD");
   const [editSourceValue, setEditSourceValue] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const [editNote, setEditNote] = useState("");
@@ -2722,13 +2778,20 @@ function CompactProfileSetupSettingsSection() {
     selectedProfileExamples.length > 0 || isLoadingProfileExamples
       ? selectedProfileExamples
       : (selectedProfile?.exampleClips ?? []);
+  const isClipFilePicker = sourceType === "LOCAL_FILE_UPLOAD";
+  const isEditFilePicker = editSourceType === "LOCAL_FILE_UPLOAD";
   const canPickClipFile =
-    sourceType === "LOCAL_FILE_PATH" || sourceType === "LOCAL_FILE_UPLOAD";
+    sourceType === "LOCAL_FILE_PATH" || isClipFilePicker;
   const canPickEditFile =
-    editSourceType === "LOCAL_FILE_PATH" ||
-    editSourceType === "LOCAL_FILE_UPLOAD";
+    editSourceType === "LOCAL_FILE_PATH" || isEditFilePicker;
 
   useEffect(() => {
+    if (!isPulseReady) {
+      setIsLoadingProfiles(false);
+      setProfileLibraryError(null);
+      return;
+    }
+
     let isCancelled = false;
 
     async function loadProfiles() {
@@ -2771,9 +2834,14 @@ function CompactProfileSetupSettingsSection() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl, profileLoadRetryCount]);
+  }, [apiBaseUrl, isPulseReady, profileLoadRetryCount]);
 
   useEffect(() => {
+    if (!isPulseReady) {
+      setIsLoadingProfileExamples(false);
+      return;
+    }
+
     const profileId = selectedProfileId;
     if (!profileId) {
       setSelectedProfileExamples([]);
@@ -2821,7 +2889,7 @@ function CompactProfileSetupSettingsSection() {
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrl, selectedProfileId]);
+  }, [apiBaseUrl, isPulseReady, selectedProfileId]);
 
   async function handlePickLocalMedia(
     nextSourceType: ExampleClipSourceType,
@@ -2967,6 +3035,19 @@ function CompactProfileSetupSettingsSection() {
     }
   }
 
+  if (!isPulseReady) {
+    const startupCopy = buildPulseStartupCopy(pulseRuntimeStatus);
+    return (
+      <div className="settings-profile-setup">
+        <section className="settings-card profile-setup-card">
+          <span className="detail-label">Starting</span>
+          <h2>{startupCopy.headline}</h2>
+          <p>{startupCopy.detail}</p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="settings-profile-setup">
       {profileLibraryError ? (
@@ -3067,7 +3148,7 @@ function CompactProfileSetupSettingsSection() {
         {selectedProfile ? (
           <div className="analysis-form">
             <label className="search-block">
-              <span className="input-label">Source type</span>
+              <span className="input-label">Add from</span>
               <select
                 className="search-input"
                 disabled={isAddingProfileExample}
@@ -3087,30 +3168,51 @@ function CompactProfileSetupSettingsSection() {
               </small>
             </label>
 
-            <label className="search-block">
-              <span className="input-label">
-                {sourceType === "TWITCH_CLIP_URL" ||
-                sourceType === "YOUTUBE_SHORT_URL"
-                  ? "Clip link"
-                  : "Clip file"}
-              </span>
-              <input
-                className="search-input"
-                disabled={isAddingProfileExample}
-                onChange={(event) => setSourceValue(event.target.value)}
-                placeholder={
-                  sourceType === "TWITCH_CLIP_URL"
-                    ? "https://clips.twitch.tv/..."
-                    : sourceType === "YOUTUBE_SHORT_URL"
-                      ? "https://www.youtube.com/shorts/..."
-                      : "/Users/you/Clips/example.mp4"
-                }
-                type="text"
-                value={sourceValue}
-              />
-            </label>
+            {isClipFilePicker ? (
+              <div className="settings-file-choice">
+                <span className="input-label">Clip file</span>
+                <div className="settings-file-value">
+                  {sourceValue
+                    ? extractSourceName(sourceValue)
+                    : "No clip file chosen yet."}
+                </div>
+                {sourceValue ? (
+                  <small className="analysis-field-note">{sourceValue}</small>
+                ) : null}
+                <button
+                  className="button-secondary"
+                  disabled={isAddingProfileExample}
+                  onClick={() => {
+                    void handlePickLocalMedia(sourceType, setSourceValue);
+                  }}
+                  type="button"
+                >
+                  Choose clip file
+                </button>
+              </div>
+            ) : (
+              <label className="search-block">
+                <span className="input-label">
+                  {sourceType === "LOCAL_FILE_PATH" ? "Clip path" : "Clip link"}
+                </span>
+                <input
+                  className="search-input"
+                  disabled={isAddingProfileExample}
+                  onChange={(event) => setSourceValue(event.target.value)}
+                  placeholder={
+                    sourceType === "TWITCH_CLIP_URL"
+                      ? "https://clips.twitch.tv/..."
+                      : sourceType === "YOUTUBE_SHORT_URL"
+                        ? "https://www.youtube.com/shorts/..."
+                        : "/Users/you/Clips/example.mp4"
+                  }
+                  type="text"
+                  value={sourceValue}
+                />
+              </label>
+            )}
 
-            {canPickClipFile ? (
+            {sourceType === "LOCAL_FILE_PATH" && canPickClipFile ? (
               <div className="action-row">
                 <button
                   className="button-secondary"
@@ -3120,7 +3222,7 @@ function CompactProfileSetupSettingsSection() {
                   }}
                   type="button"
                 >
-                  Choose local clip
+                  Choose clip file
                 </button>
               </div>
             ) : null}
@@ -3179,7 +3281,7 @@ function CompactProfileSetupSettingsSection() {
         </summary>
         <div className="analysis-form settings-details-body">
           <label className="search-block">
-            <span className="input-label">Source type</span>
+            <span className="input-label">Add from</span>
             <select
               className="search-input"
               disabled={!selectedProfile || isAddingEditedVideo}
@@ -3199,19 +3301,43 @@ function CompactProfileSetupSettingsSection() {
             </small>
           </label>
 
-          <label className="search-block">
-            <span className="input-label">Edited video file</span>
-            <input
-              className="search-input"
-              disabled={!selectedProfile || isAddingEditedVideo}
-              onChange={(event) => setEditSourceValue(event.target.value)}
-              placeholder="/Users/you/Exports/session-edit.mp4"
-              type="text"
-              value={editSourceValue}
-            />
-          </label>
+          {isEditFilePicker ? (
+            <div className="settings-file-choice">
+              <span className="input-label">Edited video file</span>
+              <div className="settings-file-value">
+                {editSourceValue
+                  ? extractSourceName(editSourceValue)
+                  : "No edited video chosen yet."}
+              </div>
+              {editSourceValue ? (
+                <small className="analysis-field-note">{editSourceValue}</small>
+              ) : null}
+              <button
+                className="button-secondary"
+                disabled={!selectedProfile || isAddingEditedVideo}
+                onClick={() => {
+                  void handlePickLocalMedia(editSourceType, setEditSourceValue);
+                }}
+                type="button"
+              >
+                Choose edited video
+              </button>
+            </div>
+          ) : (
+            <label className="search-block">
+              <span className="input-label">Edited video path</span>
+              <input
+                className="search-input"
+                disabled={!selectedProfile || isAddingEditedVideo}
+                onChange={(event) => setEditSourceValue(event.target.value)}
+                placeholder="/Users/you/Exports/session-edit.mp4"
+                type="text"
+                value={editSourceValue}
+              />
+            </label>
+          )}
 
-          {canPickEditFile ? (
+          {editSourceType === "LOCAL_FILE_PATH" && canPickEditFile ? (
             <div className="action-row">
               <button
                 className="button-secondary"
@@ -4085,6 +4211,8 @@ function isLocalServiceUnavailableError(error: unknown): boolean {
   return (
     error instanceof Error &&
     (error.message.includes("could not reach its local service") ||
+      error.message.includes("Pulse is still starting") ||
+      error.message.includes("Pulse did not finish starting") ||
       error.message.includes("Failed to fetch"))
   );
 }
@@ -4121,6 +4249,95 @@ function isTauriRuntime(): boolean {
         .__TAURI_INTERNALS__,
     )
   );
+}
+
+function usePulseRuntimeStatus(apiBaseUrl: string): PulseRuntimeStatus {
+  const [status, setStatus] = useState<PulseRuntimeStatus>("checking");
+
+  useEffect(() => {
+    let isCancelled = false;
+    let attemptCount = 0;
+    let intervalId: number | undefined;
+
+    async function checkRuntime() {
+      attemptCount += 1;
+      const isReady = await checkPulseHealth(apiBaseUrl);
+      if (isCancelled) {
+        return;
+      }
+
+      if (isReady) {
+        setStatus("ready");
+        if (intervalId !== undefined) {
+          window.clearInterval(intervalId);
+        }
+        return;
+      }
+
+      setStatus(
+        attemptCount > 10 ? "slow" : attemptCount > 1 ? "starting" : "checking",
+      );
+    }
+
+    void checkRuntime();
+    intervalId = window.setInterval(() => {
+      void checkRuntime();
+    }, 1000);
+
+    return () => {
+      isCancelled = true;
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [apiBaseUrl]);
+
+  return status;
+}
+
+async function checkPulseHealth(
+  apiBaseUrl: string,
+  timeoutMs = 1200,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/health`, {
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function isPulseRuntimeReady(status: PulseRuntimeStatus): boolean {
+  return status === "ready";
+}
+
+function buildPulseStartupCopy(status: PulseRuntimeStatus): {
+  headline: string;
+  detail: string;
+  statusLabel: string;
+} {
+  if (status === "slow") {
+    return {
+      detail:
+        "Pulse is taking longer than usual. Keep this window open; it will continue trying.",
+      headline: "Pulse is still starting",
+      statusLabel: "Starting",
+    };
+  }
+
+  return {
+    detail:
+      "This usually takes a few seconds. You can choose a video while Pulse gets ready.",
+    headline: status === "checking" ? "Checking Pulse" : "Pulse is starting",
+    statusLabel: status === "checking" ? "Checking" : "Starting",
+  };
 }
 
 function isThemeMode(value: unknown): value is ThemeMode {
@@ -4166,8 +4383,20 @@ function buildAnalysisLaunchState(
   options: {
     hasPersistedProfiles: boolean;
     isLoadingProfiles: boolean;
+    pulseRuntimeStatus: PulseRuntimeStatus;
   },
 ): AnalysisReadiness {
+  if (!isPulseRuntimeReady(options.pulseRuntimeStatus)) {
+    const copy = buildPulseStartupCopy(options.pulseRuntimeStatus);
+    return {
+      canAnalyze: false,
+      detail: copy.detail,
+      headline: copy.headline,
+      statusLabel: copy.statusLabel,
+      tone: "blocked",
+    };
+  }
+
   if (options.isLoadingProfiles) {
     return {
       canAnalyze: false,
@@ -5038,7 +5267,7 @@ function buildStartGuide(input: {
         "Create one profile.",
         "Add a few clips or one finished edit.",
       ],
-      ctaLabel: "Open Profile Setup",
+      ctaLabel: "Set up profile",
       ctaAction: "profile-setup",
     };
   }
@@ -5053,7 +5282,7 @@ function buildStartGuide(input: {
         "Add one finished edit if you have one.",
         "Scan a longer video and review the suggestions.",
       ],
-      ctaLabel: "Open Profile Setup",
+      ctaLabel: "Add examples",
       ctaAction: "profile-setup",
     };
   }

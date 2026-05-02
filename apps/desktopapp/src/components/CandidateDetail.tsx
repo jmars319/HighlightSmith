@@ -323,7 +323,7 @@ export function CandidateDetail({
 
       <details className="breakdown-panel internal-details">
         <summary className="internal-details-summary">
-          <span>Why this scored this way</span>
+          <span>More suggestion detail</span>
           <span className="score-pill">
             {percentage(candidate.scoreEstimate)}
           </span>

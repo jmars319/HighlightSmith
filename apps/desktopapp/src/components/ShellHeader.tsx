@@ -61,7 +61,7 @@ export function ShellHeader({
           <p>{selectedMediaPath || "Choose a file to start a scan."}</p>
         </div>
         <div className="stat-card compact">
-          <span className="stat-label">Reference profile</span>
+          <span className="stat-label">Profile</span>
           <strong>{currentProfileLabel}</strong>
           <p>{activeSessionStateLabel}</p>
         </div>

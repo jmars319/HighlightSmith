@@ -271,7 +271,7 @@ export function CandidateQueue({
               >
                 <CandidateCard
                   candidate={candidate}
-                  footerText={`Score ${percentage(candidate.scoreEstimate)} • ${formatSeconds(candidate.candidateWindow.startSeconds)} to ${formatSeconds(candidate.candidateWindow.endSeconds)} • ${formatDecisionState(decision?.action)}${profileMatchLabel ? ` • ${profileMatchLabel}` : ""}${reviewTag ? ` • ${formatReviewTagLabel(reviewTag)}` : ""}`}
+                  footerText={`Confidence ${percentage(candidate.scoreEstimate)} • ${formatSeconds(candidate.candidateWindow.startSeconds)} to ${formatSeconds(candidate.candidateWindow.endSeconds)} • ${formatDecisionState(decision?.action)}${profileMatchLabel ? ` • ${profileMatchLabel}` : ""}${reviewTag ? ` • ${formatReviewTagLabel(reviewTag)}` : ""}`}
                   label={resolveCandidateLabel(candidate, decision)}
                   onSelect={() => onSelectCandidate(candidate.id)}
                   secondaryText={`${plainDescription.summary}${plainDescription.detail ? ` ${plainDescription.detail}` : ""}`}

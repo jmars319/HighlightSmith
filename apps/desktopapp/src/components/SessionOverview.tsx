@@ -98,7 +98,7 @@ export function SessionOverview({
         </article>
 
         <article className="session-overview-card">
-          <span className="detail-label">Reference profile</span>
+          <span className="detail-label">Profile</span>
           <strong>{profile.name}</strong>
           <p>{profileMatchingSummary.note}</p>
           <p>
