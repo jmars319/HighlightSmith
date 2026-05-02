@@ -85,6 +85,12 @@
   margin-top: 18px;
 }
 
+.vcp-sidebar-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .vcp-nav-item,
 .vcp-controls-row button,
 .vcp-candidate-card {
@@ -101,7 +107,8 @@
 }
 
 .vcp-nav-item.active {
-  background: var(--filter-active-bg, rgba(244, 177, 96, 0.2));
+  background: var(--filter-active-bg, rgba(201, 63, 215, 0.18));
+  color: var(--filter-active-text, #fac6ff);
 }
 
 .vcp-block {
@@ -116,7 +123,7 @@
 }
 
 .vcp-candidate-card.selected {
-  border-color: var(--active-border, rgba(244, 177, 96, 0.4));
+  border-color: var(--active-border, rgba(98, 217, 255, 0.42));
 }
 
 .vcp-candidate-row,
@@ -185,19 +192,23 @@
 }
 
 .vcp-badge-high {
-  background: rgba(244, 177, 96, 0.18);
+  background: var(--tone-magenta-bg, rgba(201, 63, 215, 0.16));
+  color: var(--tone-magenta-text, #fac6ff);
 }
 
 .vcp-badge-medium {
-  background: rgba(92, 161, 176, 0.2);
+  background: var(--tone-cyan-bg, rgba(66, 173, 230, 0.18));
+  color: var(--tone-cyan-text, #b8eeff);
 }
 
 .vcp-badge-low {
-  background: rgba(189, 208, 110, 0.18);
+  background: var(--tone-success-bg, rgba(102, 217, 184, 0.14));
+  color: var(--tone-success-text, #c9f8e9);
 }
 
 .vcp-badge-experimental {
-  background: rgba(177, 128, 230, 0.18);
+  background: var(--tone-violet-bg, rgba(126, 101, 255, 0.16));
+  color: var(--tone-violet-text, #d8d0ff);
 }
 
 @media (max-width: 1180px) {

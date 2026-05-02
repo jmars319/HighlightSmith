@@ -10,6 +10,7 @@ type LayoutShellProps = {
   onSelect: (id: string) => void;
   children: ReactNode;
   aside?: ReactNode;
+  sidebarActions?: ReactNode;
 };
 
 export function LayoutShell({
@@ -22,6 +23,7 @@ export function LayoutShell({
   onSelect,
   children,
   aside,
+  sidebarActions,
 }: LayoutShellProps) {
   return (
     <div className="vcp-layout">
@@ -46,6 +48,9 @@ export function LayoutShell({
             </button>
           ))}
         </nav>
+        {sidebarActions ? (
+          <div className="vcp-sidebar-actions">{sidebarActions}</div>
+        ) : null}
       </aside>
       <section className="vcp-content">{children}</section>
       {aside ? <aside className="vcp-aside">{aside}</aside> : null}

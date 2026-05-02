@@ -26,12 +26,12 @@ export async function fetchWithLocalApiMessage(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(
-        `${failurePrefix} VCP could not reach its local service at ${apiBaseUrl} within ${Math.ceil(timeoutMs / 1000)}s.`,
+        `${failurePrefix} Pulse did not finish starting within ${Math.ceil(timeoutMs / 1000)}s. Try again in a few seconds.`,
       );
     }
 
     throw new Error(
-      `${failurePrefix} VCP could not reach its local service at ${apiBaseUrl}. Start the local backend, then try again.`,
+      `${failurePrefix} Pulse is still starting. Try again in a few seconds.`,
     );
   } finally {
     window.clearTimeout(timeoutId);

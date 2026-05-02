@@ -38,8 +38,8 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    backgroundColor: "rgba(13, 18, 23, 0.94)",
+    borderColor: "rgba(167, 202, 255, 0.12)",
+    backgroundColor: "rgba(5, 7, 22, 0.94)",
   },
   tab: {
     flexGrow: 1,
@@ -47,18 +47,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    backgroundColor: "rgba(98, 217, 255, 0.06)",
   },
   activeTab: {
-    backgroundColor: "rgba(244, 176, 97, 0.16)",
+    backgroundColor: "rgba(201, 63, 215, 0.18)",
   },
   label: {
-    color: "rgba(248, 242, 233, 0.7)",
+    color: "rgba(238, 244, 255, 0.7)",
     fontSize: 13,
     fontWeight: "600",
     textAlign: "center",
   },
   activeLabel: {
-    color: "#ffd8a9",
+    color: "#fac6ff",
   },
 });

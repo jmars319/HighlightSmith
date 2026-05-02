@@ -183,7 +183,7 @@ export function MomentPreviewModal({
           setLoadError(
             error instanceof Error
               ? error.message
-              : "VCP could not prepare an in-app preview clip for this moment.",
+              : "Pulse could not prepare a preview for this moment.",
           );
         }
       })
@@ -310,9 +310,7 @@ export function MomentPreviewModal({
     setQuickTimeFeedback(null);
     const startSeconds = previewRange?.startSeconds;
     if (typeof startSeconds !== "number") {
-      setQuickTimeFeedback(
-        "VCP could not resolve a start time for this moment.",
-      );
+      setQuickTimeFeedback("Could not find a start time for this moment.");
       return;
     }
 
@@ -326,7 +324,7 @@ export function MomentPreviewModal({
       setQuickTimeFeedback(
         error instanceof Error
           ? error.message
-          : "VCP could not open QuickTime for this moment.",
+          : "Could not open QuickTime for this moment.",
       );
     }
   }
@@ -409,11 +407,8 @@ export function MomentPreviewModal({
         <div className="moment-preview-frame">
           {isPreparingPreview ? (
             <div className="moment-preview-placeholder">
-              <strong>Preparing in-app preview clip…</strong>
-              <p>
-                VCP is extracting just this moment so the embedded player does
-                not have to load the full source file.
-              </p>
+              <strong>Preparing preview...</strong>
+              <p>Making a short preview so playback starts quickly.</p>
             </div>
           ) : preparedPreview ? (
             <video
@@ -430,10 +425,10 @@ export function MomentPreviewModal({
             />
           ) : (
             <div className="moment-preview-placeholder">
-              <strong>In-app preview unavailable</strong>
+              <strong>Preview unavailable</strong>
               <p>
-                VCP could not prepare an embedded preview clip for this moment.
-                Use QuickTime for direct file playback.
+                Pulse could not prepare a preview for this moment. Use
+                QuickTime to play the source video.
               </p>
             </div>
           )}
@@ -453,7 +448,7 @@ export function MomentPreviewModal({
             </p>
           </article>
           <article className="analysis-summary-card">
-            <span className="detail-label">In-app preview clip</span>
+            <span className="detail-label">Preview</span>
             <strong>
               {isPreparingPreview
                 ? "Preparing clip"
@@ -463,10 +458,10 @@ export function MomentPreviewModal({
             </strong>
             <p>
               {isPreparingPreview
-                ? "VCP is generating a short temporary clip for this exact moment."
+                ? "Preparing a short preview."
                 : preparedPreview
                   ? buildPreparedPreviewSummary(preparedPreview)
-                  : "VCP could not prepare a short embedded preview clip from this source file."}
+                  : "Pulse could not prepare a short preview from this video."}
             </p>
           </article>
           <article className="analysis-summary-card">
@@ -481,7 +476,7 @@ export function MomentPreviewModal({
             <p>
               {inspection
                 ? buildInspectionSummary(inspection)
-                : "VCP is checking the local file path and stream details."}
+                : "Checking that the source video is available."}
             </p>
           </article>
         </div>
@@ -503,35 +498,35 @@ function describeVideoError(
 ): string {
   if (!error) {
     return usingPreparedPreview
-      ? "The embedded preview could not load the generated preview clip for this moment."
-      : "The embedded preview could not load this local media file.";
+      ? "The preview could not load this moment."
+      : "The preview could not load this video.";
   }
 
   if (error.code === MediaError.MEDIA_ERR_ABORTED) {
-    return "The embedded preview was interrupted before playback could begin.";
+    return "Preview playback was interrupted.";
   }
 
   if (error.code === MediaError.MEDIA_ERR_NETWORK) {
     return usingPreparedPreview
-      ? "The embedded preview could not stream the generated preview clip into the desktop webview."
-      : "The embedded preview could not stream this local file into the desktop webview.";
+      ? "The preview could not load this moment."
+      : "The preview could not load this video.";
   }
 
   if (error.code === MediaError.MEDIA_ERR_DECODE) {
     return usingPreparedPreview
-      ? "The embedded preview reached the generated clip, but the desktop webview failed while decoding it."
-      : "The embedded preview reached the file, but the desktop webview failed while decoding it.";
+      ? "The preview could not play this moment."
+      : "The preview could not play this video.";
   }
 
   if (error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
     return usingPreparedPreview
-      ? "The embedded preview does not support the generated clip source as loaded."
-      : "The embedded preview does not support this local playback source as loaded.";
+      ? "This moment is not supported by the preview player."
+      : "This video is not supported by the preview player.";
   }
 
   return usingPreparedPreview
-    ? "The embedded preview failed while opening the generated clip for this moment."
-    : "The embedded preview failed while opening this local media file.";
+    ? "The preview could not open this moment."
+    : "The preview could not open this video.";
 }
 
 function buildInspectionSummary(inspection: MediaPlaybackInspection): string {
@@ -539,22 +534,13 @@ function buildInspectionSummary(inspection: MediaPlaybackInspection): string {
     return inspection.detail;
   }
 
-  const codecSummary = [
-    inspection.videoCodec ? `video ${inspection.videoCodec}` : null,
-    inspection.audioCodec ? `audio ${inspection.audioCodec}` : null,
-  ]
-    .filter(Boolean)
-    .join(" • ");
+  if (!inspection.readable) {
+    return inspection.detail;
+  }
 
-  const parts = [
-    inspection.formatName ? `format ${inspection.formatName}` : null,
-    codecSummary || null,
-    typeof inspection.fileSizeBytes === "number"
-      ? `${formatFileSize(inspection.fileSizeBytes)}`
-      : null,
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(" • ") : inspection.detail;
+  return typeof inspection.fileSizeBytes === "number"
+    ? `File is available (${formatFileSize(inspection.fileSizeBytes)}).`
+    : "File is available.";
 }
 
 function formatFileSize(bytes: number): string {
@@ -575,11 +561,8 @@ function formatFileSize(bytes: number): string {
 
 function buildPreparedPreviewSummary(preview: PreparedMediaPreview): string {
   const parts = [
-    preview.reusedExisting ? "cached clip" : "fresh clip",
-    typeof preview.fileSizeBytes === "number"
-      ? formatFileSize(preview.fileSizeBytes)
-      : null,
-    `${preview.durationSeconds.toFixed(1)}s`,
+    `Ready (${preview.durationSeconds.toFixed(1)}s)`,
+    typeof preview.fileSizeBytes === "number" ? formatFileSize(preview.fileSizeBytes) : null,
   ].filter(Boolean);
 
   return parts.join(" • ");

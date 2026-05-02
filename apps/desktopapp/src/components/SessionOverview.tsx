@@ -82,7 +82,7 @@ export function SessionOverview({
           </strong>
           <p>
             {candidateCount === 0
-              ? "VCP did not find any strong signals in this video."
+              ? "No clear moments were found in this video."
               : `${acceptedCount} kept • ${rejectedCount} skipped • ${candidateCount} total moments`}
           </p>
         </article>
@@ -102,8 +102,7 @@ export function SessionOverview({
           <strong>{profile.name}</strong>
           <p>{profileMatchingSummary.note}</p>
           <p>
-            {profileMatchingSummary.usableLocalExampleCount} usable local
-            reference
+            {profileMatchingSummary.usableLocalExampleCount} saved example
             {profileMatchingSummary.usableLocalExampleCount === 1 ? "" : "s"}
           </p>
         </article>

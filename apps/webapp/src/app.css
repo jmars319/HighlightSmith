@@ -3,19 +3,46 @@
 :root {
   color-scheme: dark;
   font-family: "Avenir Next", "Segoe UI", sans-serif;
+  --brand-cyan-rgb: 66, 173, 230;
+  --brand-magenta-rgb: 201, 63, 215;
+  --brand-blue-rgb: 18, 23, 88;
+  --text-color: #eef4ff;
+  --text-strong: #f8fbff;
+  --text-subtle: rgba(238, 244, 255, 0.72);
+  --text-faint: rgba(238, 244, 255, 0.62);
+  --panel-strong: rgba(8, 10, 28, 0.94);
+  --surface-card-border: rgba(167, 202, 255, 0.12);
+  --button-secondary-bg: rgba(98, 217, 255, 0.075);
+  --button-secondary-text: #eff8ff;
+  --button-secondary-border: rgba(167, 202, 255, 0.14);
+  --filter-active-bg: rgba(201, 63, 215, 0.18);
+  --filter-active-text: #fac6ff;
+  --active-border: rgba(98, 217, 255, 0.42);
+  --active-shadow: rgba(201, 63, 215, 0.2);
+  --tone-cyan-bg: rgba(66, 173, 230, 0.18);
+  --tone-cyan-text: #b8eeff;
+  --tone-magenta-bg: rgba(201, 63, 215, 0.16);
+  --tone-magenta-text: #fac6ff;
+  --tone-success-bg: rgba(102, 217, 184, 0.14);
+  --tone-success-text: #c9f8e9;
   background:
     radial-gradient(
       circle at top left,
-      rgba(91, 149, 161, 0.18),
+      rgba(var(--brand-cyan-rgb), 0.12),
       transparent 30%
     ),
     radial-gradient(
       circle at bottom right,
-      rgba(242, 167, 94, 0.16),
+      rgba(var(--brand-magenta-rgb), 0.11),
       transparent 24%
     ),
-    linear-gradient(180deg, #0d1217 0%, #121923 100%);
-  color: #f7f0e7;
+    radial-gradient(
+      circle at 50% 0,
+      rgba(var(--brand-blue-rgb), 0.36),
+      transparent 42%
+    ),
+    linear-gradient(180deg, #05021b 0%, #090d24 48%, #101726 100%);
+  color: var(--text-color);
 }
 
 body {
@@ -41,8 +68,8 @@ body {
 .web-panel {
   padding: 18px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--surface-card-border);
+  background: rgba(96, 140, 255, 0.055);
 }
 
 .web-panel-row {
@@ -57,7 +84,7 @@ body {
   font-size: 0.76rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--text-faint);
 }
 
 .web-panel h2 {
@@ -66,7 +93,7 @@ body {
 
 .web-panel p {
   margin: 8px 0 0;
-  color: rgba(255, 255, 255, 0.74);
+  color: var(--text-subtle);
 }
 
 .web-summary-card {
@@ -82,13 +109,13 @@ body {
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(238, 244, 255, 0.1);
 }
 
 .web-summary-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #f2a75e, #ffd4a5);
+  background: linear-gradient(90deg, #62d9ff, #e587f4);
 }
 
 .web-state-pill {
@@ -104,16 +131,16 @@ body {
 }
 
 .web-state-pill.pending {
-  background: rgba(91, 149, 161, 0.22);
-  color: #c5ecf2;
+  background: var(--tone-cyan-bg);
+  color: var(--tone-cyan-text);
 }
 
 .web-state-pill.in-progress {
-  background: rgba(242, 167, 94, 0.18);
-  color: #ffd6a8;
+  background: var(--tone-magenta-bg);
+  color: var(--tone-magenta-text);
 }
 
 .web-state-pill.reviewed {
-  background: rgba(198, 214, 121, 0.18);
-  color: #eef7b7;
+  background: var(--tone-success-bg);
+  color: var(--tone-success-text);
 }

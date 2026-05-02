@@ -81,7 +81,7 @@ export function describeCandidatePlainly(
   const needsContext =
     candidate.contextRequired || reasonCodes.has("CONTEXT_REQUIRED");
 
-  let summary = "Possible moment with limited supporting signals";
+  let summary = "Possible moment with only a few clues";
 
   if (hasLowInformation) {
     summary = "Low activity, unclear payoff";
@@ -125,7 +125,7 @@ export function describeCandidatePlainly(
     candidate.confidenceBand === "MEDIUM" || needsContext;
 
   if (lowConfidence) {
-    summary = `Low confidence - ${lowercaseFirst(summary)}`;
+    summary = `Low confidence: ${lowercaseFirst(summary)}`;
   } else if (
     mediumConfidence &&
     !summary.toLowerCase().startsWith("possible ")
@@ -135,17 +135,17 @@ export function describeCandidatePlainly(
 
   let detail: string | null = null;
   if (hasLowInformation) {
-    detail = "Weak supporting signals.";
+    detail = "Not enough signs to be confident.";
   } else if (needsContext) {
     detail = "Needs surrounding context to confirm the outcome.";
   } else if (
     (candidate.confidenceBand === "LOW" ||
-      candidate.confidenceBand === "EXPERIMENTAL") &&
+    candidate.confidenceBand === "EXPERIMENTAL") &&
     topSignalPhrases.length > 0
   ) {
-    detail = `Signals were limited to ${joinReadableList(topSignalPhrases.slice(0, 2))}.`;
+    detail = `Only a few signs showed up: ${joinReadableList(topSignalPhrases.slice(0, 2))}.`;
   } else if (topSignalPhrases.length > 0) {
-    detail = `Signals include ${joinReadableList(topSignalPhrases.slice(0, 2))}.`;
+    detail = `This moment includes ${joinReadableList(topSignalPhrases.slice(0, 2))}.`;
   }
 
   return {
@@ -253,14 +253,14 @@ export function buildProfileMatchingSummary(
       unavailableLocalExampleCount,
       ready: false,
       method: "NONE",
-      note: "Add local example clips or indexed profile edits to turn on profile-aware matching.",
+      note: "Add a few clip examples or a finished edit to improve suggestions.",
     };
   }
 
   if (usableLocalExampleCount > 0) {
     const ignoredReferenceCopy =
       referenceOnlyExampleCount > 0
-        ? ` ${referenceOnlyExampleCount} stored reference${referenceOnlyExampleCount === 1 ? "" : "s"} remain out of scope for matching in this build.`
+        ? ` ${referenceOnlyExampleCount} saved link${referenceOnlyExampleCount === 1 ? "" : "s"} will be useful later.`
         : "";
     return {
       profileId: profile.id,
@@ -270,7 +270,7 @@ export function buildProfileMatchingSummary(
       unavailableLocalExampleCount,
       ready: true,
       method: "LOCAL_FILE_HEURISTIC",
-      note: `Local-file heuristic matching is active from ${usableLocalExampleCount} usable local reference${usableLocalExampleCount === 1 ? "" : "s"}.${ignoredReferenceCopy}`,
+      note: `Using ${usableLocalExampleCount} saved example${usableLocalExampleCount === 1 ? "" : "s"} to compare new moments.${ignoredReferenceCopy}`,
     };
   }
 
@@ -283,7 +283,7 @@ export function buildProfileMatchingSummary(
       unavailableLocalExampleCount,
       ready: false,
       method: "NONE",
-      note: "This profile only has URL/reference sources right now. Matching is local-file-only in this build.",
+      note: "Links are saved. Add a local clip or finished edit to improve suggestions.",
     };
   }
 
@@ -295,7 +295,7 @@ export function buildProfileMatchingSummary(
     unavailableLocalExampleCount,
     ready: false,
     method: "NONE",
-    note: "Local reference sources are saved, but none are currently usable for matching. Check the file path and local summary readiness.",
+    note: "Saved examples are not ready yet. Check the files and try again.",
   };
 }
 
@@ -476,14 +476,14 @@ export function formatAnalysisCoverageFlag(
   }
 
   if (flag === "TRANSCRIPT_SPARSE") {
-    return "Sparse transcript";
+    return "Limited transcript";
   }
 
   if (flag === "LOW_CANDIDATE_COUNT") {
-    return "Low signal density";
+    return "Few possible moments";
   }
 
-  return "No candidates found";
+  return "No moments found";
 }
 
 export function analysisCoverageTone(
@@ -505,7 +505,7 @@ export function summarizeSessionQuality(
   candidateCount = 0,
 ): string {
   if (coverage.flags.includes("NO_CANDIDATES") || candidateCount === 0) {
-    return "Analysis returned no strong signals";
+    return "No clear moments found";
   }
 
   if (
@@ -519,18 +519,18 @@ export function summarizeSessionQuality(
     coverage.band === "THIN" ||
     coverage.flags.includes("LOW_CANDIDATE_COUNT")
   ) {
-    return "Low signal density";
+    return "Only a few possible moments found";
   }
 
   if (coverage.band === "STRONG" && candidateCount >= 3) {
-    return "Strong activity detected in multiple regions";
+    return "Several clear moments found";
   }
 
   if (coverage.band === "STRONG") {
-    return "Strong activity detected";
+    return "Clear moments found";
   }
 
-  return "Useful signals detected with partial coverage";
+  return "Some useful moments found";
 }
 
 function uniqueReasonCodes(reasonCodes: ReasonCode[]): ReasonCode[] {

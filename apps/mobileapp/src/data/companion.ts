@@ -25,8 +25,7 @@ export const companionSnapshot = {
     primaryProfileLabel: "No profile data",
     lastUpdatedLabel: "Unavailable",
     statusLabel: "No synced data yet",
-    surfaceNote:
-      "This companion app does not load demo sessions or fake queue items.",
+    surfaceNote: "Synced sessions and clips will appear here when available.",
   },
   projects: [] as Array<{
     sessionId: string;
@@ -60,9 +59,9 @@ export const companionSnapshot = {
     weightCount: number;
   }>,
   guardrails: [
-    "No ingest, analysis launch, or clip rendering on mobile.",
-    "No heavy local media processing or VOD analysis on-device.",
-    "No demo backlog, fake queue, or fake accepted clips in normal use.",
+    "Mobile is for checking progress and reviewing saved clips.",
+    "Use the desktop app to scan videos or create clips.",
+    "Empty projects stay empty until real work is available.",
   ],
 };
 
@@ -74,30 +73,30 @@ export function bandTone(band: ConfidenceBand): {
   if (band === "HIGH") {
     return {
       label: "HIGH",
-      backgroundColor: "rgba(106, 186, 193, 0.18)",
-      textColor: "#9de0e3",
+      backgroundColor: "rgba(201, 63, 215, 0.16)",
+      textColor: "#fac6ff",
     };
   }
 
   if (band === "MEDIUM") {
     return {
       label: "MEDIUM",
-      backgroundColor: "rgba(244, 176, 97, 0.18)",
-      textColor: "#ffd59a",
+      backgroundColor: "rgba(66, 173, 230, 0.18)",
+      textColor: "#b8eeff",
     };
   }
 
   if (band === "LOW") {
     return {
       label: "LOW",
-      backgroundColor: "rgba(188, 193, 205, 0.18)",
-      textColor: "#dae0ea",
+      backgroundColor: "rgba(102, 217, 184, 0.14)",
+      textColor: "#c9f8e9",
     };
   }
 
   return {
     label: "EXPERIMENTAL",
-    backgroundColor: "rgba(225, 125, 120, 0.18)",
-    textColor: "#ffb7b0",
+    backgroundColor: "rgba(126, 101, 255, 0.16)",
+    textColor: "#d8d0ff",
   };
 }

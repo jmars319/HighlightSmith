@@ -1,10 +1,10 @@
 import type { CandidateWindow, ReviewTag } from "@vaexcore/pulse-shared-types";
 
 const reviewTagLabels: Record<ReviewTag, string> = {
-  DEAD_AIR_RISK: "Dead air risk",
-  CLEANUP_RISK: "Cleanup-heavy section",
-  MENU_RISK: "Menu-heavy section",
-  LOW_INFORMATION_RISK: "Low-information risk",
+  DEAD_AIR_RISK: "Quiet section",
+  CLEANUP_RISK: "Needs cleanup",
+  MENU_RISK: "Menu-heavy",
+  LOW_INFORMATION_RISK: "Unclear moment",
 };
 
 export function formatReviewTagLabel(reviewTag: ReviewTag): string {

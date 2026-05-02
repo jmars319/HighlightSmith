@@ -35,7 +35,7 @@ export function CandidateTimeline({
       <section className="timeline-panel glass-panel empty-state">
         <p className="eyebrow">Video map</p>
         <h2>No moments found</h2>
-        <p>VCP did not find any strong moments in this session.</p>
+        <p>No clear moments were found in this session.</p>
       </section>
     );
   }

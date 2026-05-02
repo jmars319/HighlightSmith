@@ -21,7 +21,7 @@ export function TranscriptContextPeek({
           <div>
             <h3>Transcript context</h3>
             <p className="context-summary-copy">
-              Select a moment to inspect setup, payoff, and aftermath.
+              Select a moment to see the nearby transcript.
             </p>
           </div>
         </div>
@@ -40,20 +40,20 @@ export function TranscriptContextPeek({
   }> = [
     {
       id: "before",
-      label: "Before window",
-      emptyCopy: "No nearby setup chunk landed before this window.",
+      label: "Before",
+      emptyCopy: "No nearby transcript before this moment.",
       chunks: context.before,
     },
     {
       id: "inside",
       label: "Inside moment",
-      emptyCopy: "No transcript chunk overlaps this moment.",
+      emptyCopy: "No transcript saved for this moment.",
       chunks: context.inside,
     },
     {
       id: "after",
-      label: "After window",
-      emptyCopy: "No nearby aftermath chunk landed after this window.",
+      label: "After",
+      emptyCopy: "No nearby transcript after this moment.",
       chunks: context.after,
     },
   ];
@@ -64,11 +64,10 @@ export function TranscriptContextPeek({
         <div>
           <h3>Transcript context</h3>
           <p className="context-summary-copy">
-            Closest transcript chunks around the selected moment. This is for
-            review context only.
+            Nearby transcript text for the selected moment.
           </p>
         </div>
-        <span className="queue-count">{totalContextChunks} chunks</span>
+        <span className="queue-count">{totalContextChunks} lines</span>
       </div>
 
       <div className="context-peek-grid">
@@ -110,8 +109,8 @@ export function TranscriptContextPeek({
                 </div>
                 <p>{candidate.transcriptSnippet}</p>
                 <small>
-                  No stored transcript chunk overlaps this moment, so VCP is
-                  showing the snippet it saved during analysis instead.
+                  No transcript line overlaps this moment, so Pulse is showing
+                  the snippet saved during the scan instead.
                 </small>
               </article>
             ) : (
@@ -123,8 +122,8 @@ export function TranscriptContextPeek({
 
       {totalContextChunks === 0 && transcript.length === 0 ? (
         <p className="context-summary-copy">
-          No transcript chunks were saved for this session, so context review is
-          limited to the snippet VCP saved during analysis.
+          No transcript lines were saved for this session. The review uses the
+          snippet saved during the scan.
         </p>
       ) : null}
     </section>

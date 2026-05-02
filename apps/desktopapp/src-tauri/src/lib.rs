@@ -1,23 +1,482 @@
 use serde::Serialize;
 use std::collections::hash_map::DefaultHasher;
+use std::env;
 use std::fs::{self, File};
 use std::hash::{Hash, Hasher};
-use std::path::Path;
-use std::process::Command;
+use std::net::{SocketAddr, TcpStream};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
+use std::thread;
 use std::time::{Duration, SystemTime};
+use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, WINDOW_SUBMENU_ID};
+use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
+
+const APP_NAME: &str = "vaexcore pulse";
+const MAIN_WINDOW_LABEL: &str = "main";
+const SETTINGS_WINDOW_LABEL: &str = "settings";
+const MENU_OPEN_SETTINGS: &str = "open-settings";
+const MENU_OPEN_PROFILE_SETUP: &str = "open-profile-setup";
+const MENU_SHOW_MAIN: &str = "show-main-window";
+const MENU_CLOSE_MAIN: &str = "close-main-window";
+const MENU_CLOSE_MAIN_FILE: &str = "close-main-window-file";
+const MENU_QUIT_APP: &str = "quit-app";
+const ANALYZER_PORT: u16 = 9010;
+const API_PORT: u16 = 4010;
+
+#[derive(Default)]
+struct ManagedLocalServices {
+    analyzer: Option<Child>,
+    api: Option<Child>,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(Mutex::new(ManagedLocalServices::default()))
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            thread::spawn(move || {
+                if let Err(error) = ensure_local_services(&app_handle) {
+                    eprintln!("Unable to start vaexcore pulse local services: {error}");
+                }
+            });
+            Ok(())
+        })
+        .menu(build_app_menu)
+        .on_menu_event(|app, event| {
+            if event.id() == MENU_OPEN_SETTINGS {
+                let _ = open_settings_window_for(app, None);
+            } else if event.id() == MENU_OPEN_PROFILE_SETUP {
+                let _ = open_settings_window_for(app, Some("profile-setup"));
+            } else if event.id() == MENU_SHOW_MAIN {
+                let _ = show_main_window(app);
+            } else if event.id() == MENU_CLOSE_MAIN || event.id() == MENU_CLOSE_MAIN_FILE {
+                let _ = close_main_window(app);
+            } else if event.id() == MENU_QUIT_APP {
+                stop_local_services(app);
+                app.exit(0);
+            }
+        })
+        .on_window_event(|window, event| {
+            if window.label() == MAIN_WINDOW_LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             analyzer_health,
             inspect_media_playback,
             prepare_media_preview_clip,
-            open_media_in_quicktime
+            open_media_in_quicktime,
+            open_settings_window
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run vaexcore pulse desktop shell");
+        .build(tauri::generate_context!())
+        .expect("failed to build vaexcore pulse desktop shell");
+
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+            stop_local_services(app_handle);
+        }
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen {
+            has_visible_windows: false,
+            ..
+        } => {
+            let _ = show_main_window(app_handle);
+        }
+        _ => {}
+    });
+}
+
+fn build_app_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let package_info = app.package_info();
+    let config = app.config();
+    let about_metadata = AboutMetadata {
+        name: Some(APP_NAME.to_string()),
+        version: Some(package_info.version.to_string()),
+        copyright: config.bundle.copyright.clone(),
+        authors: config
+            .bundle
+            .publisher
+            .clone()
+            .map(|publisher| vec![publisher]),
+        ..Default::default()
+    };
+
+    let window_menu = Submenu::with_id_and_items(
+        app,
+        WINDOW_SUBMENU_ID,
+        "Window",
+        true,
+        &[
+            &MenuItem::with_id(app, MENU_SHOW_MAIN, "Show Main Window", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+            #[cfg(target_os = "macos")]
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::show_all(app, None)?,
+        ],
+    )?;
+
+    Menu::with_items(
+        app,
+        &[
+            #[cfg(target_os = "macos")]
+            &Submenu::with_items(
+                app,
+                APP_NAME,
+                true,
+                &[
+                    &PredefinedMenuItem::about(app, None, Some(about_metadata))?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &MenuItem::with_id(
+                        app,
+                        MENU_OPEN_SETTINGS,
+                        "Settings...",
+                        true,
+                        Some("CmdOrCtrl+Comma"),
+                    )?,
+                    &MenuItem::with_id(
+                        app,
+                        MENU_OPEN_PROFILE_SETUP,
+                        "Profile Setup...",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &MenuItem::with_id(
+                        app,
+                        MENU_SHOW_MAIN,
+                        "Show Main Window",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &MenuItem::with_id(
+                        app,
+                        MENU_CLOSE_MAIN,
+                        "Close Main Window (Pulse Keeps Running)",
+                        true,
+                        Some("CmdOrCtrl+W"),
+                    )?,
+                    &MenuItem::with_id(
+                        app,
+                        MENU_QUIT_APP,
+                        "Quit vaexcore pulse (Stops Background Work)",
+                        true,
+                        Some("CmdOrCtrl+Q"),
+                    )?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::services(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::hide(app, None)?,
+                    &PredefinedMenuItem::hide_others(app, None)?,
+                    &PredefinedMenuItem::show_all(app, None)?,
+                ],
+            )?,
+            #[cfg(not(any(
+                target_os = "macos",
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            )))]
+            &Submenu::with_items(
+                app,
+                "File",
+                true,
+                &[
+                    &MenuItem::with_id(app, MENU_OPEN_SETTINGS, "Settings...", true, None::<&str>)?,
+                    &MenuItem::with_id(
+                        app,
+                        MENU_OPEN_PROFILE_SETUP,
+                        "Profile Setup...",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &MenuItem::with_id(
+                        app,
+                        MENU_CLOSE_MAIN_FILE,
+                        "Close Main Window (Pulse Keeps Running)",
+                        true,
+                        None::<&str>,
+                    )?,
+                    #[cfg(not(target_os = "macos"))]
+                    &MenuItem::with_id(
+                        app,
+                        MENU_QUIT_APP,
+                        "Quit vaexcore pulse (Stops Background Work)",
+                        true,
+                        Some("CmdOrCtrl+Q"),
+                    )?,
+                ],
+            )?,
+            &Submenu::with_items(
+                app,
+                "Edit",
+                true,
+                &[
+                    &PredefinedMenuItem::undo(app, None)?,
+                    &PredefinedMenuItem::redo(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::cut(app, None)?,
+                    &PredefinedMenuItem::copy(app, None)?,
+                    &PredefinedMenuItem::paste(app, None)?,
+                    &PredefinedMenuItem::select_all(app, None)?,
+                ],
+            )?,
+            #[cfg(target_os = "macos")]
+            &Submenu::with_items(
+                app,
+                "View",
+                true,
+                &[&PredefinedMenuItem::fullscreen(app, None)?],
+            )?,
+            &window_menu,
+        ],
+    )
+}
+
+#[tauri::command]
+fn open_settings_window(app: tauri::AppHandle, section: Option<String>) -> Result<(), String> {
+    open_settings_window_for(&app, section.as_deref())
+}
+
+fn open_settings_window_for<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    section: Option<&str>,
+) -> Result<(), String> {
+    let section = normalize_settings_section(section);
+
+    if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
+        window.show().map_err(|error| error.to_string())?;
+        window.set_focus().map_err(|error| error.to_string())?;
+        if let Some(section) = section {
+            window
+                .emit("settings-section-selected", section)
+                .map_err(|error| error.to_string())?;
+        }
+        return Ok(());
+    }
+
+    let settings_url = match section {
+        Some(section) => format!("index.html?window=settings&section={section}"),
+        None => "index.html?window=settings".to_string(),
+    };
+
+    WebviewWindowBuilder::new(
+        app,
+        SETTINGS_WINDOW_LABEL,
+        WebviewUrl::App(settings_url.into()),
+    )
+    .title("vaexcore pulse Settings")
+    .inner_size(760.0, 660.0)
+    .min_inner_size(560.0, 500.0)
+    .resizable(true)
+    .center()
+    .build()
+    .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+fn normalize_settings_section(section: Option<&str>) -> Option<&'static str> {
+    match section {
+        Some("profile-setup") => Some("profile-setup"),
+        Some("appearance") => Some("appearance"),
+        Some("window-behavior") => Some("window-behavior"),
+        _ => None,
+    }
+}
+
+fn ensure_local_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let repo_root = resolve_repo_root()?;
+
+    if !port_is_open(ANALYZER_PORT) {
+        let analyzer = spawn_analyzer(&repo_root)?;
+        app.state::<Mutex<ManagedLocalServices>>()
+            .lock()
+            .map_err(|_| "Unable to track analyzer process.".to_string())?
+            .analyzer = Some(analyzer);
+        wait_for_port("Analyzer", ANALYZER_PORT, Duration::from_secs(30))?;
+    }
+
+    if !port_is_open(API_PORT) {
+        let api = spawn_api_bridge(&repo_root)?;
+        app.state::<Mutex<ManagedLocalServices>>()
+            .lock()
+            .map_err(|_| "Unable to track API bridge process.".to_string())?
+            .api = Some(api);
+        wait_for_port("API bridge", API_PORT, Duration::from_secs(30))?;
+    }
+
+    Ok(())
+}
+
+fn stop_local_services<R: Runtime>(app: &tauri::AppHandle<R>) {
+    let service_state = app.state::<Mutex<ManagedLocalServices>>();
+    let Ok(mut services) = service_state.lock() else {
+        return;
+    };
+
+    if let Some(mut api) = services.api.take() {
+        let _ = api.kill();
+        let _ = api.wait();
+    }
+
+    if let Some(mut analyzer) = services.analyzer.take() {
+        let _ = analyzer.kill();
+        let _ = analyzer.wait();
+    }
+}
+
+fn spawn_analyzer(repo_root: &Path) -> Result<Child, String> {
+    let python = find_executable(
+        "python3",
+        &[
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3",
+        ],
+    )
+    .ok_or_else(|| "python3 is required to start the local analyzer.".to_string())?;
+    let python_path = repo_root.join("services/analyzer/src");
+
+    Command::new(python)
+        .current_dir(repo_root)
+        .env("PYTHONPATH", python_path)
+        .env("PATH", command_path())
+        .arg("-m")
+        .arg("vaexcore_pulse_analyzer.server")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("Failed to start the local analyzer: {error}"))
+}
+
+fn spawn_api_bridge(repo_root: &Path) -> Result<Child, String> {
+    let pnpm = find_executable(
+        "pnpm",
+        &[
+            "/opt/homebrew/bin/pnpm",
+            "/usr/local/bin/pnpm",
+            "/usr/bin/pnpm",
+        ],
+    )
+    .ok_or_else(|| "pnpm is required to start the local API bridge.".to_string())?;
+
+    Command::new(pnpm)
+        .current_dir(repo_root)
+        .env("PATH", command_path())
+        .env(
+            "VAEXCORE_PULSE_ANALYZER_URL",
+            format!("http://127.0.0.1:{ANALYZER_PORT}"),
+        )
+        .arg("--filter")
+        .arg("@vaexcore/pulse-api")
+        .arg("start")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("Failed to start the local API bridge: {error}"))
+}
+
+fn resolve_repo_root() -> Result<PathBuf, String> {
+    if let Ok(configured_root) = env::var("VAEXCORE_PULSE_REPO_ROOT") {
+        let path = PathBuf::from(configured_root);
+        if path.join("services/api/package.json").exists() {
+            return Ok(path);
+        }
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .ok_or_else(|| "Unable to locate the vaexcore pulse repository.".to_string())?
+        .to_path_buf();
+
+    if repo_root.join("services/api/package.json").exists()
+        && repo_root.join("services/analyzer/src").exists()
+    {
+        return Ok(repo_root);
+    }
+
+    Err("Pulse could not find the helper files it needs to start.".to_string())
+}
+
+fn find_executable(name: &str, fallback_paths: &[&str]) -> Option<PathBuf> {
+    if let Some(paths) = env::var_os("PATH") {
+        for directory in env::split_paths(&paths) {
+            let candidate = directory.join(name);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    fallback_paths
+        .iter()
+        .map(PathBuf::from)
+        .find(|candidate| candidate.exists())
+}
+
+fn command_path() -> String {
+    let current_path = env::var("PATH").unwrap_or_default();
+    format!("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:{current_path}")
+}
+
+fn port_is_open(port: u16) -> bool {
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_ok()
+}
+
+fn wait_for_port(service_name: &str, port: u16, timeout: Duration) -> Result<(), String> {
+    let started_at = SystemTime::now();
+
+    loop {
+        if port_is_open(port) {
+            return Ok(());
+        }
+
+        if started_at
+            .elapsed()
+            .unwrap_or_else(|_| Duration::from_secs(0))
+            >= timeout
+        {
+            return Err(format!(
+                "{service_name} is still starting. Try again in a few seconds."
+            ));
+        }
+
+        thread::sleep(Duration::from_millis(300));
+    }
+}
+
+fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+        return Err("The main vaexcore pulse window is not available.".to_string());
+    };
+
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
+}
+
+fn close_main_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+        return Err("The main vaexcore pulse window is not available.".to_string());
+    };
+
+    window.hide().map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -63,7 +522,7 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
             video_codec: None,
             audio_codec: None,
             detail: format!(
-                "The saved file path no longer exists on disk: {}",
+                "Pulse could not find this file: {}",
                 media_path
             ),
         });
@@ -82,7 +541,7 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
             video_codec: None,
             audio_codec: None,
             detail: format!(
-                "vaexcore pulse can still see the file path, but macOS did not allow the app to read it: {}",
+                "macOS did not allow Pulse to read this file: {}",
                 media_path
             ),
         });
@@ -106,12 +565,9 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
         Ok(output) => output,
         Err(error) => {
             let detail = if error.kind() == std::io::ErrorKind::NotFound {
-                "The file exists, but ffprobe is not installed, so VCP could not inspect the media stream details.".to_string()
+                "The file is available, but Pulse could not inspect it.".to_string()
             } else {
-                format!(
-                    "The file exists, but VCP could not run ffprobe to inspect it: {}",
-                    error
-                )
+                format!("The file is available, but Pulse could not inspect it: {}", error)
             };
 
             return Ok(MediaPlaybackInspection {
@@ -140,9 +596,12 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
             video_codec: None,
             audio_codec: None,
             detail: if stderr.is_empty() {
-                "The file exists, but ffprobe could not read it as valid media.".to_string()
+                "The file is available, but Pulse could not read it as a video.".to_string()
             } else {
-                format!("The file exists, but ffprobe could not read it as valid media: {}", stderr)
+                format!(
+                    "The file is available, but Pulse could not read it as a video: {}",
+                    stderr
+                )
             },
         });
     }
@@ -161,38 +620,24 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
         .map(ToOwned::to_owned);
     let video_codec = streams
         .iter()
-        .find(|stream| {
-            stream
-                .get("codec_type")
-                .and_then(|value| value.as_str())
-                == Some("video")
-        })
+        .find(|stream| stream.get("codec_type").and_then(|value| value.as_str()) == Some("video"))
         .and_then(|stream| stream.get("codec_name"))
         .and_then(|value| value.as_str())
         .map(ToOwned::to_owned);
     let audio_codec = streams
         .iter()
-        .find(|stream| {
-            stream
-                .get("codec_type")
-                .and_then(|value| value.as_str())
-                == Some("audio")
-        })
+        .find(|stream| stream.get("codec_type").and_then(|value| value.as_str()) == Some("audio"))
         .and_then(|stream| stream.get("codec_name"))
         .and_then(|value| value.as_str())
         .map(ToOwned::to_owned);
 
     let detail = match (video_codec.as_deref(), audio_codec.as_deref()) {
-        (Some("h264"), Some("aac")) => "The file exists and ffprobe read it successfully as a standard H.264/AAC MP4. Since the embedded preview still failed, this points to the desktop webview playback path rather than a bad export.".to_string(),
-        (Some(video), Some(audio)) => format!(
-            "The file exists and ffprobe read it successfully (video {}, audio {}). The embedded preview may not support this playback path or codec combination.",
-            video, audio
-        ),
-        (Some(video), None) => format!(
-            "The file exists and ffprobe read it successfully (video {}). The embedded preview may not support this playback path or missing audio stream.",
-            video
-        ),
-        _ => "The file exists and ffprobe could read it, but VCP could not identify a normal video/audio stream combination for the embedded player.".to_string(),
+        (Some("h264"), Some("aac")) => "The file is available and should be playable.".to_string(),
+        (Some(_), Some(_)) => {
+            "The file is available, but this video format may not preview correctly.".to_string()
+        }
+        (Some(_), None) => "The file is available, but it may not include audio.".to_string(),
+        _ => "The file is available, but Pulse could not confirm the video format.".to_string(),
     };
 
     Ok(MediaPlaybackInspection {
@@ -221,28 +666,20 @@ fn prepare_media_preview_clip(
 
     if File::open(path).is_err() {
         return Err(format!(
-            "vaexcore pulse could not read this local file to prepare an in-app preview clip: {}",
+            "Pulse could not read this video to prepare a preview: {}",
             media_path
         ));
     }
 
     match Command::new("ffmpeg").arg("-version").output() {
         Ok(output) if output.status.success() => {}
-        Ok(_) => {
-            return Err(
-                "vaexcore pulse could not verify ffmpeg, so it cannot prepare an in-app preview clip."
-                    .to_string(),
-            )
-        }
+        Ok(_) => return Err("Pulse could not prepare a video preview.".to_string()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err(
-                "vaexcore pulse needs ffmpeg installed locally to prepare in-app preview clips."
-                    .to_string(),
-            )
+            return Err("Pulse could not prepare a video preview.".to_string())
         }
         Err(error) => {
             return Err(format!(
-                "vaexcore pulse could not start ffmpeg to prepare this preview clip: {}",
+                "Pulse could not prepare a video preview: {}",
                 error
             ))
         }
@@ -279,10 +716,7 @@ fn prepare_media_preview_clip(
             .and_then(|stem| stem.to_str())
             .unwrap_or("moment-preview"),
     );
-    let preview_path = cache_dir.join(format!(
-        "{}-{:016x}.mp4",
-        preview_stem, cache_key
-    ));
+    let preview_path = cache_dir.join(format!("{}-{:016x}.mp4", preview_stem, cache_key));
 
     if preview_path.exists() {
         let existing_metadata = fs::metadata(&preview_path).map_err(|error| error.to_string())?;
@@ -292,8 +726,7 @@ fn prepare_media_preview_clip(
                 reused_existing: true,
                 file_size_bytes: Some(existing_metadata.len()),
                 duration_seconds: clip_duration_seconds,
-                detail:
-                    "VCP reused a cached in-app preview clip for this moment.".to_string(),
+                detail: "Pulse reused an existing preview for this moment.".to_string(),
             });
         }
 
@@ -336,12 +769,12 @@ fn prepare_media_preview_clip(
             "+faststart",
             preview_path
                 .to_str()
-                .ok_or_else(|| "VCP could not resolve a preview clip path.".to_string())?,
+                .ok_or_else(|| "Pulse could not prepare a video preview.".to_string())?,
         ])
         .output()
         .map_err(|error| {
             format!(
-                "vaexcore pulse could not run ffmpeg to prepare this preview clip: {}",
+                "Pulse could not prepare a video preview: {}",
                 error
             )
         })?;
@@ -353,13 +786,13 @@ fn prepare_media_preview_clip(
             .to_string();
         if stderr.is_empty() {
             return Err(
-                "vaexcore pulse could not generate an in-app preview clip for this moment."
+                "Pulse could not prepare a preview for this moment."
                     .to_string(),
             );
         }
 
         return Err(format!(
-            "vaexcore pulse could not generate an in-app preview clip for this moment: {}",
+            "Pulse could not prepare a preview for this moment: {}",
             stderr
         ));
     }
@@ -371,21 +804,21 @@ fn prepare_media_preview_clip(
         reused_existing: false,
         file_size_bytes: Some(preview_metadata.len()),
         duration_seconds: clip_duration_seconds,
-        detail: "VCP prepared a temporary in-app preview clip for this moment."
-            .to_string(),
+        detail: "Pulse prepared a preview for this moment.".to_string(),
     })
 }
 
 #[tauri::command]
-fn open_media_in_quicktime(media_path: String, start_seconds: Option<f64>) -> Result<String, String> {
+fn open_media_in_quicktime(
+    media_path: String,
+    start_seconds: Option<f64>,
+) -> Result<String, String> {
     if !Path::new(&media_path).exists() {
         return Err(format!("File not found: {}", media_path));
     }
 
     let normalized_seconds = start_seconds.unwrap_or(0.0).max(0.0);
-    let escaped_path = media_path
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"");
+    let escaped_path = media_path.replace('\\', "\\\\").replace('"', "\\\"");
     let apple_script = format!(
         r#"
 set targetFile to POSIX file "{escaped_path}"
@@ -411,10 +844,9 @@ end tell
         .output();
 
     match script_status {
-        Ok(output) if output.status.success() => Ok(
-            "Opened this file in QuickTime and jumped to the requested moment."
-                .to_string(),
-        ),
+        Ok(output) if output.status.success() => {
+            Ok("Opened this file in QuickTime and jumped to the requested moment.".to_string())
+        }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
             let fallback = Command::new("open")
@@ -423,19 +855,19 @@ end tell
                 .map_err(|error| error.to_string())?;
             if fallback.success() {
                 if stderr.is_empty() {
-                    Ok("Opened this file in QuickTime, but VCP could not jump to the exact timestamp automatically.".to_string())
+                    Ok("Opened this file in QuickTime, but could not jump to the exact timestamp automatically.".to_string())
                 } else {
                     Ok(format!(
-                        "Opened this file in QuickTime, but VCP could not jump to the exact timestamp automatically: {}",
+                        "Opened this file in QuickTime, but could not jump to the exact timestamp automatically: {}",
                         stderr
                     ))
                 }
             } else {
-                Err("VCP could not launch QuickTime for this file.".to_string())
+                Err("Could not open this file in QuickTime.".to_string())
             }
         }
         Err(error) => Err(format!(
-            "VCP could not launch the QuickTime fallback: {}",
+            "Could not open QuickTime: {}",
             error
         )),
     }
@@ -477,7 +909,9 @@ fn cleanup_old_preview_clips(cache_dir: &Path) {
 
     let mut total_bytes = retained_entries
         .iter()
-        .fold(0_u64, |sum, (_, size_bytes, _)| sum.saturating_add(*size_bytes));
+        .fold(0_u64, |sum, (_, size_bytes, _)| {
+            sum.saturating_add(*size_bytes)
+        });
     let mut total_files = retained_entries.len();
 
     for (preview_path, size_bytes, _) in retained_entries {

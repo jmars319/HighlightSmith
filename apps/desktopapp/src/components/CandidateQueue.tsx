@@ -201,8 +201,8 @@ export function CandidateQueue({
           </p>
           {isStrongMatchFallback ? (
             <p className="queue-summary-copy">
-              VCP does not have enough strong profile evidence yet, so this
-              still shows the full set of suggested moments.
+              Add more examples to make this filter useful. For now, all
+              suggested moments are shown.
             </p>
           ) : null}
         </div>
@@ -237,7 +237,7 @@ export function CandidateQueue({
           <span className="detail-label">Queue state</span>
           <p>
             {totalCandidateCount === 0
-              ? "No moments found. VCP did not find any strong signals in this video."
+              ? "No moments found in this video."
               : reviewQueueMode === "ONLY_PENDING"
                 ? "Nothing still needing review matches the current search and filters."
                 : "No moments match the current search and filters."}
@@ -303,18 +303,18 @@ function formatProfileMatchBadge(
   profileMatch: ReturnType<typeof resolveCandidateProfileMatch>,
 ): string {
   if (profileMatch.status !== "HEURISTIC") {
-    return "No local match data";
+    return "No profile match yet";
   }
 
   if (profileMatch.strength === "STRONG") {
-    return "Strong local match";
+    return "Strong profile fit";
   }
 
   if (profileMatch.strength === "POSSIBLE") {
-    return "Possible local match";
+    return "Possible profile fit";
   }
 
-  return "Weaker local match";
+  return "Weak profile fit";
 }
 
 function formatDecisionState(

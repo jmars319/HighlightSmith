@@ -97,8 +97,8 @@ export function CandidateDetail({
         </h2>
         <p>
           {candidateCount === 0
-            ? "VCP did not find any strong moments in this session."
-            : "Select a moment to inspect why VCP flagged it and where the clip boundaries land."}
+            ? "No clear moments were found in this session."
+            : "Select a moment to see why it was suggested and where the clip starts and ends."}
         </p>
       </section>
     );
@@ -181,17 +181,17 @@ export function CandidateDetail({
             {formatLongTime(activeSegment.endSeconds)}
           </strong>
           <p>
-            Setup {candidate.suggestedSegment.setupPaddingSeconds}s • Resolution{" "}
+            Lead-in {candidate.suggestedSegment.setupPaddingSeconds}s • Ending{" "}
             {candidate.suggestedSegment.resolutionPaddingSeconds}s
           </p>
         </article>
 
         <article className="detail-card narrative-card">
-          <span className="detail-label">Why VCP flagged this</span>
+          <span className="detail-label">Why this was suggested</span>
           <strong>{plainDescription.summary}</strong>
           <p>
             {plainDescription.detail ??
-              "Signals align cleanly enough to review as a likely standalone moment."}
+              "Enough signs lined up to make this worth reviewing."}
           </p>
           {plainDescription.signalPhrases.length > 0 ? (
             <div className="analysis-coverage-flag-row">
@@ -301,19 +301,19 @@ export function CandidateDetail({
           <strong>{profile.name}</strong>
           <p>{profileMatch.note}</p>
           <p>
-            Match state {formatProfileMatchStatus(profileMatch.status)} •{" "}
-            {profileMatchingSummary.usableLocalExampleCount} usable local
-            reference
+            Profile fit {formatProfileMatchStatus(profileMatch.status)} •{" "}
+            {profileMatchingSummary.usableLocalExampleCount} saved example
             {profileMatchingSummary.usableLocalExampleCount === 1
               ? ""
-              : "s"} • {profileMatchingSummary.referenceOnlyExampleCount} saved
-            without local media
+              : "s"} ready • {profileMatchingSummary.referenceOnlyExampleCount}{" "}
+            link-only example
+            {profileMatchingSummary.referenceOnlyExampleCount === 1 ? "" : "s"}
           </p>
           {profileMatch.similarityScore !== undefined ? (
             <p>
-              Local similarity {percentage(profileMatch.similarityScore)} •{" "}
-              {profileMatch.comparedExampleCount} local reference
-              {profileMatch.comparedExampleCount === 1 ? "" : "s"} compared
+              Similarity {percentage(profileMatch.similarityScore)} • compared
+              with {profileMatch.comparedExampleCount} example
+              {profileMatch.comparedExampleCount === 1 ? "" : "s"}
             </p>
           ) : null}
         </article>
@@ -323,7 +323,7 @@ export function CandidateDetail({
 
       <details className="breakdown-panel internal-details">
         <summary className="internal-details-summary">
-          <span>Advanced scoring details</span>
+          <span>Why this scored this way</span>
           <span className="score-pill">
             {percentage(candidate.scoreEstimate)}
           </span>
@@ -332,7 +332,7 @@ export function CandidateDetail({
         <div className="analysis-coverage-flag-row">
           {candidate.reasonCodes.map((reasonCode) => (
             <span className="analysis-coverage-flag" key={reasonCode}>
-              {reasonCode} • {describeReasonCodePlainly(reasonCode)}
+              {describeReasonCodePlainly(reasonCode)}
             </span>
           ))}
         </div>
@@ -536,18 +536,18 @@ function formatProfileMatchStatus(
   status: ReturnType<typeof resolveCandidateProfileMatch>["status"],
 ): string {
   if (status === "EXAMPLE_COMPARISON") {
-    return "Reference comparison";
+    return "Compared with examples";
   }
 
   if (status === "HEURISTIC") {
-    return "Local match";
+    return "Checked against examples";
   }
 
   if (status === "PLACEHOLDER") {
-    return "Reference pending";
+    return "Needs examples";
   }
 
-  return "No match data";
+  return "Not checked";
 }
 
 function formatDecisionState(

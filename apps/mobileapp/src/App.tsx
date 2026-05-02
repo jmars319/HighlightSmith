@@ -21,30 +21,30 @@ export default function App() {
         <View style={styles.sectionStack}>
           {companionSnapshot.projects.length === 0 ? (
             <SurfaceCard
-              accent="teal"
+              accent="cyan"
               eyebrow="Projects"
               title="No synced sessions yet"
             >
               <Text style={styles.bodyText}>
-                This companion surface stays empty until a real mobile sync path
-                exists.
+                Sessions from the desktop app will appear here when sync is
+                available.
               </Text>
             </SurfaceCard>
           ) : null}
           {companionSnapshot.projects.map((project) => (
             <SurfaceCard
-              accent="teal"
+              accent="cyan"
               eyebrow={`Profile: ${project.profileLabel}`}
               key={project.sessionId}
               title={project.sessionTitle}
             >
               <Text style={styles.bodyText}>
-                {project.candidateCount} candidates tracked,{" "}
+                {project.candidateCount} moments tracked,{" "}
                 {project.acceptedCount} accepted.
               </Text>
               <Text style={styles.mutedText}>{project.sourcePath}</Text>
               <Text style={styles.captionText}>
-                Companion use case: quick project browsing and status checks.
+                Quick project browsing and status checks.
               </Text>
               <Text style={styles.metaText}>
                 Updated {project.updatedLabel}
@@ -59,26 +59,24 @@ export default function App() {
       return (
         <View style={styles.sectionStack}>
           <SurfaceCard
-            accent="amber"
-            eyebrow="Candidate Queue"
-            title="Read-only review backlog"
+            accent="magenta"
+            eyebrow="Review Queue"
+            title="Review queue"
           >
             <Text style={styles.bodyText}>
-              Mobile can surface queue pressure and context, but review
-              authority should stay desktop-first until real persistence and
-              sync exist.
+              Review queue items from desktop will appear here when sync is
+              available.
             </Text>
           </SurfaceCard>
 
           {companionSnapshot.queue.length === 0 ? (
             <SurfaceCard
-              accent="amber"
-              eyebrow="Candidate Queue"
-              title="No synced queue items"
+              accent="magenta"
+              eyebrow="Review Queue"
+              title="No queue items yet"
             >
               <Text style={styles.bodyText}>
-                Mobile does not invent review backlog items. Real queue data has
-                not been connected here yet.
+                Start a scan in the desktop app to create review items.
               </Text>
             </SurfaceCard>
           ) : null}
@@ -120,19 +118,18 @@ export default function App() {
       return (
         <View style={styles.sectionStack}>
           <SurfaceCard
-            accent="teal"
+            accent="cyan"
             eyebrow="Accepted Clips"
             title="Approved moments only"
           >
             <Text style={styles.bodyText}>
-              This companion surface is useful once desktop review decisions are
-              worth checking away from the workstation.
+              Accepted clips from the desktop app will appear here.
             </Text>
           </SurfaceCard>
 
           {companionSnapshot.acceptedClips.length === 0 ? (
             <SurfaceCard
-              accent="teal"
+              accent="cyan"
               eyebrow="Accepted Clips"
               title="No accepted clips synced"
             >
@@ -175,39 +172,39 @@ export default function App() {
       return (
         <View style={styles.sectionStack}>
           <SurfaceCard
-            accent="rose"
+            accent="violet"
             eyebrow="Profiles"
-            title="Visibility, not tuning"
+            title="Profiles on the go"
           >
             <Text style={styles.bodyText}>
-              Mobile can expose active profile intent and settings later, but it
-              should not become the place where analysis behavior is authored.
+              Mobile will show which profile is active. Use the desktop app to
+              create profiles and scan videos.
             </Text>
           </SurfaceCard>
 
           {companionSnapshot.profiles.length === 0 ? (
             <SurfaceCard
-              accent="rose"
+              accent="violet"
               eyebrow="Profiles"
               title="No synced profiles yet"
             >
               <Text style={styles.bodyText}>
-                Profile data should come from persisted storage, not placeholder
-                mobile presets.
+                Create profiles in the desktop app. They will appear here when
+                sync is available.
               </Text>
             </SurfaceCard>
           ) : null}
 
           {companionSnapshot.profiles.map((profile) => (
             <SurfaceCard
-              accent="rose"
+              accent="violet"
               eyebrow={profile.mode}
               key={profile.id}
               title={profile.label}
             >
               <Text style={styles.bodyText}>{profile.description}</Text>
               <Text style={styles.metaText}>
-                {profile.weightCount} signal weights scaffolded
+                {profile.weightCount} profile settings
               </Text>
             </SurfaceCard>
           ))}
@@ -218,9 +215,9 @@ export default function App() {
     return (
       <View style={styles.sectionStack}>
         <SurfaceCard
-          accent="amber"
+          accent="magenta"
           eyebrow="Companion Status"
-          title="Thin mobile boundary"
+          title="Mobile companion"
         >
           <Text style={styles.bodyText}>
             {companionSnapshot.dashboard.statusLabel}
@@ -250,7 +247,7 @@ export default function App() {
         </View>
 
         <SurfaceCard
-          accent="teal"
+          accent="cyan"
           eyebrow="Primary Project"
           title={companionSnapshot.dashboard.primaryProjectTitle}
         >
@@ -264,7 +261,7 @@ export default function App() {
         </SurfaceCard>
 
         <SurfaceCard
-          accent="rose"
+          accent="violet"
           eyebrow="Out Of Scope"
           title="Keep mobile honest"
         >
@@ -296,18 +293,15 @@ export default function App() {
             style={styles.logo}
           />
           <Text style={styles.kicker}>vaexcore pulse companion</Text>
-          <Text style={styles.title}>
-            Browse the queue without pretending to run the workstation.
-          </Text>
+          <Text style={styles.title}>Review your queue away from the desk.</Text>
           <Text style={styles.subtitle}>
-            Companion management surface for projects, candidate status, and
-            accepted clips. Local ingest, analysis, and editorial control still
-            belong to desktop.
+            Keep an eye on projects, review status, and accepted clips. Use the
+            desktop app when you are ready to scan or edit.
           </Text>
         </View>
 
         <View style={styles.statusPill}>
-          <Text style={styles.statusPillText}>Early scaffold only</Text>
+          <Text style={styles.statusPillText}>Sync not connected yet</Text>
         </View>
 
         {renderTabContent()}
@@ -343,7 +337,7 @@ function MetricCard({ label, value }: MetricCardProps) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0b1115",
+    backgroundColor: "#05021b",
   },
   scrollContent: {
     gap: 18,
@@ -354,21 +348,21 @@ const styles = StyleSheet.create({
   orb: {
     position: "absolute",
     borderRadius: 999,
-    opacity: 0.34,
+    opacity: 0.18,
   },
   orbLeft: {
     top: 70,
     left: -70,
     width: 220,
     height: 220,
-    backgroundColor: "#ef9b55",
+    backgroundColor: "#42ade6",
   },
   orbRight: {
     top: 260,
     right: -90,
     width: 260,
     height: 260,
-    backgroundColor: "#4d8faa",
+    backgroundColor: "#c93fd7",
   },
   header: {
     gap: 10,
@@ -377,22 +371,24 @@ const styles = StyleSheet.create({
     width: 86,
     height: 86,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(167, 202, 255, 0.16)",
   },
   kicker: {
-    color: "#f4b061",
+    color: "#62d9ff",
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 1.4,
     textTransform: "uppercase",
   },
   title: {
-    color: "#f9f4eb",
+    color: "#f8fbff",
     fontSize: 32,
     lineHeight: 34,
     fontWeight: "700",
   },
   subtitle: {
-    color: "rgba(249, 244, 235, 0.74)",
+    color: "rgba(238, 244, 255, 0.74)",
     fontSize: 15,
     lineHeight: 22,
   },
@@ -401,12 +397,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: "rgba(93, 168, 182, 0.12)",
+    backgroundColor: "rgba(201, 63, 215, 0.14)",
     borderWidth: 1,
-    borderColor: "rgba(93, 168, 182, 0.26)",
+    borderColor: "rgba(201, 63, 215, 0.28)",
   },
   statusPillText: {
-    color: "#a9dde0",
+    color: "#fac6ff",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -423,19 +419,19 @@ const styles = StyleSheet.create({
     minWidth: 145,
     padding: 16,
     borderRadius: 22,
-    backgroundColor: "rgba(17, 23, 28, 0.88)",
+    backgroundColor: "rgba(8, 10, 28, 0.9)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "rgba(167, 202, 255, 0.12)",
   },
   metricLabel: {
-    color: "rgba(249, 244, 235, 0.62)",
+    color: "rgba(238, 244, 255, 0.62)",
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   metricValue: {
     marginTop: 8,
-    color: "#f9f4eb",
+    color: "#f8fbff",
     fontSize: 26,
     fontWeight: "700",
   },
@@ -456,27 +452,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   bodyText: {
-    color: "#f8f2e9",
+    color: "#eef4ff",
     fontSize: 15,
     lineHeight: 22,
   },
   mutedText: {
-    color: "rgba(248, 242, 233, 0.66)",
+    color: "rgba(238, 244, 255, 0.66)",
     fontSize: 13,
     lineHeight: 19,
   },
   captionText: {
-    color: "#d6c8b4",
+    color: "#b8c0df",
     fontSize: 13,
     lineHeight: 19,
   },
   metaText: {
-    color: "rgba(248, 242, 233, 0.58)",
+    color: "rgba(238, 244, 255, 0.58)",
     fontSize: 12,
     fontWeight: "600",
   },
   listItem: {
-    color: "#f8f2e9",
+    color: "#eef4ff",
     fontSize: 14,
     lineHeight: 21,
   },

@@ -21,7 +21,7 @@ type WebPage =
 const navItems: Array<{ id: WebPage; label: string }> = [
   { id: "dashboard", label: "Dashboard" },
   { id: "projects", label: "Projects" },
-  { id: "candidate-history", label: "Candidate History" },
+  { id: "candidate-history", label: "Review History" },
   { id: "profiles", label: "Profiles" },
   { id: "settings", label: "Settings" },
 ];
@@ -99,7 +99,7 @@ export default function App() {
           setProfileError(
             error instanceof Error
               ? error.message
-              : "Unable to load persisted profiles",
+              : "Unable to load profiles",
           );
         });
       } finally {
@@ -155,7 +155,7 @@ export default function App() {
           setSummaryError(
             error instanceof Error
               ? error.message
-              : "Unable to load persisted sessions",
+              : "Unable to load sessions",
           );
           setSessionSummaries([]);
         });
@@ -242,7 +242,7 @@ export default function App() {
           <section className="web-grid">
             <article className="web-panel">
               <span className="web-label">Projects</span>
-              <h2>Loading persisted sessions...</h2>
+              <h2>Loading sessions...</h2>
             </article>
           </section>
         );
@@ -253,7 +253,7 @@ export default function App() {
           <section className="web-grid">
             <article className="web-panel">
               <span className="web-label">Projects</span>
-              <h2>Real session list unavailable</h2>
+              <h2>Sessions unavailable</h2>
               <p>{summaryError}</p>
             </article>
           </section>
@@ -265,10 +265,10 @@ export default function App() {
           <section className="web-grid">
             <article className="web-panel">
               <span className="web-label">Projects</span>
-              <h2>No persisted sessions yet</h2>
+              <h2>No sessions yet</h2>
               <p>
-                Run desktop analysis first. The web app stays a companion list,
-                not the primary operator surface.
+                Start a scan in the desktop app. Finished sessions will appear
+                here.
               </p>
             </article>
           </section>
@@ -286,15 +286,15 @@ export default function App() {
       return (
         <section className="web-grid">
           <article className="web-panel">
-            <span className="web-label">Candidate history</span>
-            <h2>Desktop remains the review surface</h2>
+            <span className="web-label">Review history</span>
+            <h2>Review on desktop</h2>
             <p>
-              This companion view now uses real project summaries, but candidate
-              history and full session review still stay on desktop for now.
+              Use the desktop app for full session review. This page will show
+              review history when it is ready.
             </p>
             <p>
-              Persisted sessions available: {sessionSummaries.length} • API
-              status: {apiStatus}
+              Sessions available: {sessionSummaries.length} • status:{" "}
+              {apiStatus}
             </p>
           </article>
         </section>
@@ -307,7 +307,7 @@ export default function App() {
           <section className="web-grid">
             <article className="web-panel">
               <span className="web-label">Profiles</span>
-              <h2>Loading persisted profiles...</h2>
+              <h2>Loading profiles...</h2>
             </article>
           </section>
         );
@@ -318,7 +318,7 @@ export default function App() {
           <section className="web-grid">
             <article className="web-panel">
               <span className="web-label">Profiles</span>
-              <h2>Real profile list unavailable</h2>
+              <h2>Profiles unavailable</h2>
               <p>{profileError}</p>
             </article>
           </section>
@@ -330,10 +330,10 @@ export default function App() {
           <section className="web-grid">
             <article className="web-panel">
               <span className="web-label">Profiles</span>
-              <h2>No persisted profiles yet</h2>
+              <h2>No profiles yet</h2>
               <p>
-                Create or sync profiles through the local API. The web app does
-                not fill this page with built-in presets.
+                Create a profile in the desktop app. It will appear here when
+                sync is available.
               </p>
             </article>
           </section>
@@ -348,8 +348,7 @@ export default function App() {
               <h2>{profile.label}</h2>
               <p>{profile.description}</p>
               <p>
-                {Object.keys(profile.signalWeights).length} signal weights
-                scaffolded
+                {Object.keys(profile.signalWeights).length} profile settings
               </p>
             </article>
           ))}
@@ -361,17 +360,16 @@ export default function App() {
       return (
         <section className="web-grid">
           <article className="web-panel">
-            <span className="web-label">Bridge defaults</span>
+            <span className="web-label">Connection</span>
             <p>API status: {apiStatus}</p>
-            <p>Summary data source: real persisted `/api/projects` sessions.</p>
+            <p>Sessions come from the desktop app.</p>
           </article>
           <article className="web-panel">
-            <span className="web-label">Future role</span>
+            <span className="web-label">Profiles</span>
             <p>
-              Project browsing is real here now. Full review stays on desktop
-              until a clearly useful companion flow exists.
+              Review and setup still happen in the desktop app.
             </p>
-            <p>Profile data source: persisted `/api/profiles` records only.</p>
+            <p>Saved profiles appear here when they are available.</p>
           </article>
         </section>
       );
@@ -383,23 +381,23 @@ export default function App() {
       <section className="web-grid">
         <article className="web-panel">
           <span className="web-label">Dashboard</span>
-          <h2>Desktop-fed backlog companion</h2>
+          <h2>Backlog companion</h2>
           <p>
-            Browser surface for checking real persisted session summaries while
-            desktop stays the primary review workstation.
+            Check session progress here. Use the desktop app when you are ready
+            to review.
           </p>
           <p>API status: {apiStatus}</p>
         </article>
         <article className="web-panel">
           <span className="web-label">Backlog totals</span>
-          <h2>{sessionSummaries.length} persisted sessions</h2>
+          <h2>{sessionSummaries.length} sessions</h2>
           <p>
             {sessionStats.inProgressSessions} in progress •{" "}
             {sessionStats.reviewedSessions} reviewed •{" "}
             {sessionStats.pendingSessions} not started
           </p>
-          <p>{sessionStats.acceptedCandidates} accepted candidates so far</p>
-          <p>{profiles.length} persisted profiles available</p>
+          <p>{sessionStats.acceptedCandidates} accepted moments so far</p>
+          <p>{profiles.length} profiles available</p>
         </article>
         <article className="web-panel">
           <span className="web-label">Latest session</span>
@@ -418,7 +416,7 @@ export default function App() {
           ) : (
             <>
               <h2>No sessions yet</h2>
-              <p>Run desktop analysis to populate the companion dashboard.</p>
+              <p>Start a scan in the desktop app to fill this dashboard.</p>
             </>
           )}
         </article>
@@ -441,12 +439,12 @@ export default function App() {
         aside={
           <div className="web-aside">
             <article className="web-panel">
-              <span className="web-label">Companion surface</span>
-              <p>{sessionSummaries.length} persisted sessions loaded</p>
+              <span className="web-label">Companion</span>
+              <p>{sessionSummaries.length} sessions loaded</p>
               <p>
                 {sessionSummaries[0]
                   ? `Latest update ${formatSummaryTimestamp(sessionSummaries[0].updatedAt)}`
-                  : "Desktop analysis will populate this list."}
+                  : "Desktop scans will fill this list."}
               </p>
             </article>
           </div>

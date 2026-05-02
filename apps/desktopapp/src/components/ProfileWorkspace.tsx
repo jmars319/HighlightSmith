@@ -79,23 +79,23 @@ const sourceTypeOptions: Array<{
 }> = [
   {
     id: "TWITCH_CLIP_URL",
-    label: "Twitch clip URL",
-    hint: "Paste a clip link and keep it as a saved reference for future retrieval.",
+    label: "Twitch clip link",
+    hint: "Paste a clip link you may want Pulse to find again.",
   },
   {
     id: "YOUTUBE_SHORT_URL",
-    label: "YouTube Short URL",
-    hint: "Store the Short link now. Retrieval and feature extraction come later.",
+    label: "YouTube Short link",
+    hint: "Paste a Short link you may want Pulse to find again.",
   },
   {
     id: "LOCAL_FILE_UPLOAD",
-    label: "Local clip file",
-    hint: "Choose a clip from disk with the desktop file picker.",
+    label: "Choose clip file",
+    hint: "Choose a clip from your Mac.",
   },
   {
     id: "LOCAL_FILE_PATH",
-    label: "Local clip path",
-    hint: "Paste or type an already-known local clip path.",
+    label: "Paste clip path",
+    hint: "Paste the full path to a clip on your Mac.",
   },
 ];
 
@@ -429,17 +429,17 @@ export function ProfileWorkspace({
           <div className="panel-header">
             <div>
               <span className="detail-label">Clip profiles</span>
-              <h2>Reference-driven profile library</h2>
+              <h2>Profile library</h2>
               <p>
-                Save creator profiles here. Local clips and analyzed profile
-                edits become reusable references for future scans.
+                Save profiles and examples here so future scans know what to
+                look for.
               </p>
             </div>
             <span className="queue-count">{profiles.length} profiles</span>
           </div>
 
           {isLoadingProfiles ? (
-            <p className="queue-summary-copy">Loading local profiles...</p>
+            <p className="queue-summary-copy">Loading profiles...</p>
           ) : null}
 
           <div className="profile-card-list">
@@ -461,7 +461,7 @@ export function ProfileWorkspace({
                         : "User profile"}
                     </span>
                     <span className="session-state-pill active-session">
-                      {profile.exampleClips.length} references
+                      {profile.exampleClips.length} examples
                     </span>
                   </div>
                   <strong>{profile.name}</strong>
@@ -493,7 +493,7 @@ export function ProfileWorkspace({
                 className="search-input profile-textarea"
                 disabled={isCreatingProfile}
                 onChange={(event) => setProfileDescription(event.target.value)}
-                placeholder="Describe the kind of moments this profile should eventually prefer."
+                placeholder="Describe moments you like to keep."
                 value={profileDescription}
               />
             </label>
@@ -524,7 +524,7 @@ export function ProfileWorkspace({
                   <h2>{selectedProfile.name}</h2>
                   <p>
                     {selectedProfile.description ||
-                      "No description yet. Add context, reusable clips, or an analyzed edit to make this profile more useful."}
+                      "No description yet. Add a few examples to make this profile more useful."}
                   </p>
                 </div>
                 <div className="profile-summary-badges">
@@ -539,32 +539,31 @@ export function ProfileWorkspace({
 
               <div className="analysis-summary-grid analysis-summary-grid-compact">
                 <article className="analysis-summary-card">
-                  <span className="detail-label">Saved references</span>
+                  <span className="detail-label">Saved examples</span>
                   <strong>{selectedProfileReferenceCount} total</strong>
                   <p>
-                    Reusable clips stay shortform. Profile-scoped edits become
-                    longform references after analysis.
+                    Add clips and finished edits that feel like the moments you
+                    want to keep.
                   </p>
                 </article>
                 <article className="analysis-summary-card">
-                  <span className="detail-label">Reference mix</span>
+                  <span className="detail-label">Example mix</span>
                   <strong>
                     {selectedProfileClipReferenceCount} clips •{" "}
                     {selectedProfileEditReferenceCount} edits
                   </strong>
                   <p>
-                    Clips capture reusable moments. Analyzed edits show what
-                    survived a real editorial pass.
+                    Clips capture quick moments. Finished edits show what made
+                    the final cut.
                   </p>
                 </article>
                 <article className="analysis-summary-card">
-                  <span className="detail-label">Match readiness</span>
+                  <span className="detail-label">Ready examples</span>
                   <strong>
-                    {selectedProfileUsableReferenceCount} ready local references
+                    {selectedProfileUsableReferenceCount} ready examples
                   </strong>
                   <p>
-                    Only local material participates today. Analyzed profile
-                    edits and local clips both feed local matching.
+                    Use clips or finished edits to improve future scans.
                   </p>
                 </article>
                 <article className="analysis-summary-card">
@@ -580,7 +579,7 @@ export function ProfileWorkspace({
               <h2>No profile selected</h2>
               <p>
                 Create a profile or choose one from the library to start adding
-                reference sources.
+                examples.
               </p>
             </>
           )}
@@ -594,8 +593,7 @@ export function ProfileWorkspace({
               <span className="detail-label">Start here</span>
               <h2>Build this profile with real examples</h2>
               <p>
-                The simplest path is clips first, then one edited video, then
-                advanced library tools only if you need them.
+                Start with a few clips. Add a finished edit if you have one.
               </p>
             </div>
           </div>
@@ -607,18 +605,17 @@ export function ProfileWorkspace({
                 more of.
               </li>
               <li>
-                Add one finished edited video so VCP can learn what survives a
-                real cut.
+                Add one finished edit to show Pulse what usually makes the
+                final cut.
               </li>
               <li>
-                Use the media lab later for VOD libraries, background analysis,
-                or VOD/edit comparisons.
+                Use the media library later only if you need to save more files.
               </li>
             </ol>
           ) : (
             <p className="queue-summary-copy">
               Choose or create a profile first. Then add clips and edited videos
-              as references.
+              as examples.
             </p>
           )}
         </article>
@@ -630,8 +627,7 @@ export function ProfileWorkspace({
                 <span className="detail-label">Add reusable clip</span>
                 <h2>Add reusable clips</h2>
                 <p>
-                  Use clips for short reusable moments you want VCP to find
-                  again.
+                  Use short clips that feel like moments you would keep.
                 </p>
               </div>
             </div>
@@ -733,7 +729,7 @@ export function ProfileWorkspace({
                   }}
                   type="button"
                 >
-                  {isAddingExample ? "Saving example..." : "Add clip reference"}
+                  {isAddingExample ? "Saving example..." : "Save clip example"}
                 </button>
               </div>
             </div>
@@ -745,8 +741,7 @@ export function ProfileWorkspace({
                 <span className="detail-label">Add edited video</span>
                 <h2>Add one finished edit</h2>
                 <p>
-                  Use a finished edited video to show VCP what actually survived
-                  your longform editorial pass.
+                  Use a finished edit to show Pulse what made the final cut.
                 </p>
               </div>
             </div>
@@ -771,13 +766,12 @@ export function ProfileWorkspace({
                   ))}
                 </select>
                 <small className="analysis-field-note">
-                  Choose a local file or paste a local path for the finished
-                  edit you want VCP to study.
+                  Choose a file or paste the full path to the finished edit.
                 </small>
               </label>
 
               <label className="search-block">
-                <span className="input-label">Local path or file</span>
+                <span className="input-label">Edited video file</span>
                 <input
                   className="search-input"
                   disabled={!selectedProfile || isCreatingMediaAsset}
@@ -826,7 +820,7 @@ export function ProfileWorkspace({
                     className="search-input"
                     disabled={!selectedProfile || isCreatingMediaAsset}
                     onChange={(event) => setProfileEditNote(event.target.value)}
-                    placeholder="What this edit teaches VCP"
+                    placeholder="What should Pulse learn from this edit?"
                     type="text"
                     value={profileEditNote}
                   />
@@ -848,7 +842,7 @@ export function ProfileWorkspace({
                 >
                   {isCreatingMediaAsset
                     ? "Saving edit..."
-                    : "Add edited video reference"}
+                    : "Save finished edit"}
                 </button>
               </div>
             </div>
@@ -858,8 +852,8 @@ export function ProfileWorkspace({
         <article className="utility-block">
           <div className="panel-header">
             <div>
-              <span className="detail-label">Profile references</span>
-              <h2>What this profile already knows</h2>
+              <span className="detail-label">Saved examples</span>
+              <h2>Examples in this profile</h2>
             </div>
             {isLoadingExamples ? (
               <span className="queue-count">Refreshing…</span>
@@ -868,7 +862,7 @@ export function ProfileWorkspace({
 
           {selectedProfile && visibleExamples.length === 0 ? (
             <p className="queue-summary-copy">
-              No saved reference sources yet for this profile.
+              No saved examples yet for this profile.
             </p>
           ) : null}
 
@@ -886,7 +880,7 @@ export function ProfileWorkspace({
                     {formatStatus(example.status)}
                   </span>
                 </div>
-                <strong>{example.title || "Untitled profile reference"}</strong>
+                <strong>{example.title || "Untitled example"}</strong>
                 <p className="profile-example-source">{example.sourceValue}</p>
                 {example.note ? <p>{example.note}</p> : null}
                 {example.statusDetail ? (
@@ -900,7 +894,7 @@ export function ProfileWorkspace({
                     {example.featureSummary.transcriptAnchorTerms.length > 0
                       ? ` • anchors ${formatTranscriptAnchors(example.featureSummary.transcriptAnchorTerms)}`
                       : ""}{" "}
-                    • top signals{" "}
+                    • top clues{" "}
                     {formatTopReasons(example.featureSummary.topReasonCodes)}
                   </p>
                 ) : null}
@@ -921,13 +915,13 @@ export function ProfileWorkspace({
                 <div className="panel-header">
                   <div>
                     <span className="detail-label">Background work</span>
-                    <h2>VCP is still working in the background</h2>
+                    <h2>Pulse is still working</h2>
                     <p>
                       {describeBackgroundActivity(
                         activeIndexJobCount,
                         activeAlignmentJobCount,
                       )}{" "}
-                      You can keep adding references while this finishes.
+                      You can keep adding examples while this finishes.
                     </p>
                   </div>
                   <span className="session-state-pill next-target">
@@ -965,7 +959,7 @@ export function ProfileWorkspace({
 
                 {recentBackgroundActivity.length === 0 ? (
                   <p className="queue-summary-copy">
-                    No background jobs have been started yet.
+                    Nothing is running right now.
                   </p>
                 ) : null}
 
@@ -981,8 +975,8 @@ export function ProfileWorkspace({
                           <div className="profile-example-top">
                             <span className="detail-label">
                               {asset
-                                ? `${formatAssetType(asset.assetType)} analysis`
-                                : "Asset analysis"}
+                                ? `${formatAssetType(asset.assetType)} scan`
+                                : "Scan"}
                             </span>
                             <span className="session-state-pill active-session">
                               {formatIndexJobStatus(item.job.status)}
@@ -1027,7 +1021,7 @@ export function ProfileWorkspace({
                       >
                         <div className="profile-example-top">
                           <span className="detail-label">
-                            VOD/edit comparison
+                            Video comparison
                           </span>
                           <span className="session-state-pill active-session">
                             {formatAlignmentJobStatus(item.job.status)}
@@ -1042,9 +1036,8 @@ export function ProfileWorkspace({
                           {item.job.statusDetail}
                         </p>
                         <p className="queue-summary-copy">
-                          {item.job.matchCount} candidate match
-                          {item.job.matchCount === 1 ? "" : "es"} • method{" "}
-                          {formatAlignmentMethod(item.job.method)}
+                          {item.job.matchCount} possible match
+                          {item.job.matchCount === 1 ? "" : "es"}
                         </p>
                         {item.job.errorMessage ? (
                           <p className="analysis-error">
@@ -1060,7 +1053,7 @@ export function ProfileWorkspace({
 
             <details className="utility-block internal-details advanced-lab-section">
               <summary className="internal-details-summary">
-                <span>Full media library</span>
+                <span>Media library</span>
                 <span className="queue-count">
                   {isLoadingLibraryAssets
                     ? "Refreshing…"
@@ -1072,33 +1065,33 @@ export function ProfileWorkspace({
                 <div className="panel-header">
                   <div>
                     <span className="detail-label">Media library</span>
-                    <h2>VODs, edits, and reusable clips</h2>
+                    <h2>Saved videos, edits, and clips</h2>
                     <p>
-                      Use this area when you need the full local library, not
-                      just profile references.
+                      Use this area when you need to save more media, not just
+                      profile examples.
                     </p>
                   </div>
                 </div>
 
                 <div className="analysis-summary-grid analysis-summary-grid-compact">
                   <article className="analysis-summary-card">
-                    <span className="detail-label">Assets</span>
+                    <span className="detail-label">Saved media</span>
                     <strong>{libraryAssets.length}</strong>
                     <p>
-                      {globalClipCount} global clip
+                      {globalClipCount} shared clip
                       {globalClipCount === 1 ? "" : "s"} •{" "}
-                      {vodAssetOptions.length} VOD
+                      {vodAssetOptions.length} full video
                       {vodAssetOptions.length === 1 ? "" : "s"} •{" "}
                       {editAssetOptions.length} edit
                       {editAssetOptions.length === 1 ? "" : "s"}
                     </p>
                   </article>
                   <article className="analysis-summary-card">
-                    <span className="detail-label">VOD/edit comparisons</span>
+                    <span className="detail-label">Video comparisons</span>
                     <strong>{mediaEditPairs.length}</strong>
                     <p>
-                      Optional VOD/edit audits that preserve keep/remove
-                      outcomes and help surface missed moments.
+                      Compare a full video with its final edit to see what was
+                      kept.
                     </p>
                   </article>
                   <article className="analysis-summary-card">
@@ -1107,9 +1100,8 @@ export function ProfileWorkspace({
                       {selectedProfile ? selectedProfile.name : "Global only"}
                     </strong>
                     <p>
-                      Profile scope keeps references tied to the current
-                      profile. Global scope keeps them reusable across the whole
-                      library.
+                      Save media for one profile or keep it available for every
+                      profile.
                     </p>
                   </article>
                 </div>
@@ -1119,10 +1111,10 @@ export function ProfileWorkspace({
                 <div className="panel-header">
                   <div>
                     <span className="detail-label">Add media</span>
-                    <h2>Add a clip, edit, or VOD</h2>
+                    <h2>Add a clip, edit, or full video</h2>
                     <p>
-                      Register any local media asset here when you need the full
-                      library workflow instead of the quick profile flow.
+                      Add a video, edit, or clip when you want to keep it for
+                      later.
                     </p>
                   </div>
                 </div>
@@ -1149,7 +1141,7 @@ export function ProfileWorkspace({
                         value={assetType}
                       >
                         <option value="CLIP">Clip</option>
-                        <option value="VOD">VOD</option>
+                        <option value="VOD">Full video</option>
                         <option value="EDIT">Edited video</option>
                       </select>
                     </label>
@@ -1172,9 +1164,9 @@ export function ProfileWorkspace({
                       <small className="analysis-field-note">
                         {assetScope === "PROFILE"
                           ? selectedProfile
-                            ? `This asset will attach to ${selectedProfile.name}.`
-                            : "Choose a profile first to use profile scope."
-                          : "Global assets stay reusable across the full library."}
+                            ? `This will be saved with ${selectedProfile.name}.`
+                            : "Choose a profile first."
+                          : "This will be available to every profile."}
                       </small>
                     </label>
                   </div>
@@ -1206,8 +1198,8 @@ export function ProfileWorkspace({
                     <span className="input-label">
                       {assetSourceType === "LOCAL_FILE_PATH" ||
                       assetSourceType === "LOCAL_FILE_UPLOAD"
-                        ? "Local path or file"
-                        : "Source URL"}
+                        ? "File or path"
+                        : "Link"}
                     </span>
                     <input
                       className="search-input"
@@ -1255,7 +1247,7 @@ export function ProfileWorkspace({
                         onChange={(event) => setAssetTitle(event.target.value)}
                         placeholder={
                           assetType === "VOD"
-                            ? "March 12 full VOD"
+                            ? "March 12 full video"
                             : assetType === "EDIT"
                               ? "March 12 final cut"
                               : "Reusable opener clip"
@@ -1292,8 +1284,8 @@ export function ProfileWorkspace({
                       type="button"
                     >
                       {isCreatingMediaAsset
-                        ? "Saving asset..."
-                        : "Add media asset"}
+                        ? "Saving media..."
+                        : "Save media"}
                     </button>
                   </div>
                 </div>
@@ -1302,7 +1294,7 @@ export function ProfileWorkspace({
               <article className="utility-block">
                 <div className="panel-header">
                   <div>
-                    <span className="detail-label">Media assets</span>
+                    <span className="detail-label">Saved media</span>
                     <h2>Saved library media</h2>
                   </div>
                   {isLoadingLibraryAssets ? (
@@ -1312,7 +1304,7 @@ export function ProfileWorkspace({
 
                 {libraryAssets.length === 0 ? (
                   <p className="queue-summary-copy">
-                    No library assets saved yet.
+                    No saved media yet.
                   </p>
                 ) : null}
 
@@ -1359,7 +1351,7 @@ export function ProfileWorkspace({
                             {formatStatus(asset.status)}
                           </span>
                         </div>
-                        <strong>{asset.title || "Untitled media asset"}</strong>
+                        <strong>{asset.title || "Untitled media"}</strong>
                         <p className="profile-example-source">
                           {asset.sourceValue}
                         </p>
@@ -1410,7 +1402,7 @@ export function ProfileWorkspace({
                               >
                                 {cancellingMediaIndexJobIds[latestIndexJob.id]
                                   ? "Cancelling..."
-                                  : "Cancel analysis"}
+                                  : "Cancel scan"}
                               </button>
                             ) : null}
                           </div>
@@ -1434,14 +1426,14 @@ export function ProfileWorkspace({
                             </p>
                             {asset.indexSummary ? (
                               <p className="queue-summary-copy">
-                                Analysis ready •{" "}
+                                Scan complete •{" "}
                                 {formatIndexSummary(asset.indexSummary)}
                               </p>
                             ) : null}
                             {asset.indexArtifactSummary
                               ?.latestAudioFingerprintArtifactId ? (
                               <p className="queue-summary-copy">
-                                Audio artifact ready •{" "}
+                                Audio check ready •{" "}
                                 {formatAudioFingerprintMethod(
                                   asset.indexArtifactSummary
                                     .audioFingerprintMethod,
@@ -1464,7 +1456,7 @@ export function ProfileWorkspace({
                             ) : null}
                             {asset.featureSummary ? (
                               <p className="queue-summary-copy">
-                                Local summary ready • duration{" "}
+                                Summary ready • duration{" "}
                                 {Math.round(
                                   asset.featureSummary.durationSeconds,
                                 )}
@@ -1473,7 +1465,7 @@ export function ProfileWorkspace({
                                   .length > 0
                                   ? ` • anchors ${formatTranscriptAnchors(asset.featureSummary.transcriptAnchorTerms)}`
                                   : ""}{" "}
-                                • top signals{" "}
+                                • top clues{" "}
                                 {formatTopReasons(
                                   asset.featureSummary.topReasonCodes,
                                 )}
@@ -1481,7 +1473,7 @@ export function ProfileWorkspace({
                             ) : null}
                             {latestIndexJob ? (
                               <p className="queue-summary-copy">
-                                Latest background job:{" "}
+                                Latest work:{" "}
                                 {formatIndexJobStatus(latestIndexJob.status)}
                                 {" • "}
                                 {Math.round(latestIndexJob.progress * 100)}%
@@ -1538,7 +1530,7 @@ export function ProfileWorkspace({
                                             )}
                                           </strong>
                                           <span>
-                                            Output {output.position + 1} • score{" "}
+                                            Saved pick {output.position + 1} • score{" "}
                                             {formatRatio(output.score)}
                                           </span>
                                           <button
@@ -1566,7 +1558,7 @@ export function ProfileWorkspace({
                                           >
                                             {isSavingThumbnailOutputs
                                               ? "Saving..."
-                                              : "Remove output"}
+                                              : "Remove"}
                                           </button>
                                         </figcaption>
                                       </figure>
@@ -1583,12 +1575,12 @@ export function ProfileWorkspace({
                                       .length
                                   }{" "}
                                   picks
-                                  {" • "}sampled{" "}
+                                  {" • "}checked{" "}
                                   {
                                     asset.thumbnailSuggestionSet
                                       .sampleWindowCount
                                   }{" "}
-                                  windows
+                                  spots
                                 </p>
                                 <div className="thumbnail-suggestion-grid">
                                   {asset.thumbnailSuggestionSet.suggestions.map(
@@ -1669,8 +1661,8 @@ export function ProfileWorkspace({
                                               : selectedThumbnailSuggestionIds.has(
                                                     suggestion.id,
                                                   )
-                                                ? "Chosen output"
-                                                : "Promote to output"}
+                                                ? "Chosen"
+                                                : "Choose"}
                                           </button>
                                         </figcaption>
                                       </figure>
@@ -1690,7 +1682,7 @@ export function ProfileWorkspace({
 
             <details className="utility-block internal-details advanced-lab-section">
               <summary className="internal-details-summary">
-                <span>VOD/edit audits</span>
+                <span>Video comparisons</span>
                 <span className="queue-count">
                   {isLoadingMediaPairs || isLoadingMediaAlignmentJobs
                     ? "Refreshing…"
@@ -1701,12 +1693,11 @@ export function ProfileWorkspace({
               <article className="utility-block">
                 <div className="panel-header">
                   <div>
-                    <span className="detail-label">VOD/edit comparison</span>
-                    <h2>Compare a VOD to its edit</h2>
+                    <span className="detail-label">Video comparison</span>
+                    <h2>Compare a full video to its edit</h2>
                     <p>
-                      Use this when you want vaexcore pulse to compare a source
-                      VOD against its finished edit to inspect what got kept,
-                      removed, or potentially missed.
+                      Use this when you want Pulse to compare a full video with
+                      the finished edit.
                     </p>
                   </div>
                 </div>
@@ -1714,7 +1705,7 @@ export function ProfileWorkspace({
                 <div className="analysis-form">
                   <div className="analysis-inline-grid">
                     <label className="search-block">
-                      <span className="input-label">Source VOD</span>
+                      <span className="input-label">Full video</span>
                       <select
                         className="search-input"
                         disabled={
@@ -1727,8 +1718,8 @@ export function ProfileWorkspace({
                       >
                         <option value="">
                           {vodAssetOptions.length === 0
-                            ? "No VOD assets yet"
-                            : "Choose source VOD"}
+                            ? "No full videos yet"
+                            : "Choose full video"}
                         </option>
                         {vodAssetOptions.map((asset) => (
                           <option key={asset.id} value={asset.id}>
@@ -1752,7 +1743,7 @@ export function ProfileWorkspace({
                       >
                         <option value="">
                           {editAssetOptions.length === 0
-                            ? "No edit assets yet"
+                            ? "No edits yet"
                             : "Choose edited video"}
                         </option>
                         {editAssetOptions.map((asset) => (
@@ -1766,7 +1757,7 @@ export function ProfileWorkspace({
 
                   <div className="analysis-inline-grid">
                     <label className="search-block">
-                      <span className="input-label">Pair scope</span>
+                      <span className="input-label">Save for</span>
                       <select
                         className="search-input"
                         disabled={isCreatingMediaPair}
@@ -1788,7 +1779,7 @@ export function ProfileWorkspace({
                         className="search-input"
                         disabled={isCreatingMediaPair}
                         onChange={(event) => setPairTitle(event.target.value)}
-                        placeholder="March 12 VOD/edit comparison"
+                        placeholder="March 12 comparison"
                         type="text"
                         value={pairTitle}
                       />
@@ -1801,7 +1792,7 @@ export function ProfileWorkspace({
                       className="search-input"
                       disabled={isCreatingMediaPair}
                       onChange={(event) => setPairNote(event.target.value)}
-                      placeholder="What should VCP learn from this comparison?"
+                      placeholder="What should Pulse learn from this comparison?"
                       type="text"
                       value={pairNote}
                     />
@@ -1823,7 +1814,7 @@ export function ProfileWorkspace({
                     >
                       {isCreatingMediaPair
                         ? "Saving comparison..."
-                        : "Save VOD/edit comparison"}
+                        : "Save video comparison"}
                     </button>
                   </div>
                 </div>
@@ -1832,7 +1823,7 @@ export function ProfileWorkspace({
               <article className="utility-block">
                 <div className="panel-header">
                   <div>
-                    <span className="detail-label">Saved VOD/edit audits</span>
+                    <span className="detail-label">Saved comparisons</span>
                     <h2>Comparison history</h2>
                   </div>
                   <span className="queue-count">
@@ -1844,7 +1835,7 @@ export function ProfileWorkspace({
 
                 {mediaEditPairs.length === 0 ? (
                   <p className="queue-summary-copy">
-                    No VOD/edit audits saved yet.
+                    No saved comparisons yet.
                   </p>
                 ) : null}
 
@@ -1887,21 +1878,21 @@ export function ProfileWorkspace({
                           sourceAssetHasAudioFingerprint,
                           editAssetHasAudioFingerprint,
                         )
-                      : "Align edit to VOD";
+                      : "Compare edit to full video";
 
                     return (
                       <article className="profile-example-card" key={pair.id}>
                         <div className="profile-example-top">
-                          <span className="detail-label">VOD + edit audit</span>
+                          <span className="detail-label">Video comparison</span>
                           <span className="session-state-pill active-session">
                             {formatPairStatus(pair.status)}
                           </span>
                         </div>
                         <strong>
-                          {pair.title || "Untitled VOD/edit audit"}
+                          {pair.title || "Untitled comparison"}
                         </strong>
                         <p className="queue-summary-copy">
-                          Source asset {pair.vodAssetId} • edit asset{" "}
+                          Full video {pair.vodAssetId} • edit{" "}
                           {pair.editAssetId}
                         </p>
                         {pair.note ? <p>{pair.note}</p> : null}
@@ -1918,7 +1909,7 @@ export function ProfileWorkspace({
                         ) : null}
                         {latestAlignmentJob ? (
                           <p className="queue-summary-copy">
-                            Latest alignment job:{" "}
+                            Latest comparison:{" "}
                             {formatAlignmentJobStatus(
                               latestAlignmentJob.status,
                             )}
@@ -1933,7 +1924,7 @@ export function ProfileWorkspace({
                         ) : null}
                         {pairAlignmentBlockedReason ? (
                           <p className="queue-summary-copy">
-                            Alignment blocked • {pairAlignmentBlockedReason}
+                            Needs setup • {pairAlignmentBlockedReason}
                           </p>
                         ) : null}
                         {pairMatches.length > 0 ? (
@@ -1945,7 +1936,7 @@ export function ProfileWorkspace({
                               >
                                 <div className="profile-example-top">
                                   <span className="detail-label">
-                                    Alignment match
+                                    Possible match
                                   </span>
                                   <span className="session-state-pill next-target">
                                     {formatRatio(match.confidenceScore)}{" "}
@@ -1953,7 +1944,7 @@ export function ProfileWorkspace({
                                   </span>
                                 </div>
                                 <p className="queue-summary-copy">
-                                  Source{" "}
+                                  Full video{" "}
                                   {formatDuration(
                                     match.sourceRange.startSeconds,
                                   )}
@@ -1989,7 +1980,7 @@ export function ProfileWorkspace({
                                 </div>
                                 <p className="queue-summary-copy">
                                   {formatAlignmentRange(
-                                    "Source",
+                                    "Full video",
                                     segment.sourceRange,
                                   )}
                                   {" • "}
@@ -2018,8 +2009,8 @@ export function ProfileWorkspace({
                               type="button"
                             >
                               {sourceIndexInFlight
-                                ? "Analyzing source..."
-                                : "Analyze source VOD"}
+                                ? "Scanning full video..."
+                                : "Scan full video"}
                             </button>
                           ) : null}
                           {!editAssetHasAudioFingerprint && editAsset ? (
@@ -2036,8 +2027,8 @@ export function ProfileWorkspace({
                               type="button"
                             >
                               {editIndexInFlight
-                                ? "Analyzing edit..."
-                                : "Analyze edited video"}
+                                ? "Scanning edit..."
+                                : "Scan edited video"}
                             </button>
                           ) : null}
                           <button
@@ -2055,7 +2046,7 @@ export function ProfileWorkspace({
                             type="button"
                           >
                             {hasActiveAlignmentJob
-                              ? "Aligning..."
+                              ? "Comparing..."
                               : pairAlignmentButtonLabel}
                           </button>
                           {hasActiveAlignmentJob && latestAlignmentJob ? (
@@ -2077,7 +2068,7 @@ export function ProfileWorkspace({
                                 latestAlignmentJob.id
                               ]
                                 ? "Cancelling..."
-                                : "Cancel alignment"}
+                                : "Cancel comparison"}
                             </button>
                           ) : null}
                         </div>
@@ -2129,7 +2120,7 @@ function formatReferenceKind(
   sourceType: ExampleClipSourceType,
 ): string {
   if (referenceKind === "PROFILE_EDIT") {
-    return "Profile edit reference";
+    return "Finished edit";
   }
 
   return formatSourceType(sourceType);
@@ -2139,13 +2130,13 @@ function formatReferenceSummaryLabel(
   referenceKind: ExampleReferenceKind,
 ): string {
   return referenceKind === "PROFILE_EDIT"
-    ? "Indexed edit summary ready"
-    : "Local clip summary ready";
+    ? "Edit summary ready"
+    : "Clip summary ready";
 }
 
 function formatAssetType(assetType: MediaLibraryAssetType): string {
   if (assetType === "VOD") {
-    return "VOD";
+    return "Full video";
   }
 
   if (assetType === "EDIT") {
@@ -2228,26 +2219,26 @@ function formatAudioFingerprintMethod(
   >["audioFingerprintMethod"],
 ): string {
   if (method === "DECODED_AUDIO_FINGERPRINT_V1") {
-    return "decoded audio";
+    return "audio match";
   }
 
   if (method === "BYTE_SAMPLED_AUDIO_PROXY_V1") {
-    return "byte proxy";
+    return "quick audio match";
   }
 
-  return "unknown method";
+  return "unknown";
 }
 
 function formatAlignmentMethod(method: MediaAlignmentJob["method"]): string {
   if (method === "DECODED_AUDIO_BUCKET_CORRELATION_V1") {
-    return "decoded audio";
+    return "audio match";
   }
 
   if (method === "AUDIO_PROXY_BUCKET_CORRELATION_V1") {
-    return "byte proxy";
+    return "quick audio match";
   }
 
-  return "unknown method";
+  return "unknown";
 }
 
 function formatPairStatus(status: MediaEditPair["status"]): string {
@@ -2381,14 +2372,14 @@ function describeBackgroundActivity(
   activeAlignmentJobCount: number,
 ): string {
   if (activeIndexJobCount > 0 && activeAlignmentJobCount > 0) {
-    return `VCP is analyzing ${activeIndexJobCount} asset${activeIndexJobCount === 1 ? "" : "s"} and comparing ${activeAlignmentJobCount} VOD/edit pair${activeAlignmentJobCount === 1 ? "" : "s"}.`;
+    return `Pulse is reviewing ${activeIndexJobCount} file${activeIndexJobCount === 1 ? "" : "s"} and comparing ${activeAlignmentJobCount} edit${activeAlignmentJobCount === 1 ? "" : "s"}.`;
   }
 
   if (activeIndexJobCount > 0) {
-    return `VCP is analyzing ${activeIndexJobCount} asset${activeIndexJobCount === 1 ? "" : "s"} right now.`;
+    return `Pulse is reviewing ${activeIndexJobCount} file${activeIndexJobCount === 1 ? "" : "s"} right now.`;
   }
 
-  return `VCP is comparing ${activeAlignmentJobCount} VOD/edit pair${activeAlignmentJobCount === 1 ? "" : "s"} right now.`;
+  return `Pulse is comparing ${activeAlignmentJobCount} edit${activeAlignmentJobCount === 1 ? "" : "s"} right now.`;
 }
 
 function describeAssetPrimaryStatus(
@@ -2400,45 +2391,45 @@ function describeAssetPrimaryStatus(
     latestIndexJob?.status === "RUNNING"
   ) {
     if (asset.assetType === "VOD") {
-      return "VCP is scanning this VOD in the background.";
+      return "Pulse is scanning this full video in the background.";
     }
 
     if (asset.assetType === "EDIT") {
-      return "VCP is analyzing this edited video in the background.";
+      return "Pulse is reviewing this edited video in the background.";
     }
 
-    return "VCP is analyzing this clip in the background.";
+    return "Pulse is reviewing this clip in the background.";
   }
 
   if (latestIndexJob?.status === "FAILED") {
-    return "The last analysis attempt failed. Open details to see what happened.";
+    return "The last scan failed. Open details to see what happened.";
   }
 
   if (asset.status === "MISSING_LOCAL_FILE") {
-    return "The local file is unavailable right now. Reconnect it before running analysis.";
+    return "This file is unavailable right now. Reconnect it before scanning.";
   }
 
   if (asset.assetType === "EDIT" && asset.scope === "PROFILE") {
     return asset.featureSummary
-      ? "Ready to guide future matching for this profile."
-      : "Analyze this edit to turn it into a longform reference for this profile.";
+      ? "Ready to guide future scans for this profile."
+      : "Scan this edit to help this profile learn what you keep.";
   }
 
   if (asset.assetType === "VOD") {
     return asset.featureSummary
-      ? "Ready for future VOD comparison work."
-      : "Scan this VOD when you want full-source analysis or comparison work.";
+      ? "Ready for future comparisons."
+      : "Scan this full video when you want to compare it with an edit.";
   }
 
   if (asset.assetType === "CLIP") {
     return asset.featureSummary
-      ? "Ready as a reusable clip reference."
-      : "Analyze this clip to make it more useful in future matching.";
+      ? "Ready as a saved clip example."
+      : "Scan this clip to make it more useful.";
   }
 
   return asset.featureSummary
-    ? "Analysis ready."
-    : "Analyze this edited video to make it usable in future matching.";
+    ? "Scan complete."
+    : "Scan this edited video to make it more useful.";
 }
 
 function buildAssetAnalysisActionLabel(
@@ -2452,7 +2443,7 @@ function buildAssetAnalysisActionLabel(
     }
 
     if (asset.assetType === "VOD") {
-      return "Scanning VOD...";
+      return "Scanning full video...";
     }
 
     return "Analyzing clip...";
@@ -2460,25 +2451,25 @@ function buildAssetAnalysisActionLabel(
 
   if (latestIndexJob) {
     if (asset.assetType === "EDIT") {
-      return "Refresh edit analysis";
+      return "Scan edit again";
     }
 
     if (asset.assetType === "VOD") {
-      return "Refresh VOD scan";
+      return "Scan again";
     }
 
-    return "Refresh clip analysis";
+    return "Scan clip again";
   }
 
   if (asset.assetType === "EDIT") {
-    return "Analyze edited video";
+    return "Scan edited video";
   }
 
   if (asset.assetType === "VOD") {
-    return "Scan VOD";
+    return "Scan full video";
   }
 
-  return "Analyze clip";
+  return "Scan clip";
 }
 
 function mediaAssetHasAudioFingerprint(
@@ -2497,7 +2488,7 @@ function describePairAlignmentBlockedReason(
   editAsset: MediaLibraryAsset | undefined,
 ): string | null {
   if (!sourceAsset || !editAsset) {
-    return "One or both paired media records are unavailable locally.";
+    return "One or both videos are unavailable right now.";
   }
 
   const sourceReady = mediaAssetHasAudioFingerprint(sourceAsset);
@@ -2507,14 +2498,14 @@ function describePairAlignmentBlockedReason(
   }
 
   if (!sourceReady && !editReady) {
-    return "Both the source VOD and edited video need completed analysis first.";
+    return "Scan both videos first.";
   }
 
   if (!sourceReady) {
-    return "The source VOD still needs completed analysis before alignment can run.";
+    return "Scan the full video first.";
   }
 
-  return "The edited video still needs completed analysis before alignment can run.";
+  return "Scan the edited video first.";
 }
 
 function describePairAlignmentBlockedAction(
@@ -2522,14 +2513,14 @@ function describePairAlignmentBlockedAction(
   editAssetHasAudioFingerprint: boolean,
 ): string {
   if (!sourceAssetHasAudioFingerprint && !editAssetHasAudioFingerprint) {
-    return "Analyze both assets first";
+    return "Scan both videos first";
   }
 
   if (!sourceAssetHasAudioFingerprint) {
-    return "Analyze source VOD first";
+    return "Scan full video first";
   }
 
-  return "Analyze edited video first";
+  return "Scan edited video first";
 }
 
 function toLocalImageSrc(imagePath: string) {

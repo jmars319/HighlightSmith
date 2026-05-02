@@ -5,6 +5,8 @@ import {
   useMemo,
   useState,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { emit, listen } from "@tauri-apps/api/event";
 import {
   acceptedCandidates,
   analysisCoverageTone,
@@ -63,6 +65,7 @@ import {
   type CreateMediaLibraryAssetRequest,
   type CreateClipProfileRequest,
   type ExampleClip,
+  type ExampleClipSourceType,
   type MediaAlignmentJob,
   type MediaAlignmentMatch,
   type MediaEditPair,
@@ -97,11 +100,7 @@ import {
 import { fetchWithLocalApiMessage, localApiTimeouts } from "./lib/localApi";
 
 type FilterValue = ConfidenceBand | "ALL";
-type DesktopPage =
-  | "projects"
-  | "new-analysis"
-  | "candidate-review"
-  | "profiles";
+type DesktopPage = "projects" | "new-analysis" | "candidate-review";
 type AnalysisReadiness = {
   canAnalyze: boolean;
   statusLabel: string;
@@ -115,20 +114,51 @@ type StartGuide = {
   detail: string;
   steps: string[];
   ctaLabel: string | null;
-  ctaAction: "references" | "pick-media" | null;
+  ctaAction: "profile-setup" | "pick-media" | null;
 };
 type ThemeMode = "dark" | "light";
+type SettingsSectionId = "profile-setup" | "appearance" | "window-behavior";
+type DesktopNavItem = { id: DesktopPage; label: string };
+type ProfileLibraryChangedPayload = {
+  profileId?: string;
+};
 
 const lastSessionIdStorageKey = "vaexcore-pulse.desktop.last-session-id";
 const themeModeStorageKey = "vaexcore-pulse.desktop.theme-mode";
-const desktopPages: Array<{ id: DesktopPage; label: string }> = [
+const settingsSectionSelectedEvent = "settings-section-selected";
+const profileLibraryChangedEvent = "profile-library-changed";
+const desktopPages: DesktopNavItem[] = [
   { id: "new-analysis", label: "Start" },
   { id: "candidate-review", label: "Review" },
-  { id: "profiles", label: "References" },
   { id: "projects", label: "Backlog" },
+];
+const settingsSections: Array<{
+  id: SettingsSectionId;
+  label: string;
+  detail: string;
+}> = [
+  {
+    id: "profile-setup",
+    label: "Profile Setup",
+    detail: "Profiles and examples that guide future scans.",
+  },
+  {
+    id: "appearance",
+    label: "Appearance",
+    detail: "Light or dark mode.",
+  },
+  {
+    id: "window-behavior",
+    label: "Window Behavior",
+    detail: "What happens when you close or quit.",
+  },
 ];
 
 export default function App() {
+  return isSettingsWindow() ? <SettingsWindowApp /> : <DesktopApp />;
+}
+
+function DesktopApp() {
   const [activePage, setActivePage] = useState<DesktopPage>("new-analysis");
   const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
     resolveInitialThemeMode(),
@@ -228,7 +258,6 @@ export default function App() {
     availableProfiles,
     projectSession?.profileId ?? analysisProfileId,
   );
-  const selectedProfile = resolveProfile(availableProfiles, selectedProfileId);
   const profileMatchingSummary = buildProfileMatchingSummary(currentProfile);
   const analysisLaunchState = buildAnalysisLaunchState(
     normalizedSelectedMediaPath,
@@ -400,9 +429,45 @@ export default function App() {
     : "";
 
   useEffect(() => {
-    document.documentElement.dataset.theme = themeMode;
-    document.documentElement.style.colorScheme = themeMode;
-    window.localStorage.setItem(themeModeStorageKey, themeMode);
+    persistThemeMode(themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    let isSubscribed = true;
+    let unlistenTheme: (() => void) | undefined;
+
+    function handleStorage(event: StorageEvent) {
+      if (
+        event.key === themeModeStorageKey &&
+        isThemeMode(event.newValue) &&
+        event.newValue !== themeMode
+      ) {
+        setThemeMode(event.newValue);
+      }
+    }
+
+    window.addEventListener("storage", handleStorage);
+
+    if (isTauriRuntime()) {
+      void listen<ThemeMode>("theme-mode-changed", (event) => {
+        if (isThemeMode(event.payload)) {
+          setThemeMode(event.payload);
+        }
+      }).then((unlisten) => {
+        if (!isSubscribed) {
+          unlisten();
+          return;
+        }
+
+        unlistenTheme = unlisten;
+      });
+    }
+
+    return () => {
+      isSubscribed = false;
+      window.removeEventListener("storage", handleStorage);
+      unlistenTheme?.();
+    };
   }, [themeMode]);
 
   useEffect(() => {
@@ -501,6 +566,99 @@ export default function App() {
   }, [apiBaseUrl]);
 
   useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let isSubscribed = true;
+    let unlistenProfileLibrary: (() => void) | undefined;
+
+    async function refreshProfilesFromSettings(preferredProfileId?: string) {
+      try {
+        const [nextProfiles, nextAssets] = await Promise.all([
+          fetchProfiles(apiBaseUrl),
+          fetchMediaLibraryAssets(apiBaseUrl),
+        ]);
+        if (!isSubscribed) {
+          return;
+        }
+
+        const targetProfileId = preferredProfileId ?? selectedProfileId;
+        const nextSelectedProfileId = nextProfiles.some(
+          (profile) => profile.id === targetProfileId,
+        )
+          ? targetProfileId
+          : (nextProfiles[0]?.id ?? defaultProfileId);
+        const shouldLoadExamples = nextProfiles.some(
+          (profile) => profile.id === nextSelectedProfileId,
+        );
+        const nextExamples = shouldLoadExamples
+          ? await fetchProfileExamples(apiBaseUrl, nextSelectedProfileId)
+          : [];
+
+        if (!isSubscribed) {
+          return;
+        }
+
+        setProfiles(
+          shouldLoadExamples
+            ? nextProfiles.map((profile) =>
+                profile.id === nextSelectedProfileId
+                  ? { ...profile, exampleClips: nextExamples }
+                  : profile,
+              )
+            : nextProfiles,
+        );
+        setMediaLibraryAssets(nextAssets);
+        setSelectedProfileId(nextSelectedProfileId);
+        setSelectedProfileExamples(nextExamples);
+        setAnalysisProfileId((current) => {
+          if (
+            preferredProfileId &&
+            nextProfiles.some((profile) => profile.id === preferredProfileId)
+          ) {
+            return preferredProfileId;
+          }
+
+          return nextProfiles.some((profile) => profile.id === current)
+            ? current
+            : nextSelectedProfileId;
+        });
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (!isSubscribed) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to refresh profile setup: ${error.message}`
+            : "Unable to refresh profile setup",
+        );
+      }
+    }
+
+    void listen<ProfileLibraryChangedPayload>(
+      profileLibraryChangedEvent,
+      (event) => {
+        void refreshProfilesFromSettings(event.payload?.profileId);
+      },
+    ).then((unlisten) => {
+      if (!isSubscribed) {
+        unlisten();
+        return;
+      }
+
+      unlistenProfileLibrary = unlisten;
+    });
+
+    return () => {
+      isSubscribed = false;
+      unlistenProfileLibrary?.();
+    };
+  }, [apiBaseUrl, selectedProfileId]);
+
+  useEffect(() => {
     let isCancelled = false;
 
     async function loadMediaLibraryAssets() {
@@ -520,8 +678,8 @@ export default function App() {
 
         setProfileLibraryError(
           error instanceof Error
-            ? `Unable to load media library assets: ${error.message}`
-            : "Unable to load media library assets",
+            ? `Unable to load saved media: ${error.message}`
+            : "Unable to load saved media",
         );
       } finally {
         if (!isCancelled) {
@@ -557,8 +715,8 @@ export default function App() {
 
         setProfileLibraryError(
           error instanceof Error
-            ? `Unable to load VOD/edit pairs: ${error.message}`
-            : "Unable to load VOD/edit pairs",
+            ? `Unable to load video comparisons: ${error.message}`
+            : "Unable to load video comparisons",
         );
       } finally {
         if (!isCancelled) {
@@ -673,8 +831,8 @@ export default function App() {
 
         setProfileLibraryError(
           error instanceof Error
-            ? `Unable to load media alignment state: ${error.message}`
-            : "Unable to load media alignment state",
+            ? `Unable to load video comparisons: ${error.message}`
+            : "Unable to load video comparisons",
         );
       } finally {
         if (!isCancelled) {
@@ -729,10 +887,13 @@ export default function App() {
   }, [apiBaseUrl, mediaAlignmentJobs]);
 
   useEffect(() => {
-    if (!selectedProfileId) {
+    const profileId = selectedProfileId;
+    if (!profileId) {
       setSelectedProfileExamples([]);
       return;
     }
+    const profileIdForLoad: string = profileId;
+    const selectedProfileIdForLoad: string = profileId;
 
     let isCancelled = false;
 
@@ -741,7 +902,7 @@ export default function App() {
       try {
         const examples = await fetchProfileExamples(
           apiBaseUrl,
-          selectedProfileId,
+          selectedProfileIdForLoad,
         );
         if (isCancelled) {
           return;
@@ -750,7 +911,7 @@ export default function App() {
         setSelectedProfileExamples(examples);
         setProfiles((current) =>
           current.map((profile) =>
-            profile.id === selectedProfileId
+            profile.id === selectedProfileIdForLoad
               ? { ...profile, exampleClips: examples }
               : profile,
           ),
@@ -978,14 +1139,14 @@ export default function App() {
       if (typeof selection === "string") {
         setSelectedMediaPath(selection);
         setAnalysisError(
-          `Unsupported media extension. Supported inputs: ${supportedInputExtensions.join(", ")}`,
+          `Unsupported file type. Try: ${supportedInputExtensions.join(", ")}`,
         );
         setActivePage("new-analysis");
         return;
       }
     } catch {
       setAnalysisError(
-        "Desktop file picking is available in the Tauri app. You can also paste a full local file path below.",
+        "Could not open the file picker. You can paste a full file path instead.",
       );
     }
   }
@@ -1116,7 +1277,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Something went wrong while saving the VOD/edit comparison.",
+          : "Something went wrong while saving the video comparison.",
       );
       throw error;
     } finally {
@@ -1136,7 +1297,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Something went wrong while starting background analysis.",
+          : "Something went wrong while starting the scan.",
       );
       throw error;
     } finally {
@@ -1196,7 +1357,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Something went wrong while cancelling the background job.",
+          : "Something went wrong while cancelling the scan.",
       );
       throw error;
     } finally {
@@ -1226,7 +1387,7 @@ export default function App() {
       setProfileLibraryError(
         error instanceof Error
           ? error.message
-          : "Something went wrong while starting the VOD/edit comparison.",
+          : "Something went wrong while starting the video comparison.",
       );
       throw error;
     } finally {
@@ -1776,20 +1937,28 @@ export default function App() {
                 <span className="detail-label">Start</span>
                 <h2>Scan a video</h2>
                 <p>
-                  Choose one local video, pick the reference profile you want
-                  VCP to lean on, and open the results directly into review.
+                  Choose a video, pick a profile, and start a review queue.
                 </p>
               </div>
-              <button
-                className="button-secondary"
-                disabled={isAnalyzing}
-                onClick={() => {
-                  void handlePickMedia();
-                }}
-                type="button"
-              >
-                Choose video
-              </button>
+              <div className="analysis-header-actions">
+                <button
+                  className="button-secondary"
+                  disabled={isAnalyzing}
+                  onClick={() => {
+                    void handlePickMedia();
+                  }}
+                  type="button"
+                >
+                  Choose video
+                </button>
+                <button
+                  className="button-secondary"
+                  onClick={() => openSettingsWindowFromUi("profile-setup")}
+                  type="button"
+                >
+                  Profile Setup
+                </button>
+              </div>
             </div>
 
             <div className="analysis-form">
@@ -1802,7 +1971,7 @@ export default function App() {
                     setSelectedMediaPath(event.target.value);
                     setAnalysisError(null);
                   }}
-                  placeholder="/Users/you/VODs/session-2026-03-25.mkv"
+                  placeholder="/Users/you/Videos/session-2026-03-25.mkv"
                   type="text"
                   value={selectedMediaPath}
                 />
@@ -1815,8 +1984,8 @@ export default function App() {
                 >
                   {normalizedSelectedMediaPath
                     ? isSupportedInput(normalizedSelectedMediaPath)
-                      ? `Detected ${analysisSourceName} • supported input`
-                      : `Unsupported file type. Use one of: ${supportedInputExtensions.join(", ")}`
+                      ? `Ready: ${analysisSourceName}`
+                      : `Unsupported file type. Try: ${supportedInputExtensions.join(", ")}`
                     : `Supported inputs: ${supportedInputExtensions.join(", ")}`}
                 </small>
               </label>
@@ -1849,10 +2018,10 @@ export default function App() {
                   </select>
                   <small className="analysis-field-note">
                     {hasPersistedProfiles
-                      ? "Profiles help VCP lean toward the kinds of moments you usually keep."
+                      ? "Profiles help Pulse find the kinds of moments you usually keep."
                       : isLoadingProfiles
                         ? "Loading saved profiles."
-                        : "Create a profile first so VCP has some direction."}
+                        : "Create a profile first."}
                   </small>
                 </label>
 
@@ -1881,7 +2050,7 @@ export default function App() {
                   <strong>{analysisSourceName ?? "No video chosen"}</strong>
                   <p className="analysis-summary-path">
                     {normalizedSelectedMediaPath ||
-                      "Choose a supported local video path or use the file picker."}
+                      "Choose a video file or use the file picker."}
                   </p>
                 </article>
                 <article className="analysis-summary-card">
@@ -1912,7 +2081,7 @@ export default function App() {
                   {isAnalyzing ? "Scanning video..." : "Scan video"}
                 </button>
                 <p className="analysis-support-copy">
-                  VCP will open a review queue as soon as the scan finishes.
+                  Review opens when the scan finishes.
                 </p>
               </div>
 
@@ -1928,7 +2097,7 @@ export default function App() {
             >
               <div className="analysis-readiness-header">
                 <div>
-                  <span className="detail-label">Ready to scan</span>
+                  <span className="detail-label">Scan status</span>
                   <strong>{analysisLaunchState.headline}</strong>
                   <p className="analysis-readiness-copy">
                     {analysisLaunchState.detail}
@@ -1963,8 +2132,8 @@ export default function App() {
                     <button
                       className="button-secondary"
                       onClick={() => {
-                        if (startGuide.ctaAction === "references") {
-                          setActivePage("profiles");
+                        if (startGuide.ctaAction === "profile-setup") {
+                          openSettingsWindowFromUi("profile-setup");
                           return;
                         }
 
@@ -1986,10 +2155,10 @@ export default function App() {
                 <div className="analysis-readiness-header">
                   <div>
                     <span className="detail-label">Scan in progress</span>
-                    <strong>VCP is scanning this video locally</strong>
+                    <strong>Scanning this video</strong>
                     <p className="analysis-readiness-copy">
-                      Large files can take a bit. Keep this window open and VCP
-                      will jump straight into Review when the scan finishes.
+                      Large files can take a bit. Keep this window open; Review
+                      opens when the scan finishes.
                     </p>
                   </div>
                   <span className="analysis-readiness-pill ready">Working</span>
@@ -1998,13 +2167,12 @@ export default function App() {
             ) : null}
 
             <article className="utility-block">
-              <span className="detail-label">What VCP does next</span>
+              <span className="detail-label">What happens next</span>
               <ol className="plain-list ordered">
-                <li>VCP scans the video locally.</li>
-                <li>It builds a queue of likely moments worth checking.</li>
+                <li>Pulse scans the video on your Mac.</li>
+                <li>It builds a queue of moments worth checking.</li>
                 <li>
-                  You jump straight into review and decide what is worth
-                  keeping.
+                  You review each moment and choose what to keep or skip.
                 </li>
               </ol>
               {projectSession ? (
@@ -2019,48 +2187,6 @@ export default function App() {
             </article>
           </div>
         </section>
-      );
-    }
-
-    if (activePage === "profiles") {
-      return (
-        <ProfileWorkspace
-          libraryAssets={mediaLibraryAssets}
-          mediaIndexJobs={mediaIndexJobs}
-          mediaAlignmentJobs={mediaAlignmentJobs}
-          mediaAlignmentMatches={mediaAlignmentMatches}
-          mediaEditPairs={mediaEditPairs}
-          cancellingMediaIndexJobIds={cancellingMediaIndexJobIds}
-          cancellingMediaAlignmentJobIds={cancellingMediaAlignmentJobIds}
-          savingThumbnailOutputAssetIds={savingThumbnailOutputAssetIds}
-          error={profileLibraryError}
-          examples={selectedProfileExamples}
-          isAddingExample={isAddingProfileExample}
-          isCreatingProfile={isCreatingProfile}
-          isCreatingMediaAsset={isCreatingMediaLibraryAsset}
-          isCreatingMediaIndexJob={isCreatingMediaIndexJob}
-          isCreatingMediaAlignmentJob={isCreatingMediaAlignmentJob}
-          isCreatingMediaPair={isCreatingMediaEditPair}
-          isLoadingExamples={isLoadingProfileExamples}
-          isLoadingMediaIndexJobs={isLoadingMediaIndexJobs}
-          isLoadingMediaAlignmentJobs={isLoadingMediaAlignmentJobs}
-          isLoadingLibraryAssets={isLoadingMediaLibraryAssets}
-          isLoadingMediaPairs={isLoadingMediaEditPairs}
-          isLoadingProfiles={isLoadingProfiles}
-          onAddExample={handleAddProfileExample}
-          onCancelMediaAlignmentJob={handleCancelMediaAlignmentJob}
-          onCancelMediaIndexJob={handleCancelMediaIndexJob}
-          onCreateProfile={handleCreateProfile}
-          onCreateMediaAsset={handleCreateMediaLibraryAsset}
-          onCreateMediaAlignmentJob={handleCreateMediaAlignmentJob}
-          onCreateMediaIndexJob={handleCreateMediaIndexJob}
-          onReplaceThumbnailOutputs={handleReplaceMediaThumbnailOutputs}
-          onCreateMediaPair={handleCreateMediaEditPair}
-          onSelectProfile={setSelectedProfileId}
-          profiles={availableProfiles}
-          selectedProfile={selectedProfile}
-          selectedProfileId={selectedProfileId}
-        />
       );
     }
 
@@ -2176,19 +2302,18 @@ export default function App() {
             <span className="detail-label">Before you scan</span>
             <p>Choose one local video file.</p>
             <p>
-              Pick the profile that best matches what you want VCP to favor.
+              Pick the profile closest to what you want to keep.
             </p>
             <p>Give the session a name only if the file name is not enough.</p>
           </article>
           <article className="utility-block">
             <span className="detail-label">Why profiles matter</span>
             <p>
-              Profiles give VCP examples of the kinds of moments you usually
-              keep.
+              A profile is a small set of examples. It helps Pulse find moments
+              that feel like your previous keeps.
             </p>
             <p>
-              Reusable clips help with short moments. Indexed edits help with
-              longer-form style and pacing.
+              Short clips and finished edits are both useful examples.
             </p>
           </article>
         </div>
@@ -2215,26 +2340,6 @@ export default function App() {
               {nextPendingSession
                 ? `${nextPendingSession.sessionTitle} • ${nextPendingSession.pendingCount} undecided`
                 : "Nothing is waiting right now."}
-            </p>
-          </article>
-        </div>
-      );
-    }
-
-    if (activePage === "profiles") {
-      return (
-        <div className="desktop-aside-stack">
-          <article className="utility-block">
-            <span className="detail-label">Start simple</span>
-            <p>Create or choose one profile.</p>
-            <p>Add an edited video if you want longform reference material.</p>
-            <p>Add reusable clips only when they teach something specific.</p>
-          </article>
-          <article className="utility-block">
-            <span className="detail-label">Optional tools</span>
-            <p>
-              VOD/edit audits and background job history are useful, but they
-              are secondary to building a clean reference library.
             </p>
           </article>
         </div>
@@ -2315,7 +2420,41 @@ export default function App() {
         aside={renderDesktopAside()}
         brandMark={<VaexcorePulseLogo />}
         navItems={desktopPages}
-        onSelect={(pageId) => setActivePage(pageId as DesktopPage)}
+        onSelect={(pageId) => {
+          setActivePage(pageId as DesktopPage);
+        }}
+        sidebarActions={
+          <button
+            aria-label="Open Settings"
+            className="settings-icon-button"
+            onClick={() => openSettingsWindowFromUi()}
+            title="Open Settings"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="18"
+              viewBox="0 0 24 24"
+              width="18"
+            >
+              <path
+                d="M12 8.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6Z"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+              />
+              <path
+                d="M19.4 15a1.6 1.6 0 0 0 .32 1.77l.04.04a1.95 1.95 0 0 1-2.76 2.76l-.04-.04a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-.96 1.46v.12a1.95 1.95 0 0 1-3.9 0v-.07a1.6 1.6 0 0 0-1.05-1.5 1.6 1.6 0 0 0-1.77.32l-.04.04a1.95 1.95 0 0 1-2.76-2.76l.04-.04A1.6 1.6 0 0 0 4.6 15a1.6 1.6 0 0 0-1.46-.96h-.12a1.95 1.95 0 0 1 0-3.9h.07a1.6 1.6 0 0 0 1.5-1.05 1.6 1.6 0 0 0-.32-1.77l-.04-.04a1.95 1.95 0 0 1 2.76-2.76l.04.04a1.6 1.6 0 0 0 1.77.32h.01a1.6 1.6 0 0 0 .96-1.46v-.12a1.95 1.95 0 0 1 3.9 0v.07a1.6 1.6 0 0 0 .96 1.46 1.6 1.6 0 0 0 1.77-.32l.04-.04a1.95 1.95 0 0 1 2.76 2.76l-.04.04a1.6 1.6 0 0 0-.32 1.77v.01a1.6 1.6 0 0 0 1.46.96h.12a1.95 1.95 0 0 1 0 3.9h-.07a1.6 1.6 0 0 0-1.5 1.05Z"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+              />
+            </svg>
+          </button>
+        }
         subtitle="Scan long videos, review likely moments quickly, and build references from your own edits."
         title="Creator Workspace"
       >
@@ -2331,13 +2470,9 @@ export default function App() {
           currentProfileLabel={currentProfile.name}
           currentSessionLabel={projectSession?.title ?? "No session loaded"}
           onPickMedia={handlePickMedia}
-          onToggleTheme={() =>
-            setThemeMode((current) => (current === "dark" ? "light" : "dark"))
-          }
           pendingCount={pendingReviewCount}
           rejectedCount={rejectedCount}
           selectedMediaPath={selectedMediaPath || "No video selected yet."}
-          themeMode={themeMode}
           totalCount={sessionCandidates.length}
         />
         {renderDesktopPage()}
@@ -2358,6 +2493,1655 @@ export default function App() {
       </LayoutShell>
     </div>
   );
+}
+
+function SettingsWindowApp() {
+  const [activeSettingsSection, setActiveSettingsSection] =
+    useState<SettingsSectionId>(() => resolveInitialSettingsSection());
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
+    resolveInitialThemeMode(),
+  );
+
+  useEffect(() => {
+    persistThemeMode(themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    scrollSettingsWindowToTop();
+  }, [activeSettingsSection]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let isSubscribed = true;
+    let unlistenSettingsSection: (() => void) | undefined;
+
+    void listen<SettingsSectionId>(settingsSectionSelectedEvent, (event) => {
+      if (isSettingsSectionId(event.payload)) {
+        setActiveSettingsSection(event.payload);
+        scrollSettingsWindowToTop();
+      }
+    }).then((unlisten) => {
+      if (!isSubscribed) {
+        unlisten();
+        return;
+      }
+
+      unlistenSettingsSection = unlisten;
+    });
+
+    return () => {
+      isSubscribed = false;
+      unlistenSettingsSection?.();
+    };
+  }, []);
+
+  function handleThemeModeChange(nextThemeMode: ThemeMode) {
+    setThemeMode(nextThemeMode);
+    persistThemeMode(nextThemeMode);
+
+    if (isTauriRuntime()) {
+      void emit("theme-mode-changed", nextThemeMode);
+    }
+  }
+
+  return (
+    <main className="settings-shell">
+      <section aria-labelledby="settings-title" className="settings-window">
+        <header className="settings-header">
+          <div className="settings-brand-mark">
+            <VaexcorePulseLogo />
+          </div>
+          <div>
+            <p className="eyebrow">vaexcore pulse</p>
+            <h1 id="settings-title">Settings</h1>
+          </div>
+        </header>
+
+        <div className="settings-layout">
+          <nav aria-label="Settings sections" className="settings-section-nav">
+            {settingsSections.map((section) => (
+              <button
+                aria-current={
+                  activeSettingsSection === section.id ? "page" : undefined
+                }
+                className={
+                  activeSettingsSection === section.id ? "active" : undefined
+                }
+                key={section.id}
+                onClick={() => setActiveSettingsSection(section.id)}
+                type="button"
+              >
+                <strong>{section.label}</strong>
+                <span>{section.detail}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="settings-section-panel">
+            {activeSettingsSection === "profile-setup" ? (
+              <CompactProfileSetupSettingsSection />
+            ) : null}
+
+            {activeSettingsSection === "appearance" ? (
+              <section className="settings-card">
+                <div>
+                  <span className="detail-label">Appearance</span>
+                  <h2>Color mode</h2>
+                  <p>
+                    Keep the logo palette in a calmer dark or brighter light
+                    workspace.
+                  </p>
+                </div>
+                <div aria-label="Color mode" className="segmented-control">
+                  <button
+                    aria-pressed={themeMode === "dark"}
+                    className={themeMode === "dark" ? "active" : undefined}
+                    onClick={() => handleThemeModeChange("dark")}
+                    type="button"
+                  >
+                    Dark
+                  </button>
+                  <button
+                    aria-pressed={themeMode === "light"}
+                    className={themeMode === "light" ? "active" : undefined}
+                    onClick={() => handleThemeModeChange("light")}
+                    type="button"
+                  >
+                    Light
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {activeSettingsSection === "window-behavior" ? (
+              <section className="settings-card">
+                <span className="detail-label">Window behavior</span>
+                <h2>Close window vs quit app</h2>
+                <ul className="settings-note-list">
+                  <li>
+                    <strong>Close Main Window</strong>
+                    <span>
+                      Hides the workspace. Pulse stays open from the menu.
+                    </span>
+                  </li>
+                  <li>
+                    <strong>Quit vaexcore pulse</strong>
+                    <span>Closes Pulse and stops scans or background work.</span>
+                  </li>
+                </ul>
+              </section>
+            ) : null}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+const profileSourceTypeOptions: Array<{
+  id: ExampleClipSourceType;
+  label: string;
+  hint: string;
+}> = [
+  {
+    id: "LOCAL_FILE_PATH",
+    label: "Paste local path",
+    hint: "Paste a path to a short clip on this Mac.",
+  },
+  {
+    id: "LOCAL_FILE_UPLOAD",
+    label: "Choose local file",
+    hint: "Choose a short clip from this Mac.",
+  },
+  {
+    id: "TWITCH_CLIP_URL",
+    label: "Twitch clip link",
+    hint: "Paste a Twitch clip link.",
+  },
+  {
+    id: "YOUTUBE_SHORT_URL",
+    label: "YouTube Short link",
+    hint: "Paste a YouTube Short link.",
+  },
+];
+
+const localProfileSourceTypeOptions = profileSourceTypeOptions.filter(
+  (option) =>
+    option.id === "LOCAL_FILE_PATH" || option.id === "LOCAL_FILE_UPLOAD",
+);
+
+function CompactProfileSetupSettingsSection() {
+  const apiBaseUrl =
+    import.meta.env.VITE_VAEXCORE_PULSE_API_BASE_URL ?? "http://127.0.0.1:4010";
+  const [profiles, setProfiles] = useState<ClipProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
+    null,
+  );
+  const [selectedProfileExamples, setSelectedProfileExamples] = useState<
+    ExampleClip[]
+  >([]);
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
+  const [isLoadingProfileExamples, setIsLoadingProfileExamples] =
+    useState(false);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+  const [isAddingProfileExample, setIsAddingProfileExample] = useState(false);
+  const [isAddingEditedVideo, setIsAddingEditedVideo] = useState(false);
+  const [profileLibraryError, setProfileLibraryError] = useState<string | null>(
+    null,
+  );
+  const [profileSetupNotice, setProfileSetupNotice] = useState<string | null>(
+    null,
+  );
+  const [profileLoadRetryCount, setProfileLoadRetryCount] = useState(0);
+  const [profileName, setProfileName] = useState("");
+  const [profileDescription, setProfileDescription] = useState("");
+  const [sourceType, setSourceType] =
+    useState<ExampleClipSourceType>("LOCAL_FILE_PATH");
+  const [sourceValue, setSourceValue] = useState("");
+  const [exampleTitle, setExampleTitle] = useState("");
+  const [exampleNote, setExampleNote] = useState("");
+  const [editSourceType, setEditSourceType] =
+    useState<ExampleClipSourceType>("LOCAL_FILE_PATH");
+  const [editSourceValue, setEditSourceValue] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editNote, setEditNote] = useState("");
+
+  const selectedProfile = selectedProfileId
+    ? (profiles.find((profile) => profile.id === selectedProfileId) ?? null)
+    : null;
+  const selectedSourceType = profileSourceTypeOptions.find(
+    (option) => option.id === sourceType,
+  );
+  const selectedEditSourceType = localProfileSourceTypeOptions.find(
+    (option) => option.id === editSourceType,
+  );
+  const visibleExamples =
+    selectedProfileExamples.length > 0 || isLoadingProfileExamples
+      ? selectedProfileExamples
+      : (selectedProfile?.exampleClips ?? []);
+  const canPickClipFile =
+    sourceType === "LOCAL_FILE_PATH" || sourceType === "LOCAL_FILE_UPLOAD";
+  const canPickEditFile =
+    editSourceType === "LOCAL_FILE_PATH" ||
+    editSourceType === "LOCAL_FILE_UPLOAD";
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadProfiles() {
+      setIsLoadingProfiles(true);
+      try {
+        const nextProfiles = await fetchProfiles(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setProfiles(nextProfiles);
+        setSelectedProfileId((current) =>
+          current && nextProfiles.some((profile) => profile.id === current)
+            ? current
+            : (nextProfiles[0]?.id ?? null),
+        );
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(formatProfileSetupError(error));
+        if (isLocalServiceUnavailableError(error)) {
+          window.setTimeout(() => {
+            if (!isCancelled) {
+              setProfileLoadRetryCount((current) => current + 1);
+            }
+          }, 2000);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingProfiles(false);
+        }
+      }
+    }
+
+    void loadProfiles();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl, profileLoadRetryCount]);
+
+  useEffect(() => {
+    const profileId = selectedProfileId;
+    if (!profileId) {
+      setSelectedProfileExamples([]);
+      return;
+    }
+    const profileIdForLoad: string = profileId;
+
+    let isCancelled = false;
+
+    async function loadExamples() {
+      setIsLoadingProfileExamples(true);
+      try {
+        const examples = await fetchProfileExamples(
+          apiBaseUrl,
+          profileIdForLoad,
+        );
+        if (isCancelled) {
+          return;
+        }
+
+        setSelectedProfileExamples(examples);
+        setProfiles((current) =>
+          current.map((profile) =>
+            profile.id === profileIdForLoad
+              ? { ...profile, exampleClips: examples }
+              : profile,
+          ),
+        );
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(formatProfileSetupError(error));
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingProfileExamples(false);
+        }
+      }
+    }
+
+    void loadExamples();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl, selectedProfileId]);
+
+  async function handlePickLocalMedia(
+    nextSourceType: ExampleClipSourceType,
+    onSelect: (selection: string) => void,
+  ) {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selection = await open({
+        directory: false,
+        multiple: false,
+        filters: [
+          {
+            name: "Media",
+            extensions: supportedInputExtensions.map((extension) =>
+              extension.slice(1),
+            ),
+          },
+        ],
+      });
+
+      if (typeof selection === "string") {
+        onSelect(selection);
+      }
+    } catch {
+      if (nextSourceType === "LOCAL_FILE_UPLOAD") {
+        onSelect("");
+      }
+    }
+  }
+
+  async function handleCreateProfile() {
+    const trimmedName = profileName.trim();
+    if (!trimmedName) {
+      return;
+    }
+
+    setIsCreatingProfile(true);
+    setProfileLibraryError(null);
+    setProfileSetupNotice(null);
+
+    try {
+      const createdProfile = await createProfile(apiBaseUrl, {
+        name: trimmedName,
+        description: profileDescription.trim() || undefined,
+      });
+      setProfiles((current) =>
+        upsertProfile(current, {
+          ...createdProfile,
+          exampleClips: createdProfile.exampleClips ?? [],
+        }),
+      );
+      setSelectedProfileId(createdProfile.id);
+      setSelectedProfileExamples(createdProfile.exampleClips ?? []);
+      setProfileName("");
+      setProfileDescription("");
+      setProfileSetupNotice("Profile saved.");
+      emitProfileSetupChanged(createdProfile.id);
+    } catch (error) {
+      setProfileLibraryError(formatProfileSetupError(error));
+    } finally {
+      setIsCreatingProfile(false);
+    }
+  }
+
+  async function handleAddExample() {
+    if (!selectedProfileId || !sourceValue.trim()) {
+      return;
+    }
+
+    setIsAddingProfileExample(true);
+    setProfileLibraryError(null);
+    setProfileSetupNotice(null);
+
+    try {
+      const createdExample = await createProfileExample(
+        apiBaseUrl,
+        selectedProfileId,
+        {
+          sourceType,
+          sourceValue: sourceValue.trim(),
+          title: exampleTitle.trim() || undefined,
+          note: exampleNote.trim() || undefined,
+        },
+      );
+      const nextExamples = [
+        createdExample,
+        ...selectedProfileExamples.filter(
+          (example) => example.id !== createdExample.id,
+        ),
+      ];
+      setSelectedProfileExamples(nextExamples);
+      setProfiles((current) =>
+        current.map((profile) =>
+          profile.id === selectedProfileId
+            ? {
+                ...profile,
+                exampleClips: nextExamples,
+                updatedAt: createdExample.updatedAt,
+              }
+            : profile,
+        ),
+      );
+      setSourceValue("");
+      setExampleTitle("");
+      setExampleNote("");
+      setProfileSetupNotice("Clip reference saved.");
+      emitProfileSetupChanged(selectedProfileId);
+    } catch (error) {
+      setProfileLibraryError(formatProfileSetupError(error));
+    } finally {
+      setIsAddingProfileExample(false);
+    }
+  }
+
+  async function handleAddEditedVideo() {
+    if (!selectedProfileId || !editSourceValue.trim()) {
+      return;
+    }
+
+    setIsAddingEditedVideo(true);
+    setProfileLibraryError(null);
+    setProfileSetupNotice(null);
+
+    try {
+      await createMediaLibraryAssetEntry(apiBaseUrl, {
+        assetType: "EDIT",
+        scope: "PROFILE",
+        profileId: selectedProfileId,
+        sourceType: editSourceType,
+        sourceValue: editSourceValue.trim(),
+        title: editTitle.trim() || undefined,
+        note: editNote.trim() || undefined,
+      });
+      setEditSourceValue("");
+      setEditTitle("");
+      setEditNote("");
+      setProfileSetupNotice("Edited video reference saved.");
+      emitProfileSetupChanged(selectedProfileId);
+    } catch (error) {
+      setProfileLibraryError(formatProfileSetupError(error));
+    } finally {
+      setIsAddingEditedVideo(false);
+    }
+  }
+
+  return (
+    <div className="settings-profile-setup">
+      {profileLibraryError ? (
+        <p className="analysis-error">{profileLibraryError}</p>
+      ) : null}
+      {profileSetupNotice ? (
+        <p className="settings-success-note">{profileSetupNotice}</p>
+      ) : null}
+
+      <section className="settings-card profile-setup-card">
+        <div className="profile-setup-toolbar">
+          <div>
+            <span className="detail-label">Clip profiles</span>
+            <h2>Profile Setup</h2>
+            <p>
+              Create a profile and add examples that show what you like to
+              keep.
+            </p>
+          </div>
+          <span className="queue-count">
+            {isLoadingProfiles ? "Loading..." : `${profiles.length} profiles`}
+          </span>
+        </div>
+
+        {profiles.length > 0 ? (
+          <label className="search-block">
+            <span className="input-label">Selected profile</span>
+            <select
+              className="search-input"
+              onChange={(event) => setSelectedProfileId(event.target.value)}
+              value={selectedProfileId ?? ""}
+            >
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="settings-empty-note">
+            No saved profiles yet. Create one below.
+          </p>
+        )}
+      </section>
+
+      <section className="settings-card profile-setup-card">
+        <span className="detail-label">Create profile</span>
+        <div className="settings-compact-grid">
+          <label className="search-block">
+            <span className="input-label">Name</span>
+            <input
+              className="search-input"
+              disabled={isCreatingProfile}
+              onChange={(event) => setProfileName(event.target.value)}
+              placeholder="Dry humor"
+              type="text"
+              value={profileName}
+            />
+          </label>
+          <label className="search-block">
+            <span className="input-label">Description</span>
+            <textarea
+              className="search-input profile-textarea compact"
+              disabled={isCreatingProfile}
+              onChange={(event) => setProfileDescription(event.target.value)}
+              placeholder="Describe moments you like to keep."
+              value={profileDescription}
+            />
+          </label>
+        </div>
+        <div className="action-row">
+          <button
+            className="button-primary"
+            disabled={isCreatingProfile || !profileName.trim()}
+            onClick={() => {
+              void handleCreateProfile();
+            }}
+            type="button"
+          >
+            {isCreatingProfile ? "Saving profile..." : "Create profile"}
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-card profile-setup-card">
+        <div className="profile-setup-toolbar">
+          <div>
+            <span className="detail-label">Reusable clips</span>
+            <h2>Add clip examples</h2>
+            <p>Use short clips that feel like moments you would keep.</p>
+          </div>
+          {selectedProfile ? (
+            <span className="queue-count">{selectedProfile.name}</span>
+          ) : null}
+        </div>
+
+        {selectedProfile ? (
+          <div className="analysis-form">
+            <label className="search-block">
+              <span className="input-label">Source type</span>
+              <select
+                className="search-input"
+                disabled={isAddingProfileExample}
+                onChange={(event) =>
+                  setSourceType(event.target.value as ExampleClipSourceType)
+                }
+                value={sourceType}
+              >
+                {profileSourceTypeOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <small className="analysis-field-note">
+                {selectedSourceType?.hint}
+              </small>
+            </label>
+
+            <label className="search-block">
+              <span className="input-label">
+                {sourceType === "TWITCH_CLIP_URL" ||
+                sourceType === "YOUTUBE_SHORT_URL"
+                  ? "Clip link"
+                  : "Clip file"}
+              </span>
+              <input
+                className="search-input"
+                disabled={isAddingProfileExample}
+                onChange={(event) => setSourceValue(event.target.value)}
+                placeholder={
+                  sourceType === "TWITCH_CLIP_URL"
+                    ? "https://clips.twitch.tv/..."
+                    : sourceType === "YOUTUBE_SHORT_URL"
+                      ? "https://www.youtube.com/shorts/..."
+                      : "/Users/you/Clips/example.mp4"
+                }
+                type="text"
+                value={sourceValue}
+              />
+            </label>
+
+            {canPickClipFile ? (
+              <div className="action-row">
+                <button
+                  className="button-secondary"
+                  disabled={isAddingProfileExample}
+                  onClick={() => {
+                    void handlePickLocalMedia(sourceType, setSourceValue);
+                  }}
+                  type="button"
+                >
+                  Choose local clip
+                </button>
+              </div>
+            ) : null}
+
+            <div className="settings-compact-grid two-column">
+              <label className="search-block">
+                <span className="input-label">Optional title</span>
+                <input
+                  className="search-input"
+                  disabled={isAddingProfileExample}
+                  onChange={(event) => setExampleTitle(event.target.value)}
+                  placeholder="Dry payoff example"
+                  type="text"
+                  value={exampleTitle}
+                />
+              </label>
+              <label className="search-block">
+                <span className="input-label">Optional note</span>
+                <input
+                  className="search-input"
+                  disabled={isAddingProfileExample}
+                  onChange={(event) => setExampleNote(event.target.value)}
+                  placeholder="What should Pulse notice here?"
+                  type="text"
+                  value={exampleNote}
+                />
+              </label>
+            </div>
+
+            <div className="action-row">
+              <button
+                className="button-primary"
+                disabled={isAddingProfileExample || !sourceValue.trim()}
+                onClick={() => {
+                  void handleAddExample();
+                }}
+                type="button"
+              >
+                {isAddingProfileExample
+                  ? "Saving example..."
+                  : "Save clip example"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="settings-empty-note">
+            Create or select a profile before adding examples.
+          </p>
+        )}
+      </section>
+
+      <details className="settings-card profile-setup-card internal-details">
+        <summary className="internal-details-summary">
+          <span>Finished edit example</span>
+          <span className="queue-count">Optional</span>
+        </summary>
+        <div className="analysis-form settings-details-body">
+          <label className="search-block">
+            <span className="input-label">Source type</span>
+            <select
+              className="search-input"
+              disabled={!selectedProfile || isAddingEditedVideo}
+              onChange={(event) =>
+                setEditSourceType(event.target.value as ExampleClipSourceType)
+              }
+              value={editSourceType}
+            >
+              {localProfileSourceTypeOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <small className="analysis-field-note">
+              {selectedEditSourceType?.hint}
+            </small>
+          </label>
+
+          <label className="search-block">
+            <span className="input-label">Edited video file</span>
+            <input
+              className="search-input"
+              disabled={!selectedProfile || isAddingEditedVideo}
+              onChange={(event) => setEditSourceValue(event.target.value)}
+              placeholder="/Users/you/Exports/session-edit.mp4"
+              type="text"
+              value={editSourceValue}
+            />
+          </label>
+
+          {canPickEditFile ? (
+            <div className="action-row">
+              <button
+                className="button-secondary"
+                disabled={!selectedProfile || isAddingEditedVideo}
+                onClick={() => {
+                  void handlePickLocalMedia(editSourceType, setEditSourceValue);
+                }}
+                type="button"
+              >
+                Choose edited video
+              </button>
+            </div>
+          ) : null}
+
+          <div className="settings-compact-grid two-column">
+            <label className="search-block">
+              <span className="input-label">Optional title</span>
+              <input
+                className="search-input"
+                disabled={!selectedProfile || isAddingEditedVideo}
+                onChange={(event) => setEditTitle(event.target.value)}
+                placeholder="March 12 final cut"
+                type="text"
+                value={editTitle}
+              />
+            </label>
+            <label className="search-block">
+              <span className="input-label">Optional note</span>
+              <input
+                className="search-input"
+                disabled={!selectedProfile || isAddingEditedVideo}
+                onChange={(event) => setEditNote(event.target.value)}
+                placeholder="What should Pulse learn from this edit?"
+                type="text"
+                value={editNote}
+              />
+            </label>
+          </div>
+
+          <div className="action-row">
+            <button
+              className="button-primary"
+              disabled={
+                !selectedProfile || isAddingEditedVideo || !editSourceValue
+              }
+              onClick={() => {
+                void handleAddEditedVideo();
+              }}
+              type="button"
+            >
+              {isAddingEditedVideo
+                ? "Saving edit..."
+                : "Save finished edit"}
+            </button>
+          </div>
+        </div>
+      </details>
+
+      <section className="settings-card profile-setup-card">
+        <div className="profile-setup-toolbar">
+          <div>
+            <span className="detail-label">Profile examples</span>
+            <h2>Saved examples</h2>
+          </div>
+          {isLoadingProfileExamples ? (
+            <span className="queue-count">Refreshing...</span>
+          ) : null}
+        </div>
+
+        {visibleExamples.length > 0 ? (
+          <div className="profile-reference-list">
+            {visibleExamples.map((example) => (
+              <article className="profile-example-card" key={example.id}>
+                <div className="profile-example-top">
+                  <span className="detail-label">
+                    {formatProfileSourceType(example.sourceType)}
+                  </span>
+                  <span className="session-state-pill active-session">
+                    {formatStatus(example.status)}
+                  </span>
+                </div>
+                <strong>{example.title || "Untitled example"}</strong>
+                <p className="profile-example-source">{example.sourceValue}</p>
+                {example.note ? <p>{example.note}</p> : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="settings-empty-note">
+            {selectedProfile
+              ? "No saved examples yet."
+              : "Select a profile to see its saved examples."}
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ProfileSetupSettingsSection() {
+  const apiBaseUrl =
+    import.meta.env.VITE_VAEXCORE_PULSE_API_BASE_URL ?? "http://127.0.0.1:4010";
+  const [profiles, setProfiles] = useState<ClipProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
+    null,
+  );
+  const [selectedProfileExamples, setSelectedProfileExamples] = useState<
+    ExampleClip[]
+  >([]);
+  const [mediaLibraryAssets, setMediaLibraryAssets] = useState<
+    MediaLibraryAsset[]
+  >([]);
+  const [mediaEditPairs, setMediaEditPairs] = useState<MediaEditPair[]>([]);
+  const [mediaIndexJobs, setMediaIndexJobs] = useState<MediaIndexJob[]>([]);
+  const [mediaAlignmentJobs, setMediaAlignmentJobs] = useState<
+    MediaAlignmentJob[]
+  >([]);
+  const [mediaAlignmentMatches, setMediaAlignmentMatches] = useState<
+    MediaAlignmentMatch[]
+  >([]);
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
+  const [isLoadingProfileExamples, setIsLoadingProfileExamples] =
+    useState(false);
+  const [isLoadingMediaLibraryAssets, setIsLoadingMediaLibraryAssets] =
+    useState(false);
+  const [isLoadingMediaEditPairs, setIsLoadingMediaEditPairs] = useState(false);
+  const [isLoadingMediaIndexJobs, setIsLoadingMediaIndexJobs] = useState(false);
+  const [isLoadingMediaAlignmentJobs, setIsLoadingMediaAlignmentJobs] =
+    useState(false);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+  const [isAddingProfileExample, setIsAddingProfileExample] = useState(false);
+  const [isCreatingMediaLibraryAsset, setIsCreatingMediaLibraryAsset] =
+    useState(false);
+  const [isCreatingMediaEditPair, setIsCreatingMediaEditPair] = useState(false);
+  const [isCreatingMediaIndexJob, setIsCreatingMediaIndexJob] = useState(false);
+  const [isCreatingMediaAlignmentJob, setIsCreatingMediaAlignmentJob] =
+    useState(false);
+  const [cancellingMediaIndexJobIds, setCancellingMediaIndexJobIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [cancellingMediaAlignmentJobIds, setCancellingMediaAlignmentJobIds] =
+    useState<Record<string, boolean>>({});
+  const [savingThumbnailOutputAssetIds, setSavingThumbnailOutputAssetIds] =
+    useState<Record<string, boolean>>({});
+  const [profileLibraryError, setProfileLibraryError] = useState<string | null>(
+    null,
+  );
+
+  const selectedProfile = selectedProfileId
+    ? (profiles.find((profile) => profile.id === selectedProfileId) ?? null)
+    : null;
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadProfiles() {
+      setIsLoadingProfiles(true);
+      try {
+        const nextProfiles = await fetchProfiles(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setProfiles(nextProfiles);
+        setSelectedProfileId((current) =>
+          current && nextProfiles.some((profile) => profile.id === current)
+            ? current
+            : (nextProfiles[0]?.id ?? null),
+        );
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load clip profiles: ${error.message}`
+            : "Unable to load clip profiles",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingProfiles(false);
+        }
+      }
+    }
+
+    void loadProfiles();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMediaLibraryAssets() {
+      setIsLoadingMediaLibraryAssets(true);
+      try {
+        const nextAssets = await fetchMediaLibraryAssets(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setMediaLibraryAssets(nextAssets);
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load saved media: ${error.message}`
+            : "Unable to load saved media",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingMediaLibraryAssets(false);
+        }
+      }
+    }
+
+    void loadMediaLibraryAssets();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMediaEditPairs() {
+      setIsLoadingMediaEditPairs(true);
+      try {
+        const nextPairs = await fetchMediaEditPairs(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setMediaEditPairs(nextPairs);
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load video comparisons: ${error.message}`
+            : "Unable to load video comparisons",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingMediaEditPairs(false);
+        }
+      }
+    }
+
+    void loadMediaEditPairs();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMediaIndexJobs() {
+      setIsLoadingMediaIndexJobs(true);
+      try {
+        const nextJobs = await fetchMediaIndexJobs(apiBaseUrl);
+        if (isCancelled) {
+          return;
+        }
+
+        setMediaIndexJobs(nextJobs);
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load background activity: ${error.message}`
+            : "Unable to load background activity",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingMediaIndexJobs(false);
+        }
+      }
+    }
+
+    void loadMediaIndexJobs();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    const hasActiveIndexJobs = mediaIndexJobs.some(
+      (job) => job.status === "QUEUED" || job.status === "RUNNING",
+    );
+    if (!hasActiveIndexJobs) {
+      return;
+    }
+
+    let isCancelled = false;
+    const intervalId = window.setInterval(() => {
+      async function refreshIndexState() {
+        try {
+          const [nextJobs, nextAssets, nextPairs] = await Promise.all([
+            fetchMediaIndexJobs(apiBaseUrl),
+            fetchMediaLibraryAssets(apiBaseUrl),
+            fetchMediaEditPairs(apiBaseUrl),
+          ]);
+          if (isCancelled) {
+            return;
+          }
+
+          setMediaIndexJobs(nextJobs);
+          setMediaLibraryAssets(nextAssets);
+          setMediaEditPairs(nextPairs);
+          emitProfileSetupChanged(selectedProfileId ?? undefined);
+        } catch {
+          // Keep current state; explicit load effects surface persistent failures.
+        }
+      }
+
+      void refreshIndexState();
+    }, 2000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [apiBaseUrl, mediaIndexJobs, selectedProfileId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMediaAlignmentState() {
+      setIsLoadingMediaAlignmentJobs(true);
+      try {
+        const [nextJobs, nextMatches] = await Promise.all([
+          fetchMediaAlignmentJobs(apiBaseUrl),
+          fetchMediaAlignmentMatches(apiBaseUrl),
+        ]);
+        if (isCancelled) {
+          return;
+        }
+
+        setMediaAlignmentJobs(nextJobs);
+        setMediaAlignmentMatches(nextMatches);
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load video comparisons: ${error.message}`
+            : "Unable to load video comparisons",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingMediaAlignmentJobs(false);
+        }
+      }
+    }
+
+    void loadMediaAlignmentState();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    const hasActiveAlignmentJobs = mediaAlignmentJobs.some(
+      (job) => job.status === "QUEUED" || job.status === "RUNNING",
+    );
+    if (!hasActiveAlignmentJobs) {
+      return;
+    }
+
+    let isCancelled = false;
+    const intervalId = window.setInterval(() => {
+      async function refreshAlignmentState() {
+        try {
+          const [nextJobs, nextMatches, nextPairs] = await Promise.all([
+            fetchMediaAlignmentJobs(apiBaseUrl),
+            fetchMediaAlignmentMatches(apiBaseUrl),
+            fetchMediaEditPairs(apiBaseUrl),
+          ]);
+          if (isCancelled) {
+            return;
+          }
+
+          setMediaAlignmentJobs(nextJobs);
+          setMediaAlignmentMatches(nextMatches);
+          setMediaEditPairs(nextPairs);
+          emitProfileSetupChanged(selectedProfileId ?? undefined);
+        } catch {
+          // Keep current state; explicit load effects surface persistent failures.
+        }
+      }
+
+      void refreshAlignmentState();
+    }, 2000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [apiBaseUrl, mediaAlignmentJobs, selectedProfileId]);
+
+  useEffect(() => {
+    const profileId = selectedProfileId;
+    if (!profileId) {
+      setSelectedProfileExamples([]);
+      return;
+    }
+    const selectedProfileIdForSettingsLoad: string = profileId;
+
+    let isCancelled = false;
+
+    async function loadExamples() {
+      setIsLoadingProfileExamples(true);
+      try {
+        const examples = await fetchProfileExamples(
+          apiBaseUrl,
+          selectedProfileIdForSettingsLoad,
+        );
+        if (isCancelled) {
+          return;
+        }
+
+        setSelectedProfileExamples(examples);
+        setProfiles((current) =>
+          current.map((profile) =>
+            profile.id === selectedProfileIdForSettingsLoad
+              ? { ...profile, exampleClips: examples }
+              : profile,
+          ),
+        );
+        setProfileLibraryError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setProfileLibraryError(
+          error instanceof Error
+            ? `Unable to load example clips: ${error.message}`
+            : "Unable to load example clips",
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingProfileExamples(false);
+        }
+      }
+    }
+
+    void loadExamples();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiBaseUrl, selectedProfileId]);
+
+  async function handleCreateProfile(input: CreateClipProfileRequest) {
+    const request = createClipProfileRequestSchema.parse(input);
+    setIsCreatingProfile(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdProfile = await createProfile(apiBaseUrl, request);
+      setProfiles((current) =>
+        upsertProfile(current, {
+          ...createdProfile,
+          exampleClips: createdProfile.exampleClips ?? [],
+        }),
+      );
+      setSelectedProfileId(createdProfile.id);
+      setSelectedProfileExamples(createdProfile.exampleClips ?? []);
+      emitProfileSetupChanged(createdProfile.id);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while creating the profile.",
+      );
+      throw error;
+    } finally {
+      setIsCreatingProfile(false);
+    }
+  }
+
+  async function handleAddProfileExample(
+    profileId: string,
+    input: AddExampleClipRequest,
+  ) {
+    const request = addExampleClipRequestSchema.parse(input);
+    setIsAddingProfileExample(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdExample = await createProfileExample(
+        apiBaseUrl,
+        profileId,
+        request,
+      );
+      const nextExamples = [
+        createdExample,
+        ...selectedProfileExamples.filter(
+          (example) => example.id !== createdExample.id,
+        ),
+      ];
+      setSelectedProfileExamples(nextExamples);
+      setProfiles((current) =>
+        current.map((profile) =>
+          profile.id === profileId
+            ? {
+                ...profile,
+                exampleClips: nextExamples,
+                updatedAt: createdExample.updatedAt,
+              }
+            : profile,
+        ),
+      );
+      emitProfileSetupChanged(profileId);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while saving the clip.",
+      );
+      throw error;
+    } finally {
+      setIsAddingProfileExample(false);
+    }
+  }
+
+  async function handleCreateMediaLibraryAsset(
+    input: CreateMediaLibraryAssetRequest,
+  ) {
+    const request = createMediaLibraryAssetRequestSchema.parse(input);
+    setIsCreatingMediaLibraryAsset(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdAsset = await createMediaLibraryAssetEntry(
+        apiBaseUrl,
+        request,
+      );
+      setMediaLibraryAssets((current) =>
+        upsertMediaLibraryAsset(current, createdAsset),
+      );
+      emitProfileSetupChanged(createdAsset.profileId);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while saving the media reference.",
+      );
+      throw error;
+    } finally {
+      setIsCreatingMediaLibraryAsset(false);
+    }
+  }
+
+  async function handleCreateMediaEditPair(input: CreateMediaEditPairRequest) {
+    const request = createMediaEditPairRequestSchema.parse(input);
+    setIsCreatingMediaEditPair(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdPair = await createMediaEditPairEntry(apiBaseUrl, request);
+      setMediaEditPairs((current) => upsertMediaEditPair(current, createdPair));
+      emitProfileSetupChanged(createdPair.profileId);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while saving the video comparison.",
+      );
+      throw error;
+    } finally {
+      setIsCreatingMediaEditPair(false);
+    }
+  }
+
+  async function handleCreateMediaIndexJob(input: CreateMediaIndexJobRequest) {
+    const request = createMediaIndexJobRequestSchema.parse(input);
+    setIsCreatingMediaIndexJob(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdJob = await createMediaIndexJobEntry(apiBaseUrl, request);
+      setMediaIndexJobs((current) => upsertMediaIndexJob(current, createdJob));
+      emitProfileSetupChanged(selectedProfileId ?? undefined);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while starting the scan.",
+      );
+      throw error;
+    } finally {
+      setIsCreatingMediaIndexJob(false);
+    }
+  }
+
+  async function handleReplaceMediaThumbnailOutputs(
+    assetId: string,
+    input: ReplaceMediaThumbnailOutputsRequest,
+  ) {
+    const request = replaceMediaThumbnailOutputsRequestSchema.parse(input);
+    setSavingThumbnailOutputAssetIds((current) => ({
+      ...current,
+      [assetId]: true,
+    }));
+    setProfileLibraryError(null);
+
+    try {
+      const updatedAsset = await replaceMediaThumbnailOutputsEntry(
+        apiBaseUrl,
+        assetId,
+        request,
+      );
+      setMediaLibraryAssets((current) =>
+        upsertMediaLibraryAsset(current, updatedAsset),
+      );
+      emitProfileSetupChanged(updatedAsset.profileId);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while updating thumbnail picks.",
+      );
+      throw error;
+    } finally {
+      setSavingThumbnailOutputAssetIds((current) => {
+        const { [assetId]: _removed, ...nextState } = current;
+        return nextState;
+      });
+    }
+  }
+
+  async function handleCancelMediaIndexJob(input: CancelMediaIndexJobRequest) {
+    const request = cancelMediaIndexJobRequestSchema.parse(input);
+    setCancellingMediaIndexJobIds((current) => ({
+      ...current,
+      [request.jobId]: true,
+    }));
+    setProfileLibraryError(null);
+
+    try {
+      const cancelledJob = await cancelMediaIndexJobEntry(apiBaseUrl, request);
+      setMediaIndexJobs((current) =>
+        upsertMediaIndexJob(current, cancelledJob),
+      );
+      emitProfileSetupChanged(selectedProfileId ?? undefined);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while cancelling the scan.",
+      );
+      throw error;
+    } finally {
+      setCancellingMediaIndexJobIds((current) => {
+        const { [request.jobId]: _removed, ...nextState } = current;
+        return nextState;
+      });
+    }
+  }
+
+  async function handleCreateMediaAlignmentJob(
+    input: CreateMediaAlignmentJobRequest,
+  ) {
+    const request = createMediaAlignmentJobRequestSchema.parse(input);
+    setIsCreatingMediaAlignmentJob(true);
+    setProfileLibraryError(null);
+
+    try {
+      const createdJob = await createMediaAlignmentJobEntry(
+        apiBaseUrl,
+        request,
+      );
+      setMediaAlignmentJobs((current) =>
+        upsertMediaAlignmentJob(current, createdJob),
+      );
+      emitProfileSetupChanged(selectedProfileId ?? undefined);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while starting the video comparison.",
+      );
+      throw error;
+    } finally {
+      setIsCreatingMediaAlignmentJob(false);
+    }
+  }
+
+  async function handleCancelMediaAlignmentJob(
+    input: CancelMediaAlignmentJobRequest,
+  ) {
+    const request = cancelMediaAlignmentJobRequestSchema.parse(input);
+    setCancellingMediaAlignmentJobIds((current) => ({
+      ...current,
+      [request.jobId]: true,
+    }));
+    setProfileLibraryError(null);
+
+    try {
+      const cancelledJob = await cancelMediaAlignmentJobEntry(
+        apiBaseUrl,
+        request,
+      );
+      setMediaAlignmentJobs((current) =>
+        upsertMediaAlignmentJob(current, cancelledJob),
+      );
+      emitProfileSetupChanged(selectedProfileId ?? undefined);
+    } catch (error) {
+      setProfileLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while cancelling the comparison job.",
+      );
+      throw error;
+    } finally {
+      setCancellingMediaAlignmentJobIds((current) => {
+        const { [request.jobId]: _removed, ...nextState } = current;
+        return nextState;
+      });
+    }
+  }
+
+  return (
+    <div className="settings-profile-workspace">
+      <ProfileWorkspace
+        cancellingMediaAlignmentJobIds={cancellingMediaAlignmentJobIds}
+        cancellingMediaIndexJobIds={cancellingMediaIndexJobIds}
+        error={profileLibraryError}
+        examples={selectedProfileExamples}
+        isAddingExample={isAddingProfileExample}
+        isCreatingMediaAlignmentJob={isCreatingMediaAlignmentJob}
+        isCreatingMediaAsset={isCreatingMediaLibraryAsset}
+        isCreatingMediaIndexJob={isCreatingMediaIndexJob}
+        isCreatingMediaPair={isCreatingMediaEditPair}
+        isCreatingProfile={isCreatingProfile}
+        isLoadingExamples={isLoadingProfileExamples}
+        isLoadingLibraryAssets={isLoadingMediaLibraryAssets}
+        isLoadingMediaAlignmentJobs={isLoadingMediaAlignmentJobs}
+        isLoadingMediaIndexJobs={isLoadingMediaIndexJobs}
+        isLoadingMediaPairs={isLoadingMediaEditPairs}
+        isLoadingProfiles={isLoadingProfiles}
+        libraryAssets={mediaLibraryAssets}
+        mediaAlignmentJobs={mediaAlignmentJobs}
+        mediaAlignmentMatches={mediaAlignmentMatches}
+        mediaEditPairs={mediaEditPairs}
+        mediaIndexJobs={mediaIndexJobs}
+        onAddExample={handleAddProfileExample}
+        onCancelMediaAlignmentJob={handleCancelMediaAlignmentJob}
+        onCancelMediaIndexJob={handleCancelMediaIndexJob}
+        onCreateMediaAlignmentJob={handleCreateMediaAlignmentJob}
+        onCreateMediaAsset={handleCreateMediaLibraryAsset}
+        onCreateMediaIndexJob={handleCreateMediaIndexJob}
+        onCreateMediaPair={handleCreateMediaEditPair}
+        onCreateProfile={handleCreateProfile}
+        onReplaceThumbnailOutputs={handleReplaceMediaThumbnailOutputs}
+        onSelectProfile={setSelectedProfileId}
+        profiles={profiles}
+        savingThumbnailOutputAssetIds={savingThumbnailOutputAssetIds}
+        selectedProfile={selectedProfile}
+        selectedProfileId={selectedProfileId}
+      />
+    </div>
+  );
+}
+
+function isSettingsWindow(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return (
+    new URLSearchParams(window.location.search).get("window") === "settings"
+  );
+}
+
+function scrollSettingsWindowToTop(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    document
+      .querySelector(".settings-shell")
+      ?.scrollTo({ top: 0, behavior: "auto" });
+  });
+}
+
+function openSettingsWindowFromUi(section?: SettingsSectionId): void {
+  if (!isTauriRuntime()) {
+    const sectionQuery = section
+      ? `&section=${encodeURIComponent(section)}`
+      : "";
+    const settingsUrl = `${window.location.origin}${window.location.pathname}?window=settings${sectionQuery}`;
+    window.open(settingsUrl, "vaexcore-pulse-settings", "width=760,height=660");
+    return;
+  }
+
+  void invoke("open_settings_window", { section: section ?? null }).catch(
+    (error) => {
+      console.error("Unable to open settings window", error);
+    },
+  );
+}
+
+function emitProfileSetupChanged(profileId?: string): void {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  void emit(profileLibraryChangedEvent, { profileId }).catch((error) => {
+    console.error("Unable to notify profile setup changes", error);
+  });
+}
+
+function resolveInitialSettingsSection(): SettingsSectionId {
+  if (typeof window === "undefined") {
+    return "profile-setup";
+  }
+
+  const section = new URLSearchParams(window.location.search).get("section");
+  return isSettingsSectionId(section) ? section : "profile-setup";
+}
+
+function isSettingsSectionId(value: unknown): value is SettingsSectionId {
+  return (
+    value === "profile-setup" ||
+    value === "appearance" ||
+    value === "window-behavior"
+  );
+}
+
+function formatProfileSetupError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Profile setup is unavailable right now.";
+  }
+
+  if (isLocalServiceUnavailableError(error)) {
+    return "Profile setup is still starting. This should clear in a few seconds.";
+  }
+
+  return error.message;
+}
+
+function isLocalServiceUnavailableError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.includes("could not reach its local service") ||
+      error.message.includes("Failed to fetch"))
+  );
+}
+
+function formatProfileSourceType(sourceType: ExampleClipSourceType): string {
+  if (sourceType === "TWITCH_CLIP_URL") {
+    return "Twitch clip";
+  }
+
+  if (sourceType === "YOUTUBE_SHORT_URL") {
+    return "YouTube Short";
+  }
+
+  if (sourceType === "LOCAL_FILE_UPLOAD") {
+    return "Local file";
+  }
+
+  return "Local path";
+}
+
+function formatStatus(status: string): string {
+  return status
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function isTauriRuntime(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    Boolean(
+      (window as Window & { __TAURI_INTERNALS__?: unknown })
+        .__TAURI_INTERNALS__,
+    )
+  );
+}
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === "dark" || value === "light";
+}
+
+function persistThemeMode(themeMode: ThemeMode) {
+  applyThemeMode(themeMode);
+
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(themeModeStorageKey, themeMode);
+  }
+}
+
+function applyThemeMode(themeMode: ThemeMode) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.dataset.theme = themeMode;
+  document.documentElement.style.colorScheme = themeMode;
 }
 
 function resolveInitialThemeMode(): ThemeMode {
@@ -2388,8 +4172,8 @@ function buildAnalysisLaunchState(
     return {
       canAnalyze: false,
       detail: "Waiting for your saved profiles.",
-      headline: "Loading reference profiles",
-      statusLabel: "Loading",
+      headline: "Loading profiles",
+      statusLabel: "Checking profiles",
       tone: "blocked",
     };
   }
@@ -2397,9 +4181,9 @@ function buildAnalysisLaunchState(
   if (!options.hasPersistedProfiles) {
     return {
       canAnalyze: false,
-      detail: "Create a profile first so VCP has some idea what to favor.",
-      headline: "No reference profile yet",
-      statusLabel: "Add profile",
+      detail: "Create a profile first so Pulse knows what to look for.",
+      headline: "No profile yet",
+      statusLabel: "Profile required",
       tone: "blocked",
     };
   }
@@ -2409,7 +4193,7 @@ function buildAnalysisLaunchState(
       canAnalyze: false,
       detail: "Choose a supported local video before starting.",
       headline: "Choose a video",
-      statusLabel: "Add video",
+      statusLabel: "Video required",
       tone: "blocked",
     };
   }
@@ -2417,17 +4201,16 @@ function buildAnalysisLaunchState(
   if (!isSupportedInput(sourcePath)) {
     return {
       canAnalyze: false,
-      detail: `Unsupported media extension. Use one of: ${supportedInputExtensions.join(", ")}`,
+      detail: `Unsupported file type. Try: ${supportedInputExtensions.join(", ")}`,
       headline: "Unsupported file type",
-      statusLabel: "Fix input",
+      statusLabel: "File type issue",
       tone: "blocked",
     };
   }
 
   return {
     canAnalyze: true,
-    detail:
-      "VCP can scan this video now and open a review queue when it finishes.",
+    detail: "Pulse can scan this video now. Review opens when it finishes.",
     headline: "Ready to scan",
     statusLabel: "Ready",
     tone: "ready",
@@ -2580,7 +4363,7 @@ async function fetchMediaLibraryAssets(
     `${apiBaseUrl}/api/library/assets`,
     apiBaseUrl,
     undefined,
-    "Unable to load media library assets.",
+    "Unable to load saved media.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2593,7 +4376,7 @@ async function fetchMediaLibraryAssets(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Media library asset list load failed",
+        : "Saved media could not be loaded",
     );
   }
 
@@ -2615,7 +4398,7 @@ async function createMediaLibraryAssetEntry(
       },
       body: JSON.stringify(request),
     },
-    "Unable to save media library asset.",
+    "Unable to save media.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2628,7 +4411,7 @@ async function createMediaLibraryAssetEntry(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Media library asset create failed",
+        : "Saved media could not be created",
     );
   }
 
@@ -2651,7 +4434,7 @@ async function replaceMediaThumbnailOutputsEntry(
       },
       body: JSON.stringify(request),
     },
-    "Unable to update chosen thumbnail outputs.",
+    "Unable to update chosen thumbnails.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2664,7 +4447,7 @@ async function replaceMediaThumbnailOutputsEntry(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Thumbnail output update failed",
+        : "Thumbnail update failed",
     );
   }
 
@@ -2678,7 +4461,7 @@ async function fetchMediaEditPairs(
     `${apiBaseUrl}/api/library/pairs`,
     apiBaseUrl,
     undefined,
-    "Unable to load VOD/edit pairs.",
+    "Unable to load video comparisons.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2691,7 +4474,7 @@ async function fetchMediaEditPairs(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "VOD/edit pair list load failed",
+        : "Video comparisons could not be loaded",
     );
   }
 
@@ -2713,7 +4496,7 @@ async function createMediaEditPairEntry(
       },
       body: JSON.stringify(request),
     },
-    "Unable to save VOD/edit pair.",
+    "Unable to save video comparison.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2726,7 +4509,7 @@ async function createMediaEditPairEntry(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "VOD/edit pair create failed",
+        : "Video comparison could not be created",
     );
   }
 
@@ -2774,7 +4557,7 @@ async function createMediaIndexJobEntry(
         "content-type": "application/json",
       },
     },
-    "Unable to start background analysis.",
+    "Unable to start scan.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2787,7 +4570,7 @@ async function createMediaIndexJobEntry(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Background analysis could not be started",
+        : "Scan could not be started",
     );
   }
 
@@ -2808,7 +4591,7 @@ async function cancelMediaIndexJobEntry(
         "content-type": "application/json",
       },
     },
-    "Unable to cancel background analysis.",
+    "Unable to cancel scan.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2821,7 +4604,7 @@ async function cancelMediaIndexJobEntry(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Background analysis could not be cancelled",
+        : "Scan could not be cancelled",
     );
   }
 
@@ -2835,7 +4618,7 @@ async function fetchMediaAlignmentJobs(
     `${apiBaseUrl}/api/library/alignment-jobs`,
     apiBaseUrl,
     undefined,
-    "Unable to load media alignment jobs.",
+    "Unable to load video comparisons.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2848,7 +4631,7 @@ async function fetchMediaAlignmentJobs(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Media alignment job list load failed",
+        : "Video comparisons could not be loaded",
     );
   }
 
@@ -2862,7 +4645,7 @@ async function fetchMediaAlignmentMatches(
     `${apiBaseUrl}/api/library/alignment-matches`,
     apiBaseUrl,
     undefined,
-    "Unable to load media alignment matches.",
+    "Unable to load comparison matches.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2875,7 +4658,7 @@ async function fetchMediaAlignmentMatches(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Media alignment match list load failed",
+        : "Comparison matches could not be loaded",
     );
   }
 
@@ -2899,7 +4682,7 @@ async function createMediaAlignmentJobEntry(
       },
       body: JSON.stringify(request),
     },
-    "Unable to start media alignment job.",
+    "Unable to start video comparison.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2912,7 +4695,7 @@ async function createMediaAlignmentJobEntry(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Media alignment job create failed",
+        : "Video comparison could not be started",
     );
   }
 
@@ -2933,7 +4716,7 @@ async function cancelMediaAlignmentJobEntry(
         "content-type": "application/json",
       },
     },
-    "Unable to cancel media alignment job.",
+    "Unable to cancel video comparison.",
   );
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -2946,7 +4729,7 @@ async function cancelMediaAlignmentJobEntry(
     throw new Error(
       payload && "message" in payload && payload.message
         ? payload.message
-        : "Media alignment job cancel failed",
+        : "Video comparison could not be cancelled",
     );
   }
 
@@ -3125,8 +4908,7 @@ function resolveProfile(
       id: profileId,
       name: "Profile unavailable",
       label: profileId,
-      description:
-        "This profile is missing locally. Refresh the saved profile library.",
+      description: "This profile is not available right now.",
       createdAt: "",
       updatedAt: "",
       state: "ACTIVE",
@@ -3250,31 +5032,29 @@ function buildStartGuide(input: {
     return {
       statusLabel: "First setup",
       headline: "Create your first profile",
-      detail:
-        "Profiles give VCP a starting point for the kinds of moments you usually keep.",
+      detail: "A profile tells Pulse what kinds of moments you like to keep.",
       steps: [
-        "Open References and create one profile.",
-        "Add a couple of reusable clips or one finished edit.",
-        "Come back here to scan a video into review.",
+        "Open Profile Setup.",
+        "Create one profile.",
+        "Add a few clips or one finished edit.",
       ],
-      ctaLabel: "Open References",
-      ctaAction: "references",
+      ctaLabel: "Open Profile Setup",
+      ctaAction: "profile-setup",
     };
   }
 
   if (!input.hasReferenceMaterial) {
     return {
       statusLabel: input.hasSavedSessions ? "Reference refresh" : "First setup",
-      headline: "Add a few examples before the first serious scan",
-      detail:
-        "VCP gets more useful once it can lean on a small library of clips or one finished edit.",
+      headline: "Add a few examples",
+      detail: "Examples help Pulse make better suggestions.",
       steps: [
-        "Add 2-3 reusable clips that feel representative.",
-        "Add one finished edited video if you have one.",
-        "Then scan a longer video and review the moments VCP suggests.",
+        "Add 2-3 short clips that feel like moments you would keep.",
+        "Add one finished edit if you have one.",
+        "Scan a longer video and review the suggestions.",
       ],
-      ctaLabel: "Add references",
-      ctaAction: "references",
+      ctaLabel: "Open Profile Setup",
+      ctaAction: "profile-setup",
     };
   }
 
@@ -3284,12 +5064,11 @@ function buildStartGuide(input: {
       headline: input.hasSavedSessions
         ? "Choose the next video to scan"
         : "Pick the first video you want to scan",
-      detail:
-        "Once you choose a local file, VCP can build a review queue and open the results directly into Review.",
+      detail: "Choose a file and Pulse will build a review queue.",
       steps: [
         "Choose one local video file.",
-        "Confirm the reference profile you want VCP to lean on.",
-        "Start the scan and go straight into review.",
+        "Confirm the profile you want to use.",
+        "Start the scan.",
       ],
       ctaLabel: "Choose video",
       ctaAction: "pick-media",
@@ -3302,11 +5081,11 @@ function buildStartGuide(input: {
       ? "This scan is ready to run"
       : "You are ready for the first scan",
     detail:
-      "Start with one video, let VCP build the review queue, then make keep or skip decisions in Review.",
+      "Start with one video, then review each suggested moment and choose what to keep.",
     steps: [
-      "Run the scan from the main action on the left.",
-      "Check the first few suggested moments in Review.",
-      "Keep building references as you learn what VCP should favor.",
+      "Start the scan.",
+      "Review the suggested moments.",
+      "Keep adding examples as your profile improves.",
     ],
     ctaLabel: null,
     ctaAction: null,

@@ -4,26 +4,26 @@ import { StyleSheet, Text, View } from "react-native";
 type SurfaceCardProps = {
   eyebrow?: string;
   title?: string;
-  accent?: "amber" | "teal" | "rose";
+  accent?: "cyan" | "magenta" | "violet";
   children: ReactNode;
 };
 
 const accentStyles = StyleSheet.create({
-  amber: {
-    borderColor: "rgba(244, 176, 97, 0.28)",
+  cyan: {
+    borderColor: "rgba(66, 173, 230, 0.3)",
   },
-  teal: {
-    borderColor: "rgba(106, 186, 193, 0.28)",
+  magenta: {
+    borderColor: "rgba(201, 63, 215, 0.3)",
   },
-  rose: {
-    borderColor: "rgba(225, 125, 120, 0.28)",
+  violet: {
+    borderColor: "rgba(126, 101, 255, 0.28)",
   },
 });
 
 export function SurfaceCard({
   eyebrow,
   title,
-  accent = "amber",
+  accent = "magenta",
   children,
 }: SurfaceCardProps) {
   return (
@@ -41,17 +41,17 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 24,
     borderWidth: 1,
-    backgroundColor: "rgba(17, 23, 28, 0.88)",
+    backgroundColor: "rgba(8, 10, 28, 0.9)",
   },
   eyebrow: {
-    color: "#f4b061",
+    color: "#62d9ff",
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 1.2,
     textTransform: "uppercase",
   },
   title: {
-    color: "#f8f2e9",
+    color: "#f8fbff",
     fontSize: 19,
     fontWeight: "700",
   },

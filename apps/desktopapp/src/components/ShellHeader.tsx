@@ -7,9 +7,7 @@ type ShellHeaderProps = {
   pendingCount: number;
   totalCount: number;
   activeSessionStateLabel: string;
-  themeMode: "dark" | "light";
   onPickMedia: () => Promise<void> | void;
-  onToggleTheme: () => void;
 };
 
 export function ShellHeader({
@@ -21,9 +19,7 @@ export function ShellHeader({
   pendingCount,
   totalCount,
   activeSessionStateLabel,
-  themeMode,
   onPickMedia,
-  onToggleTheme,
 }: ShellHeaderProps) {
   const selectedVideoLabel = selectedMediaPath
     ? extractFileLabel(selectedMediaPath)
@@ -54,18 +50,6 @@ export function ShellHeader({
             type="button"
           >
             Choose video
-          </button>
-          <button
-            aria-label={
-              themeMode === "dark"
-                ? "Switch to light mode"
-                : "Switch to dark mode"
-            }
-            className="button-secondary"
-            onClick={onToggleTheme}
-            type="button"
-          >
-            {themeMode === "dark" ? "Switch to Light" : "Switch to Dark"}
           </button>
         </div>
       </div>
