@@ -4,11 +4,11 @@ import type {
   ProjectSession,
   ReviewAction,
   ReviewDecision,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 import {
   projectSessionSchema,
   reviewUpdateRequestSchema,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 import { fetchWithLocalApiMessage } from "../lib/localApi";
 
 type ReviewDecisionOverrides = Pick<

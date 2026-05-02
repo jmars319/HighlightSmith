@@ -11,7 +11,7 @@ run_step \
   PYTHONPATH=services/analyzer/src \
   python3 \
   -c \
-  'from highlightsmith_analyzer.contracts import Settings; from highlightsmith_analyzer.pipeline.orchestrator import analyze_media; session = analyze_media(None, Settings(use_mock_data=True), profile_id="generic"); print(f"Mock session: {session.id} | profile={session.profile_id} | candidates={len(session.candidates)} | transcript_chunks={len(session.transcript)}")'
+  'from vaexcore_pulse_analyzer.contracts import Settings; from vaexcore_pulse_analyzer.pipeline.orchestrator import analyze_media; session = analyze_media(None, Settings(use_mock_data=True), profile_id="generic"); print(f"Mock session: {session.id} | profile={session.profile_id} | candidates={len(session.candidates)} | transcript_chunks={len(session.transcript)}")'
 run_step \
   "Running analyzer unit tests" \
   env \

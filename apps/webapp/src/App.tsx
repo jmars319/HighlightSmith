@@ -2,14 +2,14 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 import {
   deriveSessionReviewState,
   reviewedCandidateCount,
-} from "@highlightsmith/domain";
+} from "@vaexcore/pulse-domain";
 import {
   clipProfileSchema,
   projectSessionSummarySchema,
   type ClipProfile,
   type ProjectSessionSummary,
-} from "@highlightsmith/shared-types";
-import { LayoutShell } from "@highlightsmith/ui";
+} from "@vaexcore/pulse-shared-types";
+import { LayoutShell, VaexcorePulseLogo } from "@vaexcore/pulse-ui";
 
 type WebPage =
   | "dashboard"
@@ -38,7 +38,7 @@ export default function App() {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const apiBaseUrl =
-    import.meta.env.VITE_HIGHLIGHTSMITH_API_BASE_URL ?? "http://127.0.0.1:4010";
+    import.meta.env.VITE_VAEXCORE_PULSE_API_BASE_URL ?? "http://127.0.0.1:4010";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -437,7 +437,7 @@ export default function App() {
     <div className="web-shell">
       <LayoutShell
         activeId={activePage}
-        appName="Webapp"
+        appName="vaexcore pulse"
         aside={
           <div className="web-aside">
             <article className="web-panel">
@@ -451,10 +451,11 @@ export default function App() {
             </article>
           </div>
         }
+        brandMark={<VaexcorePulseLogo />}
         navItems={navItems}
         onSelect={(pageId) => setActivePage(pageId as WebPage)}
         subtitle="Desktop-first companion for project browsing, profile inspection, and lightweight status review."
-        title="HighlightSmith Web Companion"
+        title="Web Companion"
       >
         {renderPage()}
       </LayoutShell>

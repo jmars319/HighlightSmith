@@ -30,7 +30,9 @@ describe("shared-types mock data", () => {
       assert.ok(Array.isArray(candidate.reviewTags));
     }
 
-    assert.deepEqual(session.candidates[3]?.reviewTags, ["LOW_INFORMATION_RISK"]);
+    assert.deepEqual(session.candidates[3]?.reviewTags, [
+      "LOW_INFORMATION_RISK",
+    ]);
   });
 
   it("creates profile-varied mock sessions that stay unique by id", () => {

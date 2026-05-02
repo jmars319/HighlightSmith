@@ -30,3 +30,14 @@ The desktop app centers on four task areas:
 - Review
 - References
 - Backlog
+
+## macOS Packaging
+
+The packaged app is `vaexcore pulse.app`.
+
+- Product name: `vaexcore pulse`
+- Bundle ID: `com.vaexil.vaexcore.pulse`
+- Release output: `release/mac-<arch>/vaexcore pulse.app`
+- App data path: `~/Library/Application Support/vaexcore pulse`
+
+Use `pnpm release:unsigned` for local unsigned tester artifacts.

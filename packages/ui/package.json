@@ -1,5 +1,5 @@
 {
-  "name": "@highlightsmith/ui",
+  "name": "@vaexcore/pulse-ui",
   "private": true,
   "version": "0.2.0",
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@highlightsmith/shared-types": "workspace:*",
+    "@vaexcore/pulse-shared-types": "workspace:*",
     "react": "19.2.4"
   },
   "devDependencies": {

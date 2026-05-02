@@ -1,7 +1,7 @@
 import type {
   CandidateWindow,
   ContentProfile,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 
 export function explainCandidatePlaceholder(
   candidate: CandidateWindow,

@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   analyzeProjectRequestSchema,
   reviewUpdateRequestSchema,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 import {
   AnalyzerBridgeError,
   requestAnalyzerSession,
@@ -54,7 +54,8 @@ export const projectRoutes: FastifyPluginAsync = async (fastify) => {
     if (!parsedRequest.success) {
       return reply.code(400).send({
         error: "invalid_request",
-        message: parsedRequest.error.issues[0]?.message ?? "Invalid request body",
+        message:
+          parsedRequest.error.issues[0]?.message ?? "Invalid request body",
       });
     }
 
@@ -112,7 +113,8 @@ export const projectRoutes: FastifyPluginAsync = async (fastify) => {
     if (!parsedRequest.success) {
       return reply.code(400).send({
         error: "invalid_request",
-        message: parsedRequest.error.issues[0]?.message ?? "Invalid request body",
+        message:
+          parsedRequest.error.issues[0]?.message ?? "Invalid request body",
       });
     }
 

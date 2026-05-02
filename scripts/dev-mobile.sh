@@ -7,5 +7,5 @@ section "Mobile Dev"
 require_cmd pnpm
 info "Starting mobile companion app"
 note "Expo will print the local dev URL and QR code"
-print_command pnpm --filter @highlightsmith/mobileapp dev
-run_from_root pnpm --filter @highlightsmith/mobileapp dev
+print_command pnpm --filter @vaexcore/pulse-mobileapp dev
+run_from_root pnpm --filter @vaexcore/pulse-mobileapp dev

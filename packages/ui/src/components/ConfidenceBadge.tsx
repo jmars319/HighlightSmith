@@ -1,4 +1,4 @@
-import type { ConfidenceBand } from "@highlightsmith/shared-types";
+import type { ConfidenceBand } from "@vaexcore/pulse-shared-types";
 
 type ConfidenceBadgeProps = {
   band: ConfidenceBand;
@@ -6,6 +6,6 @@ type ConfidenceBadgeProps = {
 
 export function ConfidenceBadge({ band }: ConfidenceBadgeProps) {
   return (
-    <span className={`hs-badge hs-badge-${band.toLowerCase()}`}>{band}</span>
+    <span className={`vcp-badge vcp-badge-${band.toLowerCase()}`}>{band}</span>
   );
 }

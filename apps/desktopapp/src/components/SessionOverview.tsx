@@ -2,13 +2,13 @@ import type {
   ContentProfile,
   ProfileMatchingSummary,
   ProjectSession,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 import {
   analysisCoverageTone,
   formatAnalysisCoverageBand,
   formatAnalysisCoverageFlag,
   summarizeSessionQuality,
-} from "@highlightsmith/domain";
+} from "@vaexcore/pulse-domain";
 import { formatLongTime } from "../lib/format";
 
 type SessionOverviewProps = {
@@ -53,7 +53,8 @@ export function SessionOverview({
           <p className="eyebrow">Current session</p>
           <h2>{session.title}</h2>
           <p className="session-overview-copy">
-            {session.mediaSource.fileName} • {formatLongTime(session.mediaSource.durationSeconds)}
+            {session.mediaSource.fileName} •{" "}
+            {formatLongTime(session.mediaSource.durationSeconds)}
             {" • "}scanned {formatTimestamp(session.updatedAt)}
           </p>
         </div>
@@ -81,7 +82,7 @@ export function SessionOverview({
           </strong>
           <p>
             {candidateCount === 0
-              ? "HS did not find any strong signals in this video."
+              ? "VCP did not find any strong signals in this video."
               : `${acceptedCount} kept • ${rejectedCount} skipped • ${candidateCount} total moments`}
           </p>
         </article>
@@ -120,7 +121,8 @@ export function SessionOverview({
             <strong>{session.mediaSource.fileName}</strong>
             <p className="session-overview-path">{session.mediaSource.path}</p>
             <p>
-              {session.mediaSource.kind.toLowerCase()} • {session.mediaSource.format}
+              {session.mediaSource.kind.toLowerCase()} •{" "}
+              {session.mediaSource.format}
             </p>
           </article>
 

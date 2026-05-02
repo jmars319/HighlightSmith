@@ -1,7 +1,7 @@
 [project]
-name = "highlightsmith-analyzer"
+name = "vaexcore-pulse-analyzer"
 version = "0.1.0"
-description = "Offline analyzer scaffold for HighlightSmith"
+description = "Offline analyzer scaffold for vaexcore pulse"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []

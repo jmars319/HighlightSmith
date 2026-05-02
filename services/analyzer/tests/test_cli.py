@@ -7,25 +7,32 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from highlightsmith_analyzer.contracts import (
+from vaexcore_pulse_analyzer.contracts import (
     AnalysisCoverage,
     AnalysisCoverageBand,
     ExampleReferenceKind,
     MediaIndexSummary,
     Settings,
 )
-from highlightsmith_analyzer.mock_data import (
+from vaexcore_pulse_analyzer.mock_data import (
     build_mock_candidates,
     build_mock_feature_windows,
     build_mock_speech_regions,
 )
-from highlightsmith_analyzer.pipeline.scoring import apply_review_post_filter
-from highlightsmith_analyzer.pipeline.orchestrator import analyze_media
-from highlightsmith_analyzer.pipeline.indexing import (
+from vaexcore_pulse_analyzer.paths import (
+    DATABASE_FILENAME,
+    resolve_default_database_path,
+    resolve_thumbnail_output_root,
+    THUMBNAIL_OUTPUT_DIR_NAME,
+)
+from vaexcore_pulse_analyzer.pipeline.scoring import apply_review_post_filter
+from vaexcore_pulse_analyzer.pipeline.orchestrator import analyze_media
+from vaexcore_pulse_analyzer.pipeline.indexing import (
     build_decoded_audio_fingerprint_artifact_from_pcm,
 )
-from highlightsmith_analyzer.service import (
+from vaexcore_pulse_analyzer.service import (
     analyze_request,
     apply_review_update,
     create_profile_request,
@@ -37,10 +44,95 @@ from highlightsmith_analyzer.service import (
     load_session_request,
     run_media_index_job_inline,
 )
-from highlightsmith_analyzer.storage.session_store import SessionStore
+from vaexcore_pulse_analyzer.storage.session_store import SessionStore
 
 
 class AnalyzerScaffoldTests(unittest.TestCase):
+    def test_default_database_path_uses_application_support(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_home:
+            with tempfile.TemporaryDirectory() as temp_cwd:
+                previous_cwd = Path.cwd()
+                try:
+                    os.chdir(temp_cwd)
+                    with patch.dict(
+                        os.environ,
+                        {"HOME": temp_home, "VAEXCORE_PULSE_ANALYZER_DATABASE_PATH": ""},
+                        clear=False,
+                    ):
+                        expected_path = (
+                            Path(temp_home)
+                            / "Library"
+                            / "Application Support"
+                            / "vaexcore pulse"
+                            / DATABASE_FILENAME
+                        )
+                        self.assertEqual(resolve_default_database_path(), str(expected_path))
+                finally:
+                    os.chdir(previous_cwd)
+
+    def test_default_database_path_preserves_legacy_local_database(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_home:
+            with tempfile.TemporaryDirectory() as temp_cwd:
+                previous_cwd = Path.cwd()
+                try:
+                    os.chdir(temp_cwd)
+                    legacy_path = Path(".local") / DATABASE_FILENAME
+                    legacy_path.parent.mkdir(parents=True)
+                    legacy_path.write_text("legacy", encoding="utf-8")
+                    with patch.dict(
+                        os.environ,
+                        {"HOME": temp_home, "VAEXCORE_PULSE_ANALYZER_DATABASE_PATH": ""},
+                        clear=False,
+                    ):
+                        self.assertEqual(
+                            resolve_default_database_path(),
+                            str(legacy_path),
+                        )
+                finally:
+                    os.chdir(previous_cwd)
+
+    def test_default_database_path_honors_explicit_env_path(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"VAEXCORE_PULSE_ANALYZER_DATABASE_PATH": "/tmp/custom-vcp.sqlite3"},
+            clear=False,
+        ):
+            self.assertEqual(
+                resolve_default_database_path(),
+                "/tmp/custom-vcp.sqlite3",
+            )
+
+    def test_thumbnail_output_path_uses_application_support(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_home:
+            with tempfile.TemporaryDirectory() as temp_cwd:
+                previous_cwd = Path.cwd()
+                try:
+                    os.chdir(temp_cwd)
+                    with patch.dict(os.environ, {"HOME": temp_home}, clear=False):
+                        expected_path = (
+                            Path(temp_home)
+                            / "Library"
+                            / "Application Support"
+                            / "vaexcore pulse"
+                            / THUMBNAIL_OUTPUT_DIR_NAME
+                        )
+                        self.assertEqual(resolve_thumbnail_output_root(), expected_path)
+                finally:
+                    os.chdir(previous_cwd)
+
+    def test_thumbnail_output_path_preserves_legacy_local_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_home:
+            with tempfile.TemporaryDirectory() as temp_cwd:
+                previous_cwd = Path.cwd()
+                try:
+                    os.chdir(temp_cwd)
+                    legacy_path = Path(".local") / THUMBNAIL_OUTPUT_DIR_NAME
+                    legacy_path.mkdir(parents=True)
+                    with patch.dict(os.environ, {"HOME": temp_home}, clear=False):
+                        self.assertEqual(resolve_thumbnail_output_root(), legacy_path)
+                finally:
+                    os.chdir(previous_cwd)
+
     def test_mock_pipeline_generates_candidates(self) -> None:
         session = analyze_media(None, settings=Settings(use_mock_data=True))
         self.assertGreaterEqual(len(session.candidates), 4)
@@ -48,7 +140,7 @@ class AnalyzerScaffoldTests(unittest.TestCase):
 
     def test_session_store_persists_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            database_path = str(Path(temp_dir) / "vaexcore-pulse.sqlite3")
             store = SessionStore(database_path)
             store.initialize()
             session = analyze_media(None, settings=Settings(use_mock_data=True))
@@ -59,7 +151,7 @@ class AnalyzerScaffoldTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             media_path = Path(temp_dir) / "backlog-pass-01.mp4"
             media_path.write_bytes(b"not-a-real-video-but-a-real-local-path")
-            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            database_path = str(Path(temp_dir) / "vaexcore-pulse.sqlite3")
 
             session = analyze_request(
                 str(media_path),
@@ -115,12 +207,12 @@ class AnalyzerScaffoldTests(unittest.TestCase):
                     profile_id="generic",
                     session_title="Blocked input",
                     persist=False,
-                    database_path=str(Path(temp_dir) / "highlightsmith.sqlite3"),
+                    database_path=str(Path(temp_dir) / "vaexcore-pulse.sqlite3"),
                 )
 
     def test_media_library_assets_and_vod_edit_pair_persist(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            database_path = str(Path(temp_dir) / "vaexcore-pulse.sqlite3")
             clip_path = Path(temp_dir) / "global-clip.mp4"
             vod_path = Path(temp_dir) / "session-vod.mp4"
             edit_path = Path(temp_dir) / "session-edit.mp4"
@@ -248,7 +340,7 @@ class AnalyzerScaffoldTests(unittest.TestCase):
 
     def test_profile_scoped_edit_indexes_into_longform_reference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            database_path = str(Path(temp_dir) / "vaexcore-pulse.sqlite3")
             edit_path = Path(temp_dir) / "profile-edit.mp4"
             edit_path.write_bytes(b"profile-edit-fixture" * 512)
 
@@ -300,7 +392,7 @@ class AnalyzerScaffoldTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg unavailable on this machine")
     def test_real_video_index_can_persist_thumbnail_suggestions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            database_path = str(Path(temp_dir) / "vaexcore-pulse.sqlite3")
             media_path = Path(temp_dir) / "thumbnail-source.mp4"
             result = subprocess.run(
                 [
@@ -437,7 +529,7 @@ class AnalyzerScaffoldTests(unittest.TestCase):
 
     def test_same_basename_sources_persist_as_distinct_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            database_path = str(Path(temp_dir) / "vaexcore-pulse.sqlite3")
             media_dir_a = Path(temp_dir) / "creator-a"
             media_dir_b = Path(temp_dir) / "creator-b"
             media_dir_a.mkdir()
@@ -478,7 +570,7 @@ class AnalyzerScaffoldTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             media_path = Path(temp_dir) / "review-pass-01.mp4"
             media_path.write_bytes(b"review-persistence-fixture")
-            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            database_path = str(Path(temp_dir) / "vaexcore-pulse.sqlite3")
 
             session = analyze_request(
                 str(media_path),
@@ -528,7 +620,7 @@ class AnalyzerScaffoldTests(unittest.TestCase):
 
     def test_session_summaries_list_real_persisted_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            database_path = str(Path(temp_dir) / "highlightsmith.sqlite3")
+            database_path = str(Path(temp_dir) / "vaexcore-pulse.sqlite3")
             media_path_a = Path(temp_dir) / "backlog-a.mp4"
             media_path_b = Path(temp_dir) / "backlog-b.mp4"
             media_path_a.write_bytes(b"backlog-a-fixture")

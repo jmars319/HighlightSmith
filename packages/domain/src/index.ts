@@ -14,7 +14,7 @@ import type {
   ReviewAction,
   ReviewDecision,
   TranscriptChunk,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 
 export function resolveCandidateLabel(
   candidate: CandidateWindow,
@@ -98,7 +98,10 @@ export function describeCandidatePlainly(
     summary = "Brief group reaction or laughter burst";
   } else if (hasOverlapSpike) {
     summary = "Brief burst of overlapping voices";
-  } else if (hasActionCluster && (hasStructureConsequence || hasStructureResolution)) {
+  } else if (
+    hasActionCluster &&
+    (hasStructureConsequence || hasStructureResolution)
+  ) {
     summary = "High-activity segment with a possible outcome";
   } else if (hasActionCluster) {
     summary = "Short high-activity segment";
@@ -123,7 +126,10 @@ export function describeCandidatePlainly(
 
   if (lowConfidence) {
     summary = `Low confidence - ${lowercaseFirst(summary)}`;
-  } else if (mediumConfidence && !summary.toLowerCase().startsWith("possible ")) {
+  } else if (
+    mediumConfidence &&
+    !summary.toLowerCase().startsWith("possible ")
+  ) {
     summary = `Possible ${lowercaseFirst(summary)}`;
   }
 
@@ -509,7 +515,10 @@ export function summarizeSessionQuality(
     return "Limited transcript coverage";
   }
 
-  if (coverage.band === "THIN" || coverage.flags.includes("LOW_CANDIDATE_COUNT")) {
+  if (
+    coverage.band === "THIN" ||
+    coverage.flags.includes("LOW_CANDIDATE_COUNT")
+  ) {
     return "Low signal density";
   }
 

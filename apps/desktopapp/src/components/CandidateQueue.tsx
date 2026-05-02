@@ -5,14 +5,14 @@ import type {
   ProfileMatchingSummary,
   ProfilePresentationMode,
   ReviewDecision,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 import {
   describeCandidatePlainly,
   resolveCandidateProfileMatch,
   resolveCandidateLabel,
   type ReviewQueueMode,
-} from "@highlightsmith/domain";
-import { CandidateCard } from "@highlightsmith/ui";
+} from "@vaexcore/pulse-domain";
+import { CandidateCard } from "@vaexcore/pulse-ui";
 import { formatSeconds, percentage } from "../lib/format";
 import {
   candidateHasReviewRisk,
@@ -201,8 +201,8 @@ export function CandidateQueue({
           </p>
           {isStrongMatchFallback ? (
             <p className="queue-summary-copy">
-              HS does not have enough strong profile evidence yet, so this still
-              shows the full set of suggested moments.
+              VCP does not have enough strong profile evidence yet, so this
+              still shows the full set of suggested moments.
             </p>
           ) : null}
         </div>
@@ -212,7 +212,9 @@ export function CandidateQueue({
             <button
               key={filterValue}
               className={
-                filterValue === bandFilter ? "filter-chip active" : "filter-chip"
+                filterValue === bandFilter
+                  ? "filter-chip active"
+                  : "filter-chip"
               }
               onClick={() => onBandFilterChange(filterValue)}
               type="button"
@@ -235,7 +237,7 @@ export function CandidateQueue({
           <span className="detail-label">Queue state</span>
           <p>
             {totalCandidateCount === 0
-              ? "No moments found. HS did not find any strong signals in this video."
+              ? "No moments found. VCP did not find any strong signals in this video."
               : reviewQueueMode === "ONLY_PENDING"
                 ? "Nothing still needing review matches the current search and filters."
                 : "No moments match the current search and filters."}

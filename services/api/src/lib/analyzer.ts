@@ -41,7 +41,7 @@ import {
   type ProjectSessionSummary,
   type ReplaceMediaThumbnailOutputsRequest,
   type ReviewUpdateRequest,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 
 export class AnalyzerBridgeError extends Error {
   constructor(
@@ -69,11 +69,11 @@ function isZodErrorLike(
 }
 
 export function getAnalyzerUrl() {
-  return process.env.HIGHLIGHTSMITH_ANALYZER_URL ?? "http://127.0.0.1:9010";
+  return process.env.VAEXCORE_PULSE_ANALYZER_URL ?? "http://127.0.0.1:9010";
 }
 
 function getAnalyzerTimeoutMs() {
-  const rawValue = Number(process.env.HIGHLIGHTSMITH_ANALYZER_TIMEOUT_MS);
+  const rawValue = Number(process.env.VAEXCORE_PULSE_ANALYZER_TIMEOUT_MS);
   return Number.isFinite(rawValue) && rawValue > 0 ? rawValue : 15_000;
 }
 
@@ -369,7 +369,9 @@ async function parsePairResponse(response: Response): Promise<MediaEditPair> {
     );
   }
 
-  return parseWithSchema("pair", () => mediaEditPairSchema.parse(payload?.pair));
+  return parseWithSchema("pair", () =>
+    mediaEditPairSchema.parse(payload?.pair),
+  );
 }
 
 async function parsePairListResponse(
@@ -661,7 +663,9 @@ export async function requestMediaIndexArtifacts(
   return parseIndexArtifactListResponse(response);
 }
 
-export async function requestMediaAlignmentJobs(): Promise<MediaAlignmentJob[]> {
+export async function requestMediaAlignmentJobs(): Promise<
+  MediaAlignmentJob[]
+> {
   const response = await fetchAnalyzer("/library/alignment-jobs");
   return parseAlignmentJobListResponse(response);
 }
@@ -764,7 +768,10 @@ export async function submitReviewUpdate(
 export async function requestAnalyzerHealth(): Promise<unknown> {
   const response = await fetchAnalyzer("/health");
   if (!response.ok) {
-    throw new AnalyzerBridgeError("Analyzer health check failed", response.status);
+    throw new AnalyzerBridgeError(
+      "Analyzer health check failed",
+      response.status,
+    );
   }
 
   return await response.json().catch(() => null);

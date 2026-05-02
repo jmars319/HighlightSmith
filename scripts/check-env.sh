@@ -18,4 +18,4 @@ show_cmd_version cargo --version
 optional_cmd ffmpeg
 show_cmd_version ffmpeg -version
 
-success "Environment looks usable for the HighlightSmith scaffold"
+success "Environment looks usable for the vaexcore pulse scaffold"

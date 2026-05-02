@@ -3,15 +3,15 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
-section "HighlightSmith Desktop Stack"
+section "vaexcore pulse Desktop Stack"
 require_cmd pnpm
 require_cmd python3
 require_cmd cargo
 require_cmd curl
 
-analyzer_health_url="${HIGHLIGHTSMITH_ANALYZER_HEALTH_URL:-http://127.0.0.1:9010/health}"
-api_health_url="${HIGHLIGHTSMITH_API_HEALTH_URL:-http://127.0.0.1:4010/health}"
-startup_timeout_seconds="${HIGHLIGHTSMITH_DEV_BOOT_TIMEOUT_SECONDS:-30}"
+analyzer_health_url="${VAEXCORE_PULSE_ANALYZER_HEALTH_URL:-http://127.0.0.1:9010/health}"
+api_health_url="${VAEXCORE_PULSE_API_HEALTH_URL:-http://127.0.0.1:4010/health}"
+startup_timeout_seconds="${VAEXCORE_PULSE_DEV_BOOT_TIMEOUT_SECONDS:-30}"
 
 analyzer_pid=""
 api_pid=""
@@ -21,7 +21,7 @@ cleanup() {
   trap - EXIT INT TERM
 
   if [[ -n "${api_pid}" || -n "${analyzer_pid}" ]]; then
-    warn "Stopping HighlightSmith background services"
+    warn "Stopping vaexcore pulse background services"
     if [[ -n "${api_pid}" ]]; then
       kill "${api_pid}" >/dev/null 2>&1 || true
       wait "${api_pid}" >/dev/null 2>&1 || true

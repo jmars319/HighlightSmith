@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { CandidateDecisionMap } from "@highlightsmith/shared-types";
-import {
-  createMockProjectSession,
-} from "@highlightsmith/shared-types/testing";
+import type { CandidateDecisionMap } from "@vaexcore/pulse-shared-types";
+import { createMockProjectSession } from "@vaexcore/pulse-shared-types/testing";
 import {
   acceptedCandidates,
   analysisCoverageTone,
@@ -353,7 +351,9 @@ describe("domain helpers", () => {
   it("builds plain-English candidate descriptions from real analyzer signals", () => {
     const session = createMockProjectSession();
     const reactionDescription = describeCandidatePlainly(session.candidates[0]);
-    const lowSignalDescription = describeCandidatePlainly(session.candidates[3]);
+    const lowSignalDescription = describeCandidatePlainly(
+      session.candidates[3],
+    );
 
     assert.equal(
       reactionDescription.summary,

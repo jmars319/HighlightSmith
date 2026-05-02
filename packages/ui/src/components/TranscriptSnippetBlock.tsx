@@ -8,8 +8,8 @@ export function TranscriptSnippetBlock({
   text,
 }: TranscriptSnippetBlockProps) {
   return (
-    <section className="hs-block">
-      <span className="hs-block-label">{heading}</span>
+    <section className="vcp-block">
+      <span className="vcp-block-label">{heading}</span>
       <blockquote>{text}</blockquote>
     </section>
   );

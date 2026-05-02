@@ -7,7 +7,7 @@ import {
   createMediaIndexJobRequestSchema,
   createMediaLibraryAssetRequestSchema,
   replaceMediaThumbnailOutputsRequestSchema,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 import {
   AnalyzerBridgeError,
   cancelMediaAlignmentJob,

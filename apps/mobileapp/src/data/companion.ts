@@ -1,4 +1,4 @@
-import type { ConfidenceBand } from "@highlightsmith/shared-types";
+import type { ConfidenceBand } from "@vaexcore/pulse-shared-types";
 
 export type MobileTab =
   | "dashboard"

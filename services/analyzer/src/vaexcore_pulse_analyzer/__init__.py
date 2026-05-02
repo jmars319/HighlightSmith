@@ -1,4 +1,4 @@
-"""HighlightSmith analyzer package."""
+"""vaexcore pulse analyzer package."""
 
 __all__ = ["__version__"]
 

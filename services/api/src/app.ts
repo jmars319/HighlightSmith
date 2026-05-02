@@ -24,7 +24,7 @@ export async function buildApp() {
   await app.register(bridgeRoutes);
 
   app.get("/", async () => ({
-    service: "HighlightSmith API bridge",
+    service: "vaexcore pulse API bridge",
     status: "ok",
   }));
 

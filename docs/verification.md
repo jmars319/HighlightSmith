@@ -20,6 +20,14 @@ Verification should be meaningful without pretending the scaffold is feature-com
   - runs the API bridge compile verification step
 - `verify:all`
   - runs all of the above
+- `app:build`
+  - builds a real unsigned macOS `.app` at `release/mac-<arch>/vaexcore pulse.app`
+- `app:zip`
+  - creates the unsigned zip, SHA-256 file, JSON manifest, and tester handoff markdown
+- `release:check`
+  - runs typecheck, full verification, artifact smoke checks, diagnostics smoke, tester guide smoke, update-preservation smoke, metadata checks, and `git diff --check`
+- `release:unsigned`
+  - builds, zips, and checks the unsigned tester release
 - `health`
   - primary repo health command
   - runs environment check, package layout check, the workspace test suite, and full verification

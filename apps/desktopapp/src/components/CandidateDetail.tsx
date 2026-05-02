@@ -6,17 +6,17 @@ import type {
   ProjectSessionSummary,
   ReviewDecision,
   TranscriptChunk,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 import {
   describeCandidatePlainly,
   describeReasonCodePlainly,
   resolveCandidateProfileMatch,
-} from "@highlightsmith/domain";
+} from "@vaexcore/pulse-domain";
 import {
   ConfidenceBadge,
   ReviewControls,
   TranscriptSnippetBlock,
-} from "@highlightsmith/ui";
+} from "@vaexcore/pulse-ui";
 import { formatLongTime, percentage } from "../lib/format";
 import { formatReviewTagLabel } from "../lib/reviewTags";
 import { TranscriptContextPeek } from "./TranscriptContextPeek";
@@ -97,8 +97,8 @@ export function CandidateDetail({
         </h2>
         <p>
           {candidateCount === 0
-            ? "HS did not find any strong moments in this session."
-            : "Select a moment to inspect why HS flagged it and where the clip boundaries land."}
+            ? "VCP did not find any strong moments in this session."
+            : "Select a moment to inspect why VCP flagged it and where the clip boundaries land."}
         </p>
       </section>
     );
@@ -120,9 +120,7 @@ export function CandidateDetail({
     try {
       await navigator.clipboard.writeText(value);
       setCopyFeedback(
-        format === "timestamps"
-          ? "Copied timestamps."
-          : "Copied JSON export.",
+        format === "timestamps" ? "Copied timestamps." : "Copied JSON export.",
       );
     } catch {
       setCopyFeedback("Copy failed on this machine.");
@@ -189,7 +187,7 @@ export function CandidateDetail({
         </article>
 
         <article className="detail-card narrative-card">
-          <span className="detail-label">Why HS flagged this</span>
+          <span className="detail-label">Why VCP flagged this</span>
           <strong>{plainDescription.summary}</strong>
           <p>
             {plainDescription.detail ??
@@ -518,7 +516,7 @@ export function CandidateDetail({
           ) : null}
         </div>
 
-        <div className="hs-controls-row hs-controls-row-label review-label-editor">
+        <div className="vcp-controls-row vcp-controls-row-label review-label-editor">
           <input
             disabled={isSavingReview}
             onChange={(event) => onLabelChange(event.target.value)}
@@ -530,7 +528,6 @@ export function CandidateDetail({
           </button>
         </div>
       </details>
-
     </section>
   );
 }

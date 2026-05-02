@@ -59,7 +59,7 @@ def _camel_case(value: str) -> str:
 
 
 def _demo_mode_enabled() -> bool:
-    value = os.getenv("HIGHLIGHTSMITH_ENABLE_DEMO_MODE", "").strip().lower()
+    value = os.getenv("VAEXCORE_PULSE_ENABLE_DEMO_MODE", "").strip().lower()
     return value in {"1", "true", "yes", "on"}
 
 
@@ -85,7 +85,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
 
         if request_path == "/sessions":
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             summaries = list_session_summaries_request(
                 database_path=database_path,
@@ -101,7 +101,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
 
         if request_path == "/profiles":
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             profiles = list_profiles_request(database_path=database_path)
             self._send_json(
@@ -115,7 +115,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
 
         if request_path == "/library/assets":
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             assets = list_media_library_assets_request(database_path=database_path)
             self._send_json(
@@ -129,7 +129,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
 
         if request_path == "/library/pairs":
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             pairs = list_media_edit_pairs_request(database_path=database_path)
             self._send_json(
@@ -143,7 +143,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
 
         if request_path == "/library/index-jobs":
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             jobs = list_media_index_jobs_request(database_path=database_path)
             self._send_json(
@@ -157,7 +157,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
 
         if request_path == "/library/index-artifacts":
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             artifacts = list_media_index_artifacts_request(database_path=database_path)
             self._send_json(
@@ -171,7 +171,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
 
         if request_path == "/library/alignment-jobs":
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             jobs = list_media_alignment_jobs_request(database_path=database_path)
             self._send_json(
@@ -185,7 +185,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
 
         if request_path == "/library/alignment-matches":
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             matches = list_media_alignment_matches_request(database_path=database_path)
             self._send_json(
@@ -200,7 +200,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
         if request_path.startswith("/library/pairs/") and request_path.endswith("/alignment-matches"):
             pair_id = self._pair_id_from_alignment_matches_path(request_path)
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             matches = list_media_alignment_matches_request(
                 pair_id=pair_id,
@@ -228,7 +228,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
                 return
 
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             artifacts = list_media_index_artifacts_request(
                 asset_id=asset_id,
@@ -256,7 +256,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
                 return
 
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             try:
                 examples = list_profile_examples_request(
@@ -285,7 +285,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
         if request_path.startswith("/session/"):
             session_id = unquote(request_path.removeprefix("/session/")).strip()
             database_path = str(
-                os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
+                os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH") or DEFAULT_DATABASE_PATH
             )
             try:
                 session = load_session_request(
@@ -965,7 +965,7 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
     def _database_path_from_payload(self, payload: dict[str, Any]) -> str:
         return str(
             payload.get("databasePath")
-            or os.getenv("HIGHLIGHTSMITH_ANALYZER_DATABASE_PATH")
+            or os.getenv("VAEXCORE_PULSE_ANALYZER_DATABASE_PATH")
             or DEFAULT_DATABASE_PATH
         )
 
@@ -1011,10 +1011,10 @@ class AnalyzerRequestHandler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    host = os.getenv("HIGHLIGHTSMITH_ANALYZER_HOST", "127.0.0.1")
-    port = int(os.getenv("HIGHLIGHTSMITH_ANALYZER_PORT", "9010"))
+    host = os.getenv("VAEXCORE_PULSE_ANALYZER_HOST", "127.0.0.1")
+    port = int(os.getenv("VAEXCORE_PULSE_ANALYZER_PORT", "9010"))
     server = ThreadingHTTPServer((host, port), AnalyzerRequestHandler)
-    print(f"HighlightSmith analyzer listening on http://{host}:{port}")
+    print(f"vaexcore pulse analyzer listening on http://{host}:{port}")
     server.serve_forever()
     return 0
 

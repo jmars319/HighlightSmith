@@ -18,9 +18,10 @@ from .pipeline.profile_matching import (
     build_local_example_feature_summary,
     build_profile_match,
 )
+from .paths import resolve_default_database_path
 from .storage.session_store import SessionStore
 
-DEFAULT_DATABASE_PATH = ".local/highlightsmith.sqlite3"
+DEFAULT_DATABASE_PATH = resolve_default_database_path()
 
 
 def analyze_request(
@@ -380,7 +381,7 @@ def _run_media_index_job(job_id: str, database_path: str):
                 )
             except Exception as error:  # pragma: no cover - defensive local-media guard
                 asset_status_detail = (
-                    "Media index ready, but HighlightSmith could not build this "
+                    "Media index ready, but vaexcore pulse could not build this "
                     f"edit's longform reference summary yet: {error}"
                 )
 

@@ -355,7 +355,11 @@ export function createMockProjectSessions(): ProjectSession[] {
       analysisCoverage: {
         band: "THIN",
         note: "Thin coverage: transcript anchors are sparse and only a few candidates were produced.",
-        flags: ["SEEDED_TRANSCRIPT", "TRANSCRIPT_SPARSE", "LOW_CANDIDATE_COUNT"],
+        flags: [
+          "SEEDED_TRANSCRIPT",
+          "TRANSCRIPT_SPARSE",
+          "LOW_CANDIDATE_COUNT",
+        ],
       },
       candidates: primary.candidates.slice(0, 2).map((candidate, index) => ({
         ...candidate,

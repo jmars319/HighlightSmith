@@ -3,7 +3,7 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
-section "HighlightSmith Doctor"
+section "vaexcore pulse Doctor"
 note "Repo root: ${REPO_ROOT}"
 
 run_step "Running environment check" bash ./scripts/check-env.sh

@@ -2,7 +2,7 @@
 
 ## Direction
 
-HighlightSmith stores project, candidate, and review data locally.
+vaexcore pulse stores project, candidate, and review data locally.
 
 ## Current Scaffold
 

@@ -1,5 +1,5 @@
 {
-  "name": "@highlightsmith/shared-types",
+  "name": "@vaexcore/pulse-shared-types",
   "private": true,
   "version": "0.2.0",
   "type": "module",

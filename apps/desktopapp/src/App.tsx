@@ -21,16 +21,16 @@ import {
   isCandidatePending,
   reviewedCandidateCount,
   type ReviewQueueMode,
-} from "@highlightsmith/domain";
+} from "@vaexcore/pulse-domain";
 import {
   toJsonCandidateExport,
   toTimestampExport,
-} from "@highlightsmith/export";
+} from "@vaexcore/pulse-export";
 import {
   isSupportedInput,
   supportedInputExtensions,
-} from "@highlightsmith/media";
-import { defaultProfileId } from "@highlightsmith/profiles";
+} from "@vaexcore/pulse-media";
+import { defaultProfileId } from "@vaexcore/pulse-profiles";
 import {
   addExampleClipRequestSchema,
   analyzeProjectRequestSchema,
@@ -72,8 +72,12 @@ import {
   type ProjectSession,
   type ProjectSessionSummary,
   type ReplaceMediaThumbnailOutputsRequest,
-} from "@highlightsmith/shared-types";
-import { LayoutShell, TranscriptSnippetBlock } from "@highlightsmith/ui";
+} from "@vaexcore/pulse-shared-types";
+import {
+  LayoutShell,
+  TranscriptSnippetBlock,
+  VaexcorePulseLogo,
+} from "@vaexcore/pulse-ui";
 import { CandidateDetail } from "./components/CandidateDetail";
 import { CandidateQueue } from "./components/CandidateQueue";
 import {
@@ -90,10 +94,7 @@ import {
   resolveSessionResumeState,
   saveSessionResumeState,
 } from "./lib/resumeState";
-import {
-  fetchWithLocalApiMessage,
-  localApiTimeouts,
-} from "./lib/localApi";
+import { fetchWithLocalApiMessage, localApiTimeouts } from "./lib/localApi";
 
 type FilterValue = ConfidenceBand | "ALL";
 type DesktopPage =
@@ -118,8 +119,8 @@ type StartGuide = {
 };
 type ThemeMode = "dark" | "light";
 
-const lastSessionIdStorageKey = "highlightsmith.desktop.last-session-id";
-const themeModeStorageKey = "highlightsmith.desktop.theme-mode";
+const lastSessionIdStorageKey = "vaexcore-pulse.desktop.last-session-id";
+const themeModeStorageKey = "vaexcore-pulse.desktop.theme-mode";
 const desktopPages: Array<{ id: DesktopPage; label: string }> = [
   { id: "new-analysis", label: "Start" },
   { id: "candidate-review", label: "Review" },
@@ -206,7 +207,7 @@ export default function App() {
 
   const deferredSearchValue = useDeferredValue(searchValue);
   const apiBaseUrl =
-    import.meta.env.VITE_HIGHLIGHTSMITH_API_BASE_URL ?? "http://127.0.0.1:4010";
+    import.meta.env.VITE_VAEXCORE_PULSE_API_BASE_URL ?? "http://127.0.0.1:4010";
   const sessionCandidates = projectSession?.candidates ?? [];
   const normalizedSelectedMediaPath = selectedMediaPath.trim();
   const availableProfiles = profiles;
@@ -343,9 +344,9 @@ export default function App() {
     ? decisionsByCandidateId[selectedCandidate.id]
     : undefined;
   const previewCandidate = momentPreviewState
-    ? sessionCandidates.find(
+    ? (sessionCandidates.find(
         (candidate) => candidate.id === momentPreviewState.candidateId,
-      ) ?? null
+      ) ?? null)
     : null;
   const previewDecision = previewCandidate
     ? decisionsByCandidateId[previewCandidate.id]
@@ -1084,7 +1085,10 @@ export default function App() {
     setProfileLibraryError(null);
 
     try {
-      const createdAsset = await createMediaLibraryAssetEntry(apiBaseUrl, request);
+      const createdAsset = await createMediaLibraryAssetEntry(
+        apiBaseUrl,
+        request,
+      );
       setMediaLibraryAssets((current) =>
         upsertMediaLibraryAsset(current, createdAsset),
       );
@@ -1185,7 +1189,9 @@ export default function App() {
 
     try {
       const cancelledJob = await cancelMediaIndexJobEntry(apiBaseUrl, request);
-      setMediaIndexJobs((current) => upsertMediaIndexJob(current, cancelledJob));
+      setMediaIndexJobs((current) =>
+        upsertMediaIndexJob(current, cancelledJob),
+      );
     } catch (error) {
       setProfileLibraryError(
         error instanceof Error
@@ -1209,7 +1215,10 @@ export default function App() {
     setProfileLibraryError(null);
 
     try {
-      const createdJob = await createMediaAlignmentJobEntry(apiBaseUrl, request);
+      const createdJob = await createMediaAlignmentJobEntry(
+        apiBaseUrl,
+        request,
+      );
       setMediaAlignmentJobs((current) =>
         upsertMediaAlignmentJob(current, createdJob),
       );
@@ -1236,7 +1245,10 @@ export default function App() {
     setProfileLibraryError(null);
 
     try {
-      const cancelledJob = await cancelMediaAlignmentJobEntry(apiBaseUrl, request);
+      const cancelledJob = await cancelMediaAlignmentJobEntry(
+        apiBaseUrl,
+        request,
+      );
       setMediaAlignmentJobs((current) =>
         upsertMediaAlignmentJob(current, cancelledJob),
       );
@@ -1621,9 +1633,7 @@ export default function App() {
             <article className="utility-block">
               <span className="detail-label">Backlog</span>
               <h2>No saved review sessions yet</h2>
-              <p>
-                Scan a video to create your first review session.
-              </p>
+              <p>Scan a video to create your first review session.</p>
             </article>
           ) : null}
           {!isLoadingProjects &&
@@ -1644,9 +1654,7 @@ export default function App() {
                       : "Every saved session currently has decisions for all suggested moments."}
                   </p>
                 </div>
-                <span className="queue-count">
-                  {pendingSessionCount} open
-                </span>
+                <span className="queue-count">{pendingSessionCount} open</span>
               </div>
               <div className="action-row">
                 {nextPendingSession ? (
@@ -1769,7 +1777,7 @@ export default function App() {
                 <h2>Scan a video</h2>
                 <p>
                   Choose one local video, pick the reference profile you want
-                  HS to lean on, and open the results directly into review.
+                  VCP to lean on, and open the results directly into review.
                 </p>
               </div>
               <button
@@ -1841,10 +1849,10 @@ export default function App() {
                   </select>
                   <small className="analysis-field-note">
                     {hasPersistedProfiles
-                      ? "Profiles help HS lean toward the kinds of moments you usually keep."
+                      ? "Profiles help VCP lean toward the kinds of moments you usually keep."
                       : isLoadingProfiles
                         ? "Loading saved profiles."
-                        : "Create a profile first so HS has some direction."}
+                        : "Create a profile first so VCP has some direction."}
                   </small>
                 </label>
 
@@ -1870,9 +1878,7 @@ export default function App() {
               <div className="analysis-summary-grid analysis-summary-grid-compact">
                 <article className="analysis-summary-card">
                   <span className="detail-label">Video</span>
-                  <strong>
-                    {analysisSourceName ?? "No video chosen"}
-                  </strong>
+                  <strong>{analysisSourceName ?? "No video chosen"}</strong>
                   <p className="analysis-summary-path">
                     {normalizedSelectedMediaPath ||
                       "Choose a supported local video path or use the file picker."}
@@ -1906,7 +1912,7 @@ export default function App() {
                   {isAnalyzing ? "Scanning video..." : "Scan video"}
                 </button>
                 <p className="analysis-support-copy">
-                  HS will open a review queue as soon as the scan finishes.
+                  VCP will open a review queue as soon as the scan finishes.
                 </p>
               </div>
 
@@ -1940,7 +1946,9 @@ export default function App() {
               <article className="utility-block analysis-onboarding-card">
                 <div className="panel-header">
                   <div>
-                    <span className="detail-label">{startGuide.statusLabel}</span>
+                    <span className="detail-label">
+                      {startGuide.statusLabel}
+                    </span>
                     <h2>{startGuide.headline}</h2>
                     <p>{startGuide.detail}</p>
                   </div>
@@ -1978,9 +1986,9 @@ export default function App() {
                 <div className="analysis-readiness-header">
                   <div>
                     <span className="detail-label">Scan in progress</span>
-                    <strong>HS is scanning this video locally</strong>
+                    <strong>VCP is scanning this video locally</strong>
                     <p className="analysis-readiness-copy">
-                      Large files can take a bit. Keep this window open and HS
+                      Large files can take a bit. Keep this window open and VCP
                       will jump straight into Review when the scan finishes.
                     </p>
                   </div>
@@ -1990,11 +1998,14 @@ export default function App() {
             ) : null}
 
             <article className="utility-block">
-              <span className="detail-label">What HS does next</span>
+              <span className="detail-label">What VCP does next</span>
               <ol className="plain-list ordered">
-                <li>HS scans the video locally.</li>
+                <li>VCP scans the video locally.</li>
                 <li>It builds a queue of likely moments worth checking.</li>
-                <li>You jump straight into review and decide what is worth keeping.</li>
+                <li>
+                  You jump straight into review and decide what is worth
+                  keeping.
+                </li>
               </ol>
               {projectSession ? (
                 <p>
@@ -2164,13 +2175,16 @@ export default function App() {
           <article className="utility-block">
             <span className="detail-label">Before you scan</span>
             <p>Choose one local video file.</p>
-            <p>Pick the profile that best matches what you want HS to favor.</p>
+            <p>
+              Pick the profile that best matches what you want VCP to favor.
+            </p>
             <p>Give the session a name only if the file name is not enough.</p>
           </article>
           <article className="utility-block">
             <span className="detail-label">Why profiles matter</span>
             <p>
-              Profiles give HS examples of the kinds of moments you usually keep.
+              Profiles give VCP examples of the kinds of moments you usually
+              keep.
             </p>
             <p>
               Reusable clips help with short moments. Indexed edits help with
@@ -2219,8 +2233,8 @@ export default function App() {
           <article className="utility-block">
             <span className="detail-label">Optional tools</span>
             <p>
-              VOD/edit audits and background job history are useful, but they are
-              secondary to building a clean reference library.
+              VOD/edit audits and background job history are useful, but they
+              are secondary to building a clean reference library.
             </p>
           </article>
         </div>
@@ -2297,8 +2311,9 @@ export default function App() {
 
       <LayoutShell
         activeId={activePage}
-        appName="HighlightSmith"
+        appName="vaexcore pulse"
         aside={renderDesktopAside()}
+        brandMark={<VaexcorePulseLogo />}
         navItems={desktopPages}
         onSelect={(pageId) => setActivePage(pageId as DesktopPage)}
         subtitle="Scan long videos, review likely moments quickly, and build references from your own edits."
@@ -2331,8 +2346,12 @@ export default function App() {
           candidate={previewCandidate}
           decision={previewDecision}
           initialMode={momentPreviewState?.mode ?? "SUGGESTED_SEGMENT"}
-          isOpen={activePage === "candidate-review" && previewCandidate !== null}
-          mediaDurationSeconds={projectSession?.mediaSource.durationSeconds ?? 0}
+          isOpen={
+            activePage === "candidate-review" && previewCandidate !== null
+          }
+          mediaDurationSeconds={
+            projectSession?.mediaSource.durationSeconds ?? 0
+          }
           mediaPath={projectSession?.mediaSource.path ?? selectedMediaPath}
           onClose={handleCloseMomentPreview}
         />
@@ -2378,7 +2397,7 @@ function buildAnalysisLaunchState(
   if (!options.hasPersistedProfiles) {
     return {
       canAnalyze: false,
-      detail: "Create a profile first so HS has some idea what to favor.",
+      detail: "Create a profile first so VCP has some idea what to favor.",
       headline: "No reference profile yet",
       statusLabel: "Add profile",
       tone: "blocked",
@@ -2407,7 +2426,8 @@ function buildAnalysisLaunchState(
 
   return {
     canAnalyze: true,
-    detail: "HS can scan this video now and open a review queue when it finishes.",
+    detail:
+      "VCP can scan this video now and open a review queue when it finishes.",
     headline: "Ready to scan",
     statusLabel: "Ready",
     tone: "ready",
@@ -2651,7 +2671,9 @@ async function replaceMediaThumbnailOutputsEntry(
   return mediaLibraryAssetSchema.parse(payload);
 }
 
-async function fetchMediaEditPairs(apiBaseUrl: string): Promise<MediaEditPair[]> {
+async function fetchMediaEditPairs(
+  apiBaseUrl: string,
+): Promise<MediaEditPair[]> {
   const response = await fetchWithLocalApiMessage(
     `${apiBaseUrl}/api/library/pairs`,
     apiBaseUrl,
@@ -3049,10 +3071,7 @@ function upsertMediaIndexJob(
   current: MediaIndexJob[],
   nextJob: MediaIndexJob,
 ): MediaIndexJob[] {
-  const merged = [
-    nextJob,
-    ...current.filter((job) => job.id !== nextJob.id),
-  ];
+  const merged = [nextJob, ...current.filter((job) => job.id !== nextJob.id)];
 
   return merged.sort((left, right) =>
     right.updatedAt.localeCompare(left.updatedAt),
@@ -3063,10 +3082,7 @@ function upsertMediaAlignmentJob(
   current: MediaAlignmentJob[],
   nextJob: MediaAlignmentJob,
 ): MediaAlignmentJob[] {
-  const merged = [
-    nextJob,
-    ...current.filter((job) => job.id !== nextJob.id),
-  ];
+  const merged = [nextJob, ...current.filter((job) => job.id !== nextJob.id)];
 
   return merged.sort((left, right) =>
     right.updatedAt.localeCompare(left.updatedAt),
@@ -3235,7 +3251,7 @@ function buildStartGuide(input: {
       statusLabel: "First setup",
       headline: "Create your first profile",
       detail:
-        "Profiles give HS a starting point for the kinds of moments you usually keep.",
+        "Profiles give VCP a starting point for the kinds of moments you usually keep.",
       steps: [
         "Open References and create one profile.",
         "Add a couple of reusable clips or one finished edit.",
@@ -3251,11 +3267,11 @@ function buildStartGuide(input: {
       statusLabel: input.hasSavedSessions ? "Reference refresh" : "First setup",
       headline: "Add a few examples before the first serious scan",
       detail:
-        "HS gets more useful once it can lean on a small library of clips or one finished edit.",
+        "VCP gets more useful once it can lean on a small library of clips or one finished edit.",
       steps: [
         "Add 2-3 reusable clips that feel representative.",
         "Add one finished edited video if you have one.",
-        "Then scan a longer video and review the moments HS suggests.",
+        "Then scan a longer video and review the moments VCP suggests.",
       ],
       ctaLabel: "Add references",
       ctaAction: "references",
@@ -3269,10 +3285,10 @@ function buildStartGuide(input: {
         ? "Choose the next video to scan"
         : "Pick the first video you want to scan",
       detail:
-        "Once you choose a local file, HS can build a review queue and open the results directly into Review.",
+        "Once you choose a local file, VCP can build a review queue and open the results directly into Review.",
       steps: [
         "Choose one local video file.",
-        "Confirm the reference profile you want HS to lean on.",
+        "Confirm the reference profile you want VCP to lean on.",
         "Start the scan and go straight into review.",
       ],
       ctaLabel: "Choose video",
@@ -3286,11 +3302,11 @@ function buildStartGuide(input: {
       ? "This scan is ready to run"
       : "You are ready for the first scan",
     detail:
-      "Start with one video, let HS build the review queue, then make keep or skip decisions in Review.",
+      "Start with one video, let VCP build the review queue, then make keep or skip decisions in Review.",
     steps: [
       "Run the scan from the main action on the left.",
       "Check the first few suggested moments in Review.",
-      "Keep building references as you learn what HS should favor.",
+      "Keep building references as you learn what VCP should favor.",
     ],
     ctaLabel: null,
     ctaAction: null,

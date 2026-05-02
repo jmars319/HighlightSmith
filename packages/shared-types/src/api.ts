@@ -77,7 +77,9 @@ export const createMediaIndexJobRequestSchema = z.object({
 export const replaceMediaThumbnailOutputsRequestSchema = z
   .object({
     selectedSuggestionIds: z
-      .array(z.string().trim().min(1, "selectedSuggestionIds entries are required"))
+      .array(
+        z.string().trim().min(1, "selectedSuggestionIds entries are required"),
+      )
       .max(8),
   })
   .superRefine((value, context) => {

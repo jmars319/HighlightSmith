@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { CandidateWindow, ReviewDecision } from "@highlightsmith/shared-types";
+import type {
+  CandidateWindow,
+  ReviewDecision,
+} from "@vaexcore/pulse-shared-types";
 import { formatLongTime } from "../lib/format";
 
 export type MomentPreviewMode = "SUGGESTED_SEGMENT" | "DETECTED_MOMENT";
@@ -180,7 +183,7 @@ export function MomentPreviewModal({
           setLoadError(
             error instanceof Error
               ? error.message
-              : "HS could not prepare an in-app preview clip for this moment.",
+              : "VCP could not prepare an in-app preview clip for this moment.",
           );
         }
       })
@@ -307,7 +310,9 @@ export function MomentPreviewModal({
     setQuickTimeFeedback(null);
     const startSeconds = previewRange?.startSeconds;
     if (typeof startSeconds !== "number") {
-      setQuickTimeFeedback("HS could not resolve a start time for this moment.");
+      setQuickTimeFeedback(
+        "VCP could not resolve a start time for this moment.",
+      );
       return;
     }
 
@@ -321,7 +326,7 @@ export function MomentPreviewModal({
       setQuickTimeFeedback(
         error instanceof Error
           ? error.message
-          : "HS could not open QuickTime for this moment.",
+          : "VCP could not open QuickTime for this moment.",
       );
     }
   }
@@ -349,11 +354,7 @@ export function MomentPreviewModal({
               {formatLongTime(previewRange.endSeconds)}
             </p>
           </div>
-          <button
-            className="button-secondary"
-            onClick={onClose}
-            type="button"
-          >
+          <button className="button-secondary" onClick={onClose} type="button">
             Close
           </button>
         </div>
@@ -410,7 +411,7 @@ export function MomentPreviewModal({
             <div className="moment-preview-placeholder">
               <strong>Preparing in-app preview clip…</strong>
               <p>
-                HS is extracting just this moment so the embedded player does
+                VCP is extracting just this moment so the embedded player does
                 not have to load the full source file.
               </p>
             </div>
@@ -419,9 +420,7 @@ export function MomentPreviewModal({
               className="moment-preview-video"
               controls
               onError={() => {
-                setLoadError(
-                  describeVideoError(videoRef.current?.error, true),
-                );
+                setLoadError(describeVideoError(videoRef.current?.error, true));
               }}
               onLoadedMetadata={handleLoadedMetadata}
               onTimeUpdate={handleTimeUpdate}
@@ -433,7 +432,7 @@ export function MomentPreviewModal({
             <div className="moment-preview-placeholder">
               <strong>In-app preview unavailable</strong>
               <p>
-                HS could not prepare an embedded preview clip for this moment.
+                VCP could not prepare an embedded preview clip for this moment.
                 Use QuickTime for direct file playback.
               </p>
             </div>
@@ -464,10 +463,10 @@ export function MomentPreviewModal({
             </strong>
             <p>
               {isPreparingPreview
-                ? "HS is generating a short temporary clip for this exact moment."
+                ? "VCP is generating a short temporary clip for this exact moment."
                 : preparedPreview
                   ? buildPreparedPreviewSummary(preparedPreview)
-                  : "HS could not prepare a short embedded preview clip from this source file."}
+                  : "VCP could not prepare a short embedded preview clip from this source file."}
             </p>
           </article>
           <article className="analysis-summary-card">
@@ -482,7 +481,7 @@ export function MomentPreviewModal({
             <p>
               {inspection
                 ? buildInspectionSummary(inspection)
-                : "HS is checking the local file path and stream details."}
+                : "VCP is checking the local file path and stream details."}
             </p>
           </article>
         </div>

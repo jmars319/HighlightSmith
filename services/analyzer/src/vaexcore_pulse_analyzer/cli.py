@@ -7,14 +7,15 @@ from enum import Enum
 from typing import Any
 
 from .contracts import Settings
+from .paths import resolve_default_database_path
 from .pipeline.orchestrator import analyze_media
 from .service import analyze_request
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="highlightsmith-analyzer",
-        description="Offline analyzer scaffold for HighlightSmith.",
+        prog="vaexcore-pulse-analyzer",
+        description="Offline analyzer scaffold for vaexcore pulse.",
     )
     parser.add_argument("source", nargs="?", help="Local media path to analyze.")
     parser.add_argument(
@@ -29,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--database",
-        default=".local/highlightsmith.sqlite3",
+        default=resolve_default_database_path(),
         help="SQLite path used when --persist is supplied.",
     )
     parser.add_argument(

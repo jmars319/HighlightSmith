@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Profiles let HighlightSmith adjust weighting without pretending the same content behaves identically.
+Profiles let vaexcore pulse adjust weighting without pretending the same content behaves identically.
 
 ## Placeholder Profiles
 

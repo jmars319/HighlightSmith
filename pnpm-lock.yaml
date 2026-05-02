@@ -22,36 +22,36 @@ importers:
 
   apps/desktopapp:
     dependencies:
-      "@highlightsmith/domain":
-        specifier: workspace:*
-        version: link:../../packages/domain
-      "@highlightsmith/export":
-        specifier: workspace:*
-        version: link:../../packages/export
-      "@highlightsmith/media":
-        specifier: workspace:*
-        version: link:../../packages/media
-      "@highlightsmith/profiles":
-        specifier: workspace:*
-        version: link:../../packages/profiles
-      "@highlightsmith/scoring":
-        specifier: workspace:*
-        version: link:../../packages/scoring
-      "@highlightsmith/shared-types":
-        specifier: workspace:*
-        version: link:../../packages/shared-types
-      "@highlightsmith/storage":
-        specifier: workspace:*
-        version: link:../../packages/storage
-      "@highlightsmith/ui":
-        specifier: workspace:*
-        version: link:../../packages/ui
       "@tauri-apps/api":
         specifier: 2.10.1
         version: 2.10.1
       "@tauri-apps/plugin-dialog":
         specifier: 2.6.0
         version: 2.6.0
+      "@vaexcore/pulse-domain":
+        specifier: workspace:*
+        version: link:../../packages/domain
+      "@vaexcore/pulse-export":
+        specifier: workspace:*
+        version: link:../../packages/export
+      "@vaexcore/pulse-media":
+        specifier: workspace:*
+        version: link:../../packages/media
+      "@vaexcore/pulse-profiles":
+        specifier: workspace:*
+        version: link:../../packages/profiles
+      "@vaexcore/pulse-scoring":
+        specifier: workspace:*
+        version: link:../../packages/scoring
+      "@vaexcore/pulse-shared-types":
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+      "@vaexcore/pulse-storage":
+        specifier: workspace:*
+        version: link:../../packages/storage
+      "@vaexcore/pulse-ui":
+        specifier: workspace:*
+        version: link:../../packages/ui
       react:
         specifier: 19.2.4
         version: 19.2.4
@@ -80,13 +80,13 @@ importers:
 
   apps/mobileapp:
     dependencies:
-      "@highlightsmith/domain":
+      "@vaexcore/pulse-domain":
         specifier: workspace:*
         version: link:../../packages/domain
-      "@highlightsmith/profiles":
+      "@vaexcore/pulse-profiles":
         specifier: workspace:*
         version: link:../../packages/profiles
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../../packages/shared-types
       expo:
@@ -111,16 +111,16 @@ importers:
 
   apps/webapp:
     dependencies:
-      "@highlightsmith/domain":
+      "@vaexcore/pulse-domain":
         specifier: workspace:*
         version: link:../../packages/domain
-      "@highlightsmith/profiles":
+      "@vaexcore/pulse-profiles":
         specifier: workspace:*
         version: link:../../packages/profiles
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../../packages/shared-types
-      "@highlightsmith/ui":
+      "@vaexcore/pulse-ui":
         specifier: workspace:*
         version: link:../../packages/ui
       react:
@@ -148,19 +148,19 @@ importers:
 
   packages/ai-assist:
     dependencies:
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../shared-types
 
   packages/domain:
     dependencies:
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../shared-types
 
   packages/export:
     dependencies:
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../shared-types
 
@@ -168,13 +168,13 @@ importers:
 
   packages/profiles:
     dependencies:
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../shared-types
 
   packages/scoring:
     dependencies:
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../shared-types
 
@@ -186,13 +186,13 @@ importers:
 
   packages/storage:
     dependencies:
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../shared-types
 
   packages/ui:
     dependencies:
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../shared-types
       react:
@@ -208,13 +208,13 @@ importers:
       "@fastify/cors":
         specifier: 11.2.0
         version: 11.2.0
-      "@highlightsmith/domain":
+      "@vaexcore/pulse-domain":
         specifier: workspace:*
         version: link:../../packages/domain
-      "@highlightsmith/profiles":
+      "@vaexcore/pulse-profiles":
         specifier: workspace:*
         version: link:../../packages/profiles
-      "@highlightsmith/shared-types":
+      "@vaexcore/pulse-shared-types":
         specifier: workspace:*
         version: link:../../packages/shared-types
       fastify:

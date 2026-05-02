@@ -1,12 +1,12 @@
 [package]
-name = "highlightsmith-desktop"
-version = "0.1.0"
-description = "Local-first highlight scouting shell for HighlightSmith"
+name = "vaexcore-pulse-desktop"
+version = "0.2.0"
+description = "Local-first highlight scouting shell for vaexcore pulse"
 authors = ["Jason Marshall"]
 edition = "2021"
 
 [lib]
-name = "highlightsmith_desktop_lib"
+name = "vaexcore_pulse_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

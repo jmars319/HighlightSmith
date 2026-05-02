@@ -1,4 +1,4 @@
-@import "@highlightsmith/ui/styles.css";
+@import "@vaexcore/pulse-ui/styles.css";
 
 :root {
   color-scheme: dark;
@@ -1234,7 +1234,7 @@ h3 {
   align-items: center;
 }
 
-.review-panel-primary .hs-block {
+.review-panel-primary .vcp-block {
   margin-top: 12px;
 }
 

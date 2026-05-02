@@ -1,8 +1,8 @@
-import { buildCandidateTranscriptContext } from "@highlightsmith/domain";
+import { buildCandidateTranscriptContext } from "@vaexcore/pulse-domain";
 import type {
   CandidateWindow,
   TranscriptChunk,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 import { formatLongTime, percentage } from "../lib/format";
 
 type TranscriptContextPeekProps = {
@@ -94,7 +94,8 @@ export function TranscriptContextPeek({
                         {formatLongTime(chunk.startSeconds)} to{" "}
                         {formatLongTime(chunk.endSeconds)}
                       </span>
-                      {chunk.confidence !== undefined && chunk.confidence > 0.05 ? (
+                      {chunk.confidence !== undefined &&
+                      chunk.confidence > 0.05 ? (
                         <span>{percentage(chunk.confidence)}</span>
                       ) : null}
                     </div>
@@ -109,7 +110,7 @@ export function TranscriptContextPeek({
                 </div>
                 <p>{candidate.transcriptSnippet}</p>
                 <small>
-                  No stored transcript chunk overlaps this moment, so HS is
+                  No stored transcript chunk overlaps this moment, so VCP is
                   showing the snippet it saved during analysis instead.
                 </small>
               </article>
@@ -123,7 +124,7 @@ export function TranscriptContextPeek({
       {totalContextChunks === 0 && transcript.length === 0 ? (
         <p className="context-summary-copy">
           No transcript chunks were saved for this session, so context review is
-          limited to the snippet HS saved during analysis.
+          limited to the snippet VCP saved during analysis.
         </p>
       ) : null}
     </section>

@@ -5,14 +5,14 @@ import { afterEach, describe, it } from "node:test";
 import { once } from "node:events";
 import os from "node:os";
 import path from "node:path";
-import { buildProjectSummary } from "@highlightsmith/domain";
-import { createMockProjectSession } from "@highlightsmith/shared-types/testing";
+import { buildProjectSummary } from "@vaexcore/pulse-domain";
+import { createMockProjectSession } from "@vaexcore/pulse-shared-types/testing";
 import { buildApp } from "./app";
 
 describe("api smoke routes", () => {
   afterEach(() => {
-    delete process.env.HIGHLIGHTSMITH_ANALYZER_URL;
-    delete process.env.HIGHLIGHTSMITH_ANALYZER_TIMEOUT_MS;
+    delete process.env.VAEXCORE_PULSE_ANALYZER_URL;
+    delete process.env.VAEXCORE_PULSE_ANALYZER_TIMEOUT_MS;
   });
 
   it("serves the health endpoint", async () => {
@@ -44,12 +44,12 @@ describe("api smoke routes", () => {
   it("streams local media files with byte-range support", async () => {
     const previewCacheDirectory = path.join(
       os.tmpdir(),
-      "highlightsmith-preview-clips",
+      "vaexcore-pulse-preview-clips",
     );
     await rm(previewCacheDirectory, { recursive: true, force: true });
     await mkdir(previewCacheDirectory, { recursive: true });
     const tempDirectory = await mkdtemp(
-      path.join(os.tmpdir(), "highlightsmith-api-media-"),
+      path.join(os.tmpdir(), "vaexcore-pulse-api-media-"),
     );
     const mediaPath = path.join(previewCacheDirectory, "preview.mp4");
     const outsideMediaPath = path.join(tempDirectory, "outside-preview.mp4");
@@ -87,10 +87,7 @@ describe("api smoke routes", () => {
       });
 
       assert.equal(forbiddenResponse.statusCode, 403);
-      assert.equal(
-        forbiddenResponse.json().error,
-        "media_path_forbidden",
-      );
+      assert.equal(forbiddenResponse.json().error, "media_path_forbidden");
     } finally {
       await app.close();
       await rm(tempDirectory, { recursive: true, force: true });
@@ -147,7 +144,7 @@ describe("api smoke routes", () => {
       throw new Error("Failed to bind analyzer test server");
     }
 
-    process.env.HIGHLIGHTSMITH_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
+    process.env.VAEXCORE_PULSE_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
 
     const app = await buildApp();
     try {
@@ -177,7 +174,7 @@ describe("api smoke routes", () => {
   });
 
   it("reports an unreachable analyzer bridge cleanly", async () => {
-    process.env.HIGHLIGHTSMITH_ANALYZER_URL = "http://127.0.0.1:1";
+    process.env.VAEXCORE_PULSE_ANALYZER_URL = "http://127.0.0.1:1";
     const app = await buildApp();
 
     try {
@@ -209,8 +206,8 @@ describe("api smoke routes", () => {
       throw new Error("Failed to bind analyzer test server");
     }
 
-    process.env.HIGHLIGHTSMITH_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
-    process.env.HIGHLIGHTSMITH_ANALYZER_TIMEOUT_MS = "50";
+    process.env.VAEXCORE_PULSE_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
+    process.env.VAEXCORE_PULSE_ANALYZER_TIMEOUT_MS = "50";
 
     const app = await buildApp();
     try {
@@ -257,7 +254,7 @@ describe("api smoke routes", () => {
       note: "Hold for deadpan timing.",
       status: "REFERENCE_ONLY",
       statusDetail:
-        "Remote clip retrieval is not enabled yet. HighlightSmith is storing this reference for future matching work.",
+        "Remote clip retrieval is not enabled yet. vaexcore pulse is storing this reference for future matching work.",
       createdAt: "2026-04-11T00:00:00.000Z",
       updatedAt: "2026-04-11T00:00:00.000Z",
     };
@@ -325,7 +322,7 @@ describe("api smoke routes", () => {
       throw new Error("Failed to bind analyzer test server");
     }
 
-    process.env.HIGHLIGHTSMITH_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
+    process.env.VAEXCORE_PULSE_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
 
     const app = await buildApp();
     try {
@@ -396,7 +393,8 @@ describe("api smoke routes", () => {
       title: "Global opener reference",
       note: "Reusable clip example.",
       status: "LOCAL_FILE_AVAILABLE",
-      statusDetail: "Local clip summary is ready for heuristic profile matching.",
+      statusDetail:
+        "Local clip summary is ready for heuristic profile matching.",
       featureSummary: {
         methodVersion: "LOCAL_FILE_HEURISTIC_V2",
         generatedAt: "2026-04-20T12:00:00.000Z",
@@ -435,12 +433,12 @@ describe("api smoke routes", () => {
         generatedAt: "2026-04-20T12:10:10.000Z",
         sourcePath: "/tmp/global-clip.mp4",
         sampleWindowCount: 8,
-        note:
-          "Bounded ffmpeg thumbnail suggestions scored from local activity buckets and simple visual clarity heuristics.",
+        note: "Bounded ffmpeg thumbnail suggestions scored from local activity buckets and simple visual clarity heuristics.",
         suggestions: [
           {
             id: "thumbnail_asset_clip_global_001_11000",
-            imagePath: "/tmp/highlightsmith-thumbnails/asset_clip_global_001_01.jpg",
+            imagePath:
+              "/tmp/vaexcore-pulse-thumbnails/asset_clip_global_001_01.jpg",
             timestampSeconds: 11,
             score: 0.73,
             activityScore: 0.68,
@@ -451,7 +449,8 @@ describe("api smoke routes", () => {
           },
           {
             id: "thumbnail_asset_clip_global_001_29000",
-            imagePath: "/tmp/highlightsmith-thumbnails/asset_clip_global_001_02.jpg",
+            imagePath:
+              "/tmp/vaexcore-pulse-thumbnails/asset_clip_global_001_02.jpg",
             timestampSeconds: 29,
             score: 0.69,
             activityScore: 0.64,
@@ -469,7 +468,8 @@ describe("api smoke routes", () => {
             id: "thumb_output_001",
             assetId: "asset_clip_global_001",
             sourceSuggestionId: "thumbnail_asset_clip_global_001_11000",
-            imagePath: "/tmp/highlightsmith-thumbnails/asset_clip_global_001_01.jpg",
+            imagePath:
+              "/tmp/vaexcore-pulse-thumbnails/asset_clip_global_001_01.jpg",
             timestampSeconds: 11,
             score: 0.73,
             activityScore: 0.68,
@@ -495,7 +495,8 @@ describe("api smoke routes", () => {
             id: "thumb_output_002",
             assetId: "asset_clip_global_001",
             sourceSuggestionId: "thumbnail_asset_clip_global_001_29000",
-            imagePath: "/tmp/highlightsmith-thumbnails/asset_clip_global_001_02.jpg",
+            imagePath:
+              "/tmp/vaexcore-pulse-thumbnails/asset_clip_global_001_02.jpg",
             timestampSeconds: 29,
             score: 0.69,
             activityScore: 0.64,
@@ -594,8 +595,7 @@ describe("api smoke routes", () => {
           fingerprint: "fedcba98765432100000",
         },
       ],
-      note:
-        "Bounded byte-sampled audio proxy for coarse future matching.",
+      note: "Bounded byte-sampled audio proxy for coarse future matching.",
       createdAt: "2026-04-20T12:10:00.000Z",
       updatedAt: "2026-04-20T12:10:00.000Z",
     };
@@ -612,8 +612,7 @@ describe("api smoke routes", () => {
       payloadByteSize: 420,
       sampleWindowCount: 8,
       thumbnailSuggestions: asset.thumbnailSuggestionSet.suggestions,
-      note:
-        "Bounded ffmpeg thumbnail suggestions scored from local activity buckets and simple visual clarity heuristics.",
+      note: "Bounded ffmpeg thumbnail suggestions scored from local activity buckets and simple visual clarity heuristics.",
       createdAt: "2026-04-20T12:10:10.000Z",
       updatedAt: "2026-04-20T12:10:10.000Z",
     };
@@ -734,7 +733,10 @@ describe("api smoke routes", () => {
         return;
       }
 
-      if (request.method === "GET" && request.url === "/library/index-artifacts") {
+      if (
+        request.method === "GET" &&
+        request.url === "/library/index-artifacts"
+      ) {
         response.setHeader("content-type", "application/json");
         response.end(
           JSON.stringify({
@@ -759,7 +761,10 @@ describe("api smoke routes", () => {
         return;
       }
 
-      if (request.method === "GET" && request.url === "/library/alignment-jobs") {
+      if (
+        request.method === "GET" &&
+        request.url === "/library/alignment-jobs"
+      ) {
         response.setHeader("content-type", "application/json");
         response.end(
           JSON.stringify({
@@ -770,7 +775,10 @@ describe("api smoke routes", () => {
         return;
       }
 
-      if (request.method === "GET" && request.url === "/library/alignment-matches") {
+      if (
+        request.method === "GET" &&
+        request.url === "/library/alignment-matches"
+      ) {
         response.setHeader("content-type", "application/json");
         response.end(
           JSON.stringify({
@@ -795,7 +803,10 @@ describe("api smoke routes", () => {
         return;
       }
 
-      if (request.method === "POST" && request.url === "/library/alignment-jobs") {
+      if (
+        request.method === "POST" &&
+        request.url === "/library/alignment-jobs"
+      ) {
         response.setHeader("content-type", "application/json");
         response.end(
           JSON.stringify({
@@ -860,7 +871,11 @@ describe("api smoke routes", () => {
         response.end(
           JSON.stringify({
             status: "cancelled",
-            job: { ...indexJob, status: "CANCELLED", cancelledAt: "2026-04-20T12:11:00.000Z" },
+            job: {
+              ...indexJob,
+              status: "CANCELLED",
+              cancelledAt: "2026-04-20T12:11:00.000Z",
+            },
           }),
         );
         return;
@@ -878,7 +893,7 @@ describe("api smoke routes", () => {
       throw new Error("Failed to bind analyzer test server");
     }
 
-    process.env.HIGHLIGHTSMITH_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
+    process.env.VAEXCORE_PULSE_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
 
     const app = await buildApp();
     try {
@@ -991,17 +1006,29 @@ describe("api smoke routes", () => {
       const listedPairs = listPairsResponse.json() as Array<{ id: string }>;
       const createdPair = createPairResponse.json() as { id: string };
       const listedJobs = listIndexJobsResponse.json() as Array<{ id: string }>;
-      const listedArtifacts = listIndexArtifactsResponse.json() as Array<{ id: string }>;
-      const replacedThumbnailOutputsAsset = replaceThumbnailOutputsResponse.json() as {
+      const listedArtifacts = listIndexArtifactsResponse.json() as Array<{
         id: string;
-        thumbnailOutputSet?: { outputs: Array<{ id: string }> };
+      }>;
+      const replacedThumbnailOutputsAsset =
+        replaceThumbnailOutputsResponse.json() as {
+          id: string;
+          thumbnailOutputSet?: { outputs: Array<{ id: string }> };
+        };
+      const listedAssetArtifacts =
+        listAssetIndexArtifactsResponse.json() as Array<{ id: string }>;
+      const listedAlignmentJobs = listAlignmentJobsResponse.json() as Array<{
+        id: string;
+      }>;
+      const listedAlignmentMatches =
+        listAlignmentMatchesResponse.json() as Array<{ id: string }>;
+      const listedPairAlignmentMatches =
+        listPairAlignmentMatchesResponse.json() as Array<{ id: string }>;
+      const createdAlignmentJob = createAlignmentJobResponse.json() as {
+        id: string;
       };
-      const listedAssetArtifacts = listAssetIndexArtifactsResponse.json() as Array<{ id: string }>;
-      const listedAlignmentJobs = listAlignmentJobsResponse.json() as Array<{ id: string }>;
-      const listedAlignmentMatches = listAlignmentMatchesResponse.json() as Array<{ id: string }>;
-      const listedPairAlignmentMatches = listPairAlignmentMatchesResponse.json() as Array<{ id: string }>;
-      const createdAlignmentJob = createAlignmentJobResponse.json() as { id: string };
-      const createdPairAlignmentJob = createPairAlignmentJobResponse.json() as { id: string };
+      const createdPairAlignmentJob = createPairAlignmentJobResponse.json() as {
+        id: string;
+      };
       const cancelledAlignmentJob = cancelAlignmentJobResponse.json() as {
         id: string;
         status: string;
@@ -1075,7 +1102,7 @@ describe("api smoke routes", () => {
       throw new Error("Failed to bind analyzer test server");
     }
 
-    process.env.HIGHLIGHTSMITH_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
+    process.env.VAEXCORE_PULSE_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
 
     const app = await buildApp();
     try {
@@ -1153,7 +1180,7 @@ describe("api smoke routes", () => {
       throw new Error("Failed to bind analyzer test server");
     }
 
-    process.env.HIGHLIGHTSMITH_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
+    process.env.VAEXCORE_PULSE_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
 
     const app = await buildApp();
     try {
@@ -1233,7 +1260,7 @@ describe("api smoke routes", () => {
       throw new Error("Failed to bind analyzer test server");
     }
 
-    process.env.HIGHLIGHTSMITH_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
+    process.env.VAEXCORE_PULSE_ANALYZER_URL = `http://127.0.0.1:${address.port}`;
 
     const app = await buildApp();
     try {

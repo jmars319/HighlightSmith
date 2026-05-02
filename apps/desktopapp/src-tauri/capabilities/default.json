@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the HighlightSmith desktop shell.",
+  "description": "Default capability for the vaexcore pulse desktop shell.",
   "windows": ["main"],
   "permissions": ["core:default", "dialog:default"]
 }

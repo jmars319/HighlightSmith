@@ -2,11 +2,11 @@ import {
   defaultReviewQueueMode,
   filterCandidatesByReviewMode,
   type ReviewQueueMode,
-} from "@highlightsmith/domain";
-import type { ProjectSession } from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-domain";
+import type { ProjectSession } from "@vaexcore/pulse-shared-types";
 
 const sessionResumeStorageKeyPrefix =
-  "highlightsmith.desktop.session-resume-state.";
+  "vaexcore-pulse.desktop.session-resume-state.";
 
 export type SessionResumeState = {
   selectedCandidateId: string | null;
@@ -49,7 +49,9 @@ export function loadSessionResumeState(
           ? parsed.queueIndex
           : null,
       updatedAt:
-        typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
+        typeof parsed.updatedAt === "string"
+          ? parsed.updatedAt
+          : new Date().toISOString(),
     };
   } catch {
     return null;
@@ -79,7 +81,7 @@ export function resolveSessionResumeState(
     storedState?.reviewQueueMode === "ONLY_PENDING" &&
     fallbackReviewQueueMode === "ALL"
       ? "ALL"
-      : storedState?.reviewQueueMode ?? fallbackReviewQueueMode;
+      : (storedState?.reviewQueueMode ?? fallbackReviewQueueMode);
   const visibleQueueCandidates = filterCandidatesByReviewMode(
     session.candidates,
     session,

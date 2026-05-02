@@ -17,7 +17,7 @@ pub fn run() {
             open_media_in_quicktime
         ])
         .run(tauri::generate_context!())
-        .expect("failed to run HighlightSmith desktop shell");
+        .expect("failed to run vaexcore pulse desktop shell");
 }
 
 #[tauri::command]
@@ -82,7 +82,7 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
             video_codec: None,
             audio_codec: None,
             detail: format!(
-                "HighlightSmith can still see the file path, but macOS did not allow the app to read it: {}",
+                "vaexcore pulse can still see the file path, but macOS did not allow the app to read it: {}",
                 media_path
             ),
         });
@@ -106,10 +106,10 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
         Ok(output) => output,
         Err(error) => {
             let detail = if error.kind() == std::io::ErrorKind::NotFound {
-                "The file exists, but ffprobe is not installed, so HS could not inspect the media stream details.".to_string()
+                "The file exists, but ffprobe is not installed, so VCP could not inspect the media stream details.".to_string()
             } else {
                 format!(
-                    "The file exists, but HS could not run ffprobe to inspect it: {}",
+                    "The file exists, but VCP could not run ffprobe to inspect it: {}",
                     error
                 )
             };
@@ -192,7 +192,7 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
             "The file exists and ffprobe read it successfully (video {}). The embedded preview may not support this playback path or missing audio stream.",
             video
         ),
-        _ => "The file exists and ffprobe could read it, but HS could not identify a normal video/audio stream combination for the embedded player.".to_string(),
+        _ => "The file exists and ffprobe could read it, but VCP could not identify a normal video/audio stream combination for the embedded player.".to_string(),
     };
 
     Ok(MediaPlaybackInspection {
@@ -221,7 +221,7 @@ fn prepare_media_preview_clip(
 
     if File::open(path).is_err() {
         return Err(format!(
-            "HighlightSmith could not read this local file to prepare an in-app preview clip: {}",
+            "vaexcore pulse could not read this local file to prepare an in-app preview clip: {}",
             media_path
         ));
     }
@@ -230,19 +230,19 @@ fn prepare_media_preview_clip(
         Ok(output) if output.status.success() => {}
         Ok(_) => {
             return Err(
-                "HighlightSmith could not verify ffmpeg, so it cannot prepare an in-app preview clip."
+                "vaexcore pulse could not verify ffmpeg, so it cannot prepare an in-app preview clip."
                     .to_string(),
             )
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Err(
-                "HighlightSmith needs ffmpeg installed locally to prepare in-app preview clips."
+                "vaexcore pulse needs ffmpeg installed locally to prepare in-app preview clips."
                     .to_string(),
             )
         }
         Err(error) => {
             return Err(format!(
-                "HighlightSmith could not start ffmpeg to prepare this preview clip: {}",
+                "vaexcore pulse could not start ffmpeg to prepare this preview clip: {}",
                 error
             ))
         }
@@ -293,7 +293,7 @@ fn prepare_media_preview_clip(
                 file_size_bytes: Some(existing_metadata.len()),
                 duration_seconds: clip_duration_seconds,
                 detail:
-                    "HS reused a cached in-app preview clip for this moment.".to_string(),
+                    "VCP reused a cached in-app preview clip for this moment.".to_string(),
             });
         }
 
@@ -336,12 +336,12 @@ fn prepare_media_preview_clip(
             "+faststart",
             preview_path
                 .to_str()
-                .ok_or_else(|| "HS could not resolve a preview clip path.".to_string())?,
+                .ok_or_else(|| "VCP could not resolve a preview clip path.".to_string())?,
         ])
         .output()
         .map_err(|error| {
             format!(
-                "HighlightSmith could not run ffmpeg to prepare this preview clip: {}",
+                "vaexcore pulse could not run ffmpeg to prepare this preview clip: {}",
                 error
             )
         })?;
@@ -353,13 +353,13 @@ fn prepare_media_preview_clip(
             .to_string();
         if stderr.is_empty() {
             return Err(
-                "HighlightSmith could not generate an in-app preview clip for this moment."
+                "vaexcore pulse could not generate an in-app preview clip for this moment."
                     .to_string(),
             );
         }
 
         return Err(format!(
-            "HighlightSmith could not generate an in-app preview clip for this moment: {}",
+            "vaexcore pulse could not generate an in-app preview clip for this moment: {}",
             stderr
         ));
     }
@@ -371,7 +371,7 @@ fn prepare_media_preview_clip(
         reused_existing: false,
         file_size_bytes: Some(preview_metadata.len()),
         duration_seconds: clip_duration_seconds,
-        detail: "HS prepared a temporary in-app preview clip for this moment."
+        detail: "VCP prepared a temporary in-app preview clip for this moment."
             .to_string(),
     })
 }
@@ -423,19 +423,19 @@ end tell
                 .map_err(|error| error.to_string())?;
             if fallback.success() {
                 if stderr.is_empty() {
-                    Ok("Opened this file in QuickTime, but HS could not jump to the exact timestamp automatically.".to_string())
+                    Ok("Opened this file in QuickTime, but VCP could not jump to the exact timestamp automatically.".to_string())
                 } else {
                     Ok(format!(
-                        "Opened this file in QuickTime, but HS could not jump to the exact timestamp automatically: {}",
+                        "Opened this file in QuickTime, but VCP could not jump to the exact timestamp automatically: {}",
                         stderr
                     ))
                 }
             } else {
-                Err("HS could not launch QuickTime for this file.".to_string())
+                Err("VCP could not launch QuickTime for this file.".to_string())
             }
         }
         Err(error) => Err(format!(
-            "HS could not launch the QuickTime fallback: {}",
+            "VCP could not launch the QuickTime fallback: {}",
             error
         )),
     }
@@ -493,7 +493,7 @@ fn cleanup_old_preview_clips(cache_dir: &Path) {
 }
 
 fn preview_cache_dir() -> std::path::PathBuf {
-    std::env::temp_dir().join("highlightsmith-preview-clips")
+    std::env::temp_dir().join("vaexcore-pulse-preview-clips")
 }
 
 fn sanitize_file_stem(file_stem: &str) -> String {

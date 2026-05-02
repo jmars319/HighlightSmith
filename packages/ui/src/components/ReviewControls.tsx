@@ -24,9 +24,9 @@ export function ReviewControls({
   disabled = false,
 }: ReviewControlsProps) {
   return (
-    <section className="hs-block">
-      <span className="hs-block-label">{blockLabel}</span>
-      <div className="hs-controls-row hs-controls-row-actions">
+    <section className="vcp-block">
+      <span className="vcp-block-label">{blockLabel}</span>
+      <div className="vcp-controls-row vcp-controls-row-actions">
         <button disabled={disabled} onClick={onAccept} type="button">
           Keep
         </button>
@@ -40,7 +40,7 @@ export function ReviewControls({
         ) : null}
       </div>
       {showLabelEditor ? (
-        <div className="hs-controls-row hs-controls-row-label">
+        <div className="vcp-controls-row vcp-controls-row-label">
           <input
             disabled={disabled}
             onChange={(event) => onLabelChange(event.target.value)}

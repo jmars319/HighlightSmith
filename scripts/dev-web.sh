@@ -7,5 +7,5 @@ section "Web Dev"
 require_cmd pnpm
 info "Starting webapp"
 note "Expected URL: http://127.0.0.1:1430"
-print_command pnpm --filter @highlightsmith/webapp dev
-run_from_root pnpm --filter @highlightsmith/webapp dev
+print_command pnpm --filter @vaexcore/pulse-webapp dev
+run_from_root pnpm --filter @vaexcore/pulse-webapp dev

@@ -2,7 +2,7 @@ import type {
   CandidateWindow,
   MediaSource,
   ReviewDecision,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 
 export function toJsonCandidateExport(
   mediaSource: MediaSource,
@@ -64,7 +64,7 @@ export function toEdlPlaceholder(
   candidates: CandidateWindow[],
 ): string {
   return [
-    "TITLE: HighlightSmith Placeholder EDL",
+    "TITLE: vaexcore pulse Placeholder EDL",
     `SOURCE FILE: ${mediaSource.fileName}`,
     "NOTE: Real EDL generation is intentionally deferred.",
     `CANDIDATE COUNT: ${candidates.length}`,

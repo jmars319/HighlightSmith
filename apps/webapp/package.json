@@ -1,5 +1,5 @@
 {
-  "name": "@highlightsmith/webapp",
+  "name": "@vaexcore/pulse-webapp",
   "private": true,
   "version": "0.2.0",
   "type": "module",
@@ -10,10 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@highlightsmith/domain": "workspace:*",
-    "@highlightsmith/profiles": "workspace:*",
-    "@highlightsmith/shared-types": "workspace:*",
-    "@highlightsmith/ui": "workspace:*",
+    "@vaexcore/pulse-domain": "workspace:*",
+    "@vaexcore/pulse-profiles": "workspace:*",
+    "@vaexcore/pulse-shared-types": "workspace:*",
+    "@vaexcore/pulse-ui": "workspace:*",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

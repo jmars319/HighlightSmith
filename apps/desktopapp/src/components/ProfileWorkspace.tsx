@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { supportedInputExtensions } from "@highlightsmith/media";
+import { supportedInputExtensions } from "@vaexcore/pulse-media";
 import type {
   AddExampleClipRequest,
   CancelMediaAlignmentJobRequest,
@@ -22,7 +22,7 @@ import type {
   MediaLibraryAssetScope,
   MediaLibraryAssetType,
   ReplaceMediaThumbnailOutputsRequest,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 
 type ProfileWorkspaceProps = {
   profiles: ClipProfile[];
@@ -56,12 +56,8 @@ type ProfileWorkspaceProps = {
     profileId: string,
     input: AddExampleClipRequest,
   ) => Promise<void>;
-  onCreateMediaAsset: (
-    input: CreateMediaLibraryAssetRequest,
-  ) => Promise<void>;
-  onCreateMediaIndexJob: (
-    input: CreateMediaIndexJobRequest,
-  ) => Promise<void>;
+  onCreateMediaAsset: (input: CreateMediaLibraryAssetRequest) => Promise<void>;
+  onCreateMediaIndexJob: (input: CreateMediaIndexJobRequest) => Promise<void>;
   onReplaceThumbnailOutputs: (
     assetId: string,
     input: ReplaceMediaThumbnailOutputsRequest,
@@ -69,9 +65,7 @@ type ProfileWorkspaceProps = {
   onCreateMediaAlignmentJob: (
     input: CreateMediaAlignmentJobRequest,
   ) => Promise<void>;
-  onCancelMediaIndexJob: (
-    input: CancelMediaIndexJobRequest,
-  ) => Promise<void>;
+  onCancelMediaIndexJob: (input: CancelMediaIndexJobRequest) => Promise<void>;
   onCancelMediaAlignmentJob: (
     input: CancelMediaAlignmentJobRequest,
   ) => Promise<void>;
@@ -105,8 +99,9 @@ const sourceTypeOptions: Array<{
   },
 ];
 
-const localOnlySourceTypeOptions = sourceTypeOptions.filter((option) =>
-  option.id === "LOCAL_FILE_UPLOAD" || option.id === "LOCAL_FILE_PATH",
+const localOnlySourceTypeOptions = sourceTypeOptions.filter(
+  (option) =>
+    option.id === "LOCAL_FILE_UPLOAD" || option.id === "LOCAL_FILE_PATH",
 );
 
 export function ProfileWorkspace({
@@ -159,7 +154,8 @@ export function ProfileWorkspace({
   const [profileEditTitle, setProfileEditTitle] = useState("");
   const [profileEditNote, setProfileEditNote] = useState("");
   const [assetType, setAssetType] = useState<MediaLibraryAssetType>("CLIP");
-  const [assetScope, setAssetScope] = useState<MediaLibraryAssetScope>("GLOBAL");
+  const [assetScope, setAssetScope] =
+    useState<MediaLibraryAssetScope>("GLOBAL");
   const [assetSourceType, setAssetSourceType] =
     useState<ExampleClipSourceType>("LOCAL_FILE_PATH");
   const [assetSourceValue, setAssetSourceValue] = useState("");
@@ -194,11 +190,14 @@ export function ProfileWorkspace({
   const globalClipCount = libraryAssets.filter(
     (asset) => asset.assetType === "CLIP" && asset.scope === "GLOBAL",
   ).length;
-  const vodAssetOptions = libraryAssets.filter((asset) => asset.assetType === "VOD");
+  const vodAssetOptions = libraryAssets.filter(
+    (asset) => asset.assetType === "VOD",
+  );
   const editAssetOptions = libraryAssets.filter(
     (asset) => asset.assetType === "EDIT",
   );
-  const selectedProfileReferenceCount = selectedProfile?.exampleClips.length ?? 0;
+  const selectedProfileReferenceCount =
+    selectedProfile?.exampleClips.length ?? 0;
   const selectedProfileEditReferenceCount =
     selectedProfile?.exampleClips.filter(
       (example) => example.referenceKind === "PROFILE_EDIT",
@@ -374,7 +373,10 @@ export function ProfileWorkspace({
       await onCreateMediaAsset({
         assetType,
         scope: assetScope,
-        profileId: assetScope === "PROFILE" ? selectedProfileId ?? undefined : undefined,
+        profileId:
+          assetScope === "PROFILE"
+            ? (selectedProfileId ?? undefined)
+            : undefined,
         sourceType: assetSourceType,
         sourceValue: assetSourceValue.trim(),
         title: assetTitle.trim() || undefined,
@@ -404,7 +406,10 @@ export function ProfileWorkspace({
       await onCreateMediaPair({
         vodAssetId: selectedVodAssetId,
         editAssetId: selectedEditAssetId,
-        profileId: pairScope === "PROFILE" ? selectedProfileId ?? undefined : undefined,
+        profileId:
+          pairScope === "PROFILE"
+            ? (selectedProfileId ?? undefined)
+            : undefined,
         title: pairTitle.trim() || undefined,
         note: pairNote.trim() || undefined,
       });
@@ -597,9 +602,18 @@ export function ProfileWorkspace({
 
           {selectedProfile ? (
             <ol className="plain-list ordered reference-step-list">
-              <li>Add a few short clips that capture the kinds of moments you want more of.</li>
-              <li>Add one finished edited video so HS can learn what survives a real cut.</li>
-              <li>Use the media lab later for VOD libraries, background analysis, or VOD/edit comparisons.</li>
+              <li>
+                Add a few short clips that capture the kinds of moments you want
+                more of.
+              </li>
+              <li>
+                Add one finished edited video so VCP can learn what survives a
+                real cut.
+              </li>
+              <li>
+                Use the media lab later for VOD libraries, background analysis,
+                or VOD/edit comparisons.
+              </li>
             </ol>
           ) : (
             <p className="queue-summary-copy">
@@ -616,7 +630,7 @@ export function ProfileWorkspace({
                 <span className="detail-label">Add reusable clip</span>
                 <h2>Add reusable clips</h2>
                 <p>
-                  Use clips for short reusable moments you want HS to find
+                  Use clips for short reusable moments you want VCP to find
                   again.
                 </p>
               </div>
@@ -719,9 +733,7 @@ export function ProfileWorkspace({
                   }}
                   type="button"
                 >
-                  {isAddingExample
-                    ? "Saving example..."
-                    : "Add clip reference"}
+                  {isAddingExample ? "Saving example..." : "Add clip reference"}
                 </button>
               </div>
             </div>
@@ -733,7 +745,7 @@ export function ProfileWorkspace({
                 <span className="detail-label">Add edited video</span>
                 <h2>Add one finished edit</h2>
                 <p>
-                  Use a finished edited video to show HS what actually survived
+                  Use a finished edited video to show VCP what actually survived
                   your longform editorial pass.
                 </p>
               </div>
@@ -760,7 +772,7 @@ export function ProfileWorkspace({
                 </select>
                 <small className="analysis-field-note">
                   Choose a local file or paste a local path for the finished
-                  edit you want HS to study.
+                  edit you want VCP to study.
                 </small>
               </label>
 
@@ -799,7 +811,9 @@ export function ProfileWorkspace({
                   <input
                     className="search-input"
                     disabled={!selectedProfile || isCreatingMediaAsset}
-                    onChange={(event) => setProfileEditTitle(event.target.value)}
+                    onChange={(event) =>
+                      setProfileEditTitle(event.target.value)
+                    }
                     placeholder="March 12 final cut"
                     type="text"
                     value={profileEditTitle}
@@ -812,7 +826,7 @@ export function ProfileWorkspace({
                     className="search-input"
                     disabled={!selectedProfile || isCreatingMediaAsset}
                     onChange={(event) => setProfileEditNote(event.target.value)}
-                    placeholder="What this edit teaches HS"
+                    placeholder="What this edit teaches VCP"
                     type="text"
                     value={profileEditNote}
                   />
@@ -880,7 +894,8 @@ export function ProfileWorkspace({
                 ) : null}
                 {example.featureSummary ? (
                   <p className="queue-summary-copy">
-                    {formatReferenceSummaryLabel(example.referenceKind)} • duration{" "}
+                    {formatReferenceSummaryLabel(example.referenceKind)} •
+                    duration{" "}
                     {Math.round(example.featureSummary.durationSeconds)}s
                     {example.featureSummary.transcriptAnchorTerms.length > 0
                       ? ` • anchors ${formatTranscriptAnchors(example.featureSummary.transcriptAnchorTerms)}`
@@ -906,12 +921,13 @@ export function ProfileWorkspace({
                 <div className="panel-header">
                   <div>
                     <span className="detail-label">Background work</span>
-                    <h2>HS is still working in the background</h2>
+                    <h2>VCP is still working in the background</h2>
                     <p>
                       {describeBackgroundActivity(
                         activeIndexJobCount,
                         activeAlignmentJobCount,
-                      )} You can keep adding references while this finishes.
+                      )}{" "}
+                      You can keep adding references while this finishes.
                     </p>
                   </div>
                   <span className="session-state-pill next-target">
@@ -934,650 +950,742 @@ export function ProfileWorkspace({
                 </span>
               </summary>
 
-            <article className="utility-block">
-              <div className="panel-header">
-                <div>
-                  <span className="detail-label">Background activity</span>
-                  <h2>Recent background work</h2>
+              <article className="utility-block">
+                <div className="panel-header">
+                  <div>
+                    <span className="detail-label">Background activity</span>
+                    <h2>Recent background work</h2>
+                  </div>
+                  <span className="queue-count">
+                    {isLoadingMediaIndexJobs || isLoadingMediaAlignmentJobs
+                      ? "Refreshing…"
+                      : `${recentBackgroundActivity.length} jobs`}
+                  </span>
                 </div>
-                <span className="queue-count">
-                  {isLoadingMediaIndexJobs || isLoadingMediaAlignmentJobs
-                    ? "Refreshing…"
-                    : `${recentBackgroundActivity.length} jobs`}
-                </span>
-              </div>
 
-              {recentBackgroundActivity.length === 0 ? (
-                <p className="queue-summary-copy">
-                  No background jobs have been started yet.
-                </p>
-              ) : null}
+                {recentBackgroundActivity.length === 0 ? (
+                  <p className="queue-summary-copy">
+                    No background jobs have been started yet.
+                  </p>
+                ) : null}
 
-              <div className="profile-example-list">
-                {recentBackgroundActivity.slice(0, 6).map((item) => {
-                  if (item.kind === "INDEX") {
-                    const asset = mediaAssetById.get(item.job.assetId);
+                <div className="profile-example-list">
+                  {recentBackgroundActivity.slice(0, 6).map((item) => {
+                    if (item.kind === "INDEX") {
+                      const asset = mediaAssetById.get(item.job.assetId);
+                      return (
+                        <article
+                          className="profile-example-card"
+                          key={item.job.id}
+                        >
+                          <div className="profile-example-top">
+                            <span className="detail-label">
+                              {asset
+                                ? `${formatAssetType(asset.assetType)} analysis`
+                                : "Asset analysis"}
+                            </span>
+                            <span className="session-state-pill active-session">
+                              {formatIndexJobStatus(item.job.status)}
+                            </span>
+                          </div>
+                          <strong>
+                            {asset?.title ||
+                              asset?.sourceValue ||
+                              item.job.assetId}
+                          </strong>
+                          <p className="queue-summary-copy">
+                            {Math.round(item.job.progress * 100)}% •{" "}
+                            {item.job.statusDetail}
+                          </p>
+                          {item.job.result ? (
+                            <p className="queue-summary-copy">
+                              Result • {formatIndexSummary(item.job.result)}
+                            </p>
+                          ) : null}
+                          {item.job.errorMessage ? (
+                            <p className="analysis-error">
+                              {item.job.errorMessage}
+                            </p>
+                          ) : null}
+                        </article>
+                      );
+                    }
+
+                    const pair = item.job.pairId
+                      ? mediaEditPairById.get(item.job.pairId)
+                      : undefined;
+                    const sourceAsset = mediaAssetById.get(
+                      item.job.sourceAssetId,
+                    );
+                    const queryAsset = mediaAssetById.get(
+                      item.job.queryAssetId,
+                    );
                     return (
-                      <article className="profile-example-card" key={item.job.id}>
+                      <article
+                        className="profile-example-card"
+                        key={item.job.id}
+                      >
                         <div className="profile-example-top">
                           <span className="detail-label">
-                            {asset ? `${formatAssetType(asset.assetType)} analysis` : "Asset analysis"}
+                            VOD/edit comparison
                           </span>
                           <span className="session-state-pill active-session">
-                            {formatIndexJobStatus(item.job.status)}
+                            {formatAlignmentJobStatus(item.job.status)}
                           </span>
                         </div>
                         <strong>
-                          {asset?.title || asset?.sourceValue || item.job.assetId}
+                          {pair?.title ||
+                            `${sourceAsset?.title || sourceAsset?.sourceValue || item.job.sourceAssetId} -> ${queryAsset?.title || queryAsset?.sourceValue || item.job.queryAssetId}`}
                         </strong>
                         <p className="queue-summary-copy">
-                          {Math.round(item.job.progress * 100)}% • {item.job.statusDetail}
+                          {Math.round(item.job.progress * 100)}% •{" "}
+                          {item.job.statusDetail}
                         </p>
-                        {item.job.result ? (
-                          <p className="queue-summary-copy">
-                            Result • {formatIndexSummary(item.job.result)}
-                          </p>
-                        ) : null}
+                        <p className="queue-summary-copy">
+                          {item.job.matchCount} candidate match
+                          {item.job.matchCount === 1 ? "" : "es"} • method{" "}
+                          {formatAlignmentMethod(item.job.method)}
+                        </p>
                         {item.job.errorMessage ? (
-                          <p className="analysis-error">{item.job.errorMessage}</p>
+                          <p className="analysis-error">
+                            {item.job.errorMessage}
+                          </p>
                         ) : null}
                       </article>
                     );
-                  }
-
-                  const pair = item.job.pairId
-                    ? mediaEditPairById.get(item.job.pairId)
-                    : undefined;
-                  const sourceAsset = mediaAssetById.get(item.job.sourceAssetId);
-                  const queryAsset = mediaAssetById.get(item.job.queryAssetId);
-                  return (
-                    <article className="profile-example-card" key={item.job.id}>
-                      <div className="profile-example-top">
-                        <span className="detail-label">VOD/edit comparison</span>
-                        <span className="session-state-pill active-session">
-                          {formatAlignmentJobStatus(item.job.status)}
-                        </span>
-                      </div>
-                      <strong>
-                        {pair?.title ||
-                          `${sourceAsset?.title || sourceAsset?.sourceValue || item.job.sourceAssetId} -> ${queryAsset?.title || queryAsset?.sourceValue || item.job.queryAssetId}`}
-                      </strong>
-                      <p className="queue-summary-copy">
-                        {Math.round(item.job.progress * 100)}% • {item.job.statusDetail}
-                      </p>
-                      <p className="queue-summary-copy">
-                        {item.job.matchCount} candidate match
-                        {item.job.matchCount === 1 ? "" : "es"} • method{" "}
-                        {formatAlignmentMethod(item.job.method)}
-                      </p>
-                      {item.job.errorMessage ? (
-                        <p className="analysis-error">{item.job.errorMessage}</p>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            </article>
+                  })}
+                </div>
+              </article>
             </details>
 
             <details className="utility-block internal-details advanced-lab-section">
               <summary className="internal-details-summary">
                 <span>Full media library</span>
                 <span className="queue-count">
-                  {isLoadingLibraryAssets ? "Refreshing…" : `${libraryAssets.length} saved`}
+                  {isLoadingLibraryAssets
+                    ? "Refreshing…"
+                    : `${libraryAssets.length} saved`}
                 </span>
               </summary>
 
-            <article className="utility-block">
-              <div className="panel-header">
-                <div>
-                  <span className="detail-label">Media library</span>
-                  <h2>VODs, edits, and reusable clips</h2>
-                  <p>
-                    Use this area when you need the full local library, not
-                    just profile references.
-                  </p>
+              <article className="utility-block">
+                <div className="panel-header">
+                  <div>
+                    <span className="detail-label">Media library</span>
+                    <h2>VODs, edits, and reusable clips</h2>
+                    <p>
+                      Use this area when you need the full local library, not
+                      just profile references.
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="analysis-summary-grid analysis-summary-grid-compact">
-                <article className="analysis-summary-card">
-                  <span className="detail-label">Assets</span>
-                  <strong>{libraryAssets.length}</strong>
-                  <p>
-                    {globalClipCount} global clip
-                    {globalClipCount === 1 ? "" : "s"} •{" "}
-                    {vodAssetOptions.length} VOD
-                    {vodAssetOptions.length === 1 ? "" : "s"} •{" "}
-                    {editAssetOptions.length} edit
-                    {editAssetOptions.length === 1 ? "" : "s"}
-                  </p>
-                </article>
-                <article className="analysis-summary-card">
-                  <span className="detail-label">VOD/edit comparisons</span>
-                  <strong>{mediaEditPairs.length}</strong>
-                  <p>
-                    Optional VOD/edit audits that preserve keep/remove outcomes
-                    and help surface missed moments.
-                  </p>
-                </article>
-                <article className="analysis-summary-card">
-                  <span className="detail-label">Scope</span>
-                  <strong>{selectedProfile ? selectedProfile.name : "Global only"}</strong>
-                  <p>
-                    Profile scope keeps references tied to the current profile.
-                    Global scope keeps them reusable across the whole library.
-                  </p>
-                </article>
-              </div>
-            </article>
-
-            <article className="utility-block">
-              <div className="panel-header">
-                <div>
-                  <span className="detail-label">Add media</span>
-                  <h2>Add a clip, edit, or VOD</h2>
-                  <p>
-                    Register any local media asset here when you need the full
-                    library workflow instead of the quick profile flow.
-                  </p>
+                <div className="analysis-summary-grid analysis-summary-grid-compact">
+                  <article className="analysis-summary-card">
+                    <span className="detail-label">Assets</span>
+                    <strong>{libraryAssets.length}</strong>
+                    <p>
+                      {globalClipCount} global clip
+                      {globalClipCount === 1 ? "" : "s"} •{" "}
+                      {vodAssetOptions.length} VOD
+                      {vodAssetOptions.length === 1 ? "" : "s"} •{" "}
+                      {editAssetOptions.length} edit
+                      {editAssetOptions.length === 1 ? "" : "s"}
+                    </p>
+                  </article>
+                  <article className="analysis-summary-card">
+                    <span className="detail-label">VOD/edit comparisons</span>
+                    <strong>{mediaEditPairs.length}</strong>
+                    <p>
+                      Optional VOD/edit audits that preserve keep/remove
+                      outcomes and help surface missed moments.
+                    </p>
+                  </article>
+                  <article className="analysis-summary-card">
+                    <span className="detail-label">Scope</span>
+                    <strong>
+                      {selectedProfile ? selectedProfile.name : "Global only"}
+                    </strong>
+                    <p>
+                      Profile scope keeps references tied to the current
+                      profile. Global scope keeps them reusable across the whole
+                      library.
+                    </p>
+                  </article>
                 </div>
-              </div>
+              </article>
 
-              <div className="analysis-form">
-                <div className="analysis-inline-grid">
-                  <label className="search-block">
-                    <span className="input-label">Asset type</span>
-                    <select
-                      className="search-input"
-                      disabled={isCreatingMediaAsset}
-                      onChange={(event) => {
-                        const nextAssetType = event.target
-                          .value as MediaLibraryAssetType;
-                        setAssetType(nextAssetType);
-                        if (
-                          nextAssetType !== "CLIP" &&
-                          assetSourceType !== "LOCAL_FILE_PATH" &&
-                          assetSourceType !== "LOCAL_FILE_UPLOAD"
-                        ) {
-                          setAssetSourceType("LOCAL_FILE_PATH");
+              <article className="utility-block">
+                <div className="panel-header">
+                  <div>
+                    <span className="detail-label">Add media</span>
+                    <h2>Add a clip, edit, or VOD</h2>
+                    <p>
+                      Register any local media asset here when you need the full
+                      library workflow instead of the quick profile flow.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="analysis-form">
+                  <div className="analysis-inline-grid">
+                    <label className="search-block">
+                      <span className="input-label">Asset type</span>
+                      <select
+                        className="search-input"
+                        disabled={isCreatingMediaAsset}
+                        onChange={(event) => {
+                          const nextAssetType = event.target
+                            .value as MediaLibraryAssetType;
+                          setAssetType(nextAssetType);
+                          if (
+                            nextAssetType !== "CLIP" &&
+                            assetSourceType !== "LOCAL_FILE_PATH" &&
+                            assetSourceType !== "LOCAL_FILE_UPLOAD"
+                          ) {
+                            setAssetSourceType("LOCAL_FILE_PATH");
+                          }
+                        }}
+                        value={assetType}
+                      >
+                        <option value="CLIP">Clip</option>
+                        <option value="VOD">VOD</option>
+                        <option value="EDIT">Edited video</option>
+                      </select>
+                    </label>
+
+                    <label className="search-block">
+                      <span className="input-label">Scope</span>
+                      <select
+                        className="search-input"
+                        disabled={isCreatingMediaAsset}
+                        onChange={(event) =>
+                          setAssetScope(
+                            event.target.value as MediaLibraryAssetScope,
+                          )
                         }
-                      }}
-                      value={assetType}
-                    >
-                      <option value="CLIP">Clip</option>
-                      <option value="VOD">VOD</option>
-                      <option value="EDIT">Edited video</option>
-                    </select>
-                  </label>
+                        value={assetScope}
+                      >
+                        <option value="GLOBAL">Global</option>
+                        <option value="PROFILE">Selected profile</option>
+                      </select>
+                      <small className="analysis-field-note">
+                        {assetScope === "PROFILE"
+                          ? selectedProfile
+                            ? `This asset will attach to ${selectedProfile.name}.`
+                            : "Choose a profile first to use profile scope."
+                          : "Global assets stay reusable across the full library."}
+                      </small>
+                    </label>
+                  </div>
 
                   <label className="search-block">
-                    <span className="input-label">Scope</span>
+                    <span className="input-label">Source type</span>
                     <select
                       className="search-input"
                       disabled={isCreatingMediaAsset}
                       onChange={(event) =>
-                        setAssetScope(event.target.value as MediaLibraryAssetScope)
+                        setAssetSourceType(
+                          event.target.value as ExampleClipSourceType,
+                        )
                       }
-                      value={assetScope}
+                      value={assetSourceType}
                     >
-                      <option value="GLOBAL">Global</option>
-                      <option value="PROFILE">Selected profile</option>
+                      {availableAssetSourceTypes.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
                     <small className="analysis-field-note">
-                      {assetScope === "PROFILE"
-                        ? selectedProfile
-                          ? `This asset will attach to ${selectedProfile.name}.`
-                          : "Choose a profile first to use profile scope."
-                        : "Global assets stay reusable across the full library."}
+                      {selectedAssetSourceType?.hint}
                     </small>
                   </label>
-                </div>
 
-                <label className="search-block">
-                  <span className="input-label">Source type</span>
-                  <select
-                    className="search-input"
-                    disabled={isCreatingMediaAsset}
-                    onChange={(event) =>
-                      setAssetSourceType(event.target.value as ExampleClipSourceType)
-                    }
-                    value={assetSourceType}
-                  >
-                    {availableAssetSourceTypes.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="analysis-field-note">
-                    {selectedAssetSourceType?.hint}
-                  </small>
-                </label>
+                  <label className="search-block">
+                    <span className="input-label">
+                      {assetSourceType === "LOCAL_FILE_PATH" ||
+                      assetSourceType === "LOCAL_FILE_UPLOAD"
+                        ? "Local path or file"
+                        : "Source URL"}
+                    </span>
+                    <input
+                      className="search-input"
+                      disabled={isCreatingMediaAsset}
+                      onChange={(event) =>
+                        setAssetSourceValue(event.target.value)
+                      }
+                      placeholder={
+                        assetType === "VOD"
+                          ? "/Volumes/Archive/session-vod.mkv"
+                          : assetType === "EDIT"
+                            ? "/Users/you/Exports/session-edit.mp4"
+                            : assetSourceType === "TWITCH_CLIP_URL"
+                              ? "https://clips.twitch.tv/..."
+                              : assetSourceType === "YOUTUBE_SHORT_URL"
+                                ? "https://www.youtube.com/shorts/..."
+                                : "/Users/you/Clips/example.mp4"
+                      }
+                      type="text"
+                      value={assetSourceValue}
+                    />
+                  </label>
 
-                <label className="search-block">
-                  <span className="input-label">
-                    {assetSourceType === "LOCAL_FILE_PATH" ||
-                    assetSourceType === "LOCAL_FILE_UPLOAD"
-                      ? "Local path or file"
-                      : "Source URL"}
-                  </span>
-                  <input
-                    className="search-input"
-                    disabled={isCreatingMediaAsset}
-                    onChange={(event) => setAssetSourceValue(event.target.value)}
-                    placeholder={
-                      assetType === "VOD"
-                        ? "/Volumes/Archive/session-vod.mkv"
-                        : assetType === "EDIT"
-                          ? "/Users/you/Exports/session-edit.mp4"
-                          : assetSourceType === "TWITCH_CLIP_URL"
-                            ? "https://clips.twitch.tv/..."
-                            : assetSourceType === "YOUTUBE_SHORT_URL"
-                              ? "https://www.youtube.com/shorts/..."
-                              : "/Users/you/Clips/example.mp4"
-                    }
-                    type="text"
-                    value={assetSourceValue}
-                  />
-                </label>
+                  {usesLocalAssetPicker ? (
+                    <div className="action-row">
+                      <button
+                        className="button-secondary"
+                        disabled={isCreatingMediaAsset}
+                        onClick={() => {
+                          void handlePickMediaLibraryAsset(assetSourceType);
+                        }}
+                        type="button"
+                      >
+                        Choose local media
+                      </button>
+                    </div>
+                  ) : null}
 
-                {usesLocalAssetPicker ? (
+                  <div className="analysis-inline-grid">
+                    <label className="search-block">
+                      <span className="input-label">Optional title</span>
+                      <input
+                        className="search-input"
+                        disabled={isCreatingMediaAsset}
+                        onChange={(event) => setAssetTitle(event.target.value)}
+                        placeholder={
+                          assetType === "VOD"
+                            ? "March 12 full VOD"
+                            : assetType === "EDIT"
+                              ? "March 12 final cut"
+                              : "Reusable opener clip"
+                        }
+                        type="text"
+                        value={assetTitle}
+                      />
+                    </label>
+
+                    <label className="search-block">
+                      <span className="input-label">Optional note</span>
+                      <input
+                        className="search-input"
+                        disabled={isCreatingMediaAsset}
+                        onChange={(event) => setAssetNote(event.target.value)}
+                        placeholder="Why this media matters"
+                        type="text"
+                        value={assetNote}
+                      />
+                    </label>
+                  </div>
+
                   <div className="action-row">
                     <button
-                      className="button-secondary"
-                      disabled={isCreatingMediaAsset}
+                      className="button-primary"
+                      disabled={
+                        isCreatingMediaAsset ||
+                        !assetSourceValue.trim() ||
+                        (assetScope === "PROFILE" && !selectedProfileId)
+                      }
                       onClick={() => {
-                        void handlePickMediaLibraryAsset(assetSourceType);
+                        void handleCreateMediaAsset();
                       }}
                       type="button"
                     >
-                      Choose local media
+                      {isCreatingMediaAsset
+                        ? "Saving asset..."
+                        : "Add media asset"}
                     </button>
                   </div>
+                </div>
+              </article>
+
+              <article className="utility-block">
+                <div className="panel-header">
+                  <div>
+                    <span className="detail-label">Media assets</span>
+                    <h2>Saved library media</h2>
+                  </div>
+                  {isLoadingLibraryAssets ? (
+                    <span className="queue-count">Refreshing…</span>
+                  ) : null}
+                </div>
+
+                {libraryAssets.length === 0 ? (
+                  <p className="queue-summary-copy">
+                    No library assets saved yet.
+                  </p>
                 ) : null}
 
-                <div className="analysis-inline-grid">
-                  <label className="search-block">
-                    <span className="input-label">Optional title</span>
-                    <input
-                      className="search-input"
-                      disabled={isCreatingMediaAsset}
-                      onChange={(event) => setAssetTitle(event.target.value)}
-                      placeholder={
-                        assetType === "VOD"
-                          ? "March 12 full VOD"
-                          : assetType === "EDIT"
-                            ? "March 12 final cut"
-                            : "Reusable opener clip"
-                      }
-                      type="text"
-                      value={assetTitle}
-                    />
-                  </label>
-
-                  <label className="search-block">
-                    <span className="input-label">Optional note</span>
-                    <input
-                      className="search-input"
-                      disabled={isCreatingMediaAsset}
-                      onChange={(event) => setAssetNote(event.target.value)}
-                      placeholder="Why this media matters"
-                      type="text"
-                      value={assetNote}
-                    />
-                  </label>
-                </div>
-
-                <div className="action-row">
-                  <button
-                    className="button-primary"
-                    disabled={
-                      isCreatingMediaAsset ||
-                      !assetSourceValue.trim() ||
-                      (assetScope === "PROFILE" && !selectedProfileId)
-                    }
-                    onClick={() => {
-                      void handleCreateMediaAsset();
-                    }}
-                    type="button"
-                  >
-                    {isCreatingMediaAsset
-                      ? "Saving asset..."
-                      : "Add media asset"}
-                  </button>
-                </div>
-              </div>
-            </article>
-
-            <article className="utility-block">
-              <div className="panel-header">
-                <div>
-                  <span className="detail-label">Media assets</span>
-                  <h2>Saved library media</h2>
-                </div>
-                {isLoadingLibraryAssets ? (
-                  <span className="queue-count">Refreshing…</span>
-                ) : null}
-              </div>
-
-              {libraryAssets.length === 0 ? (
-                <p className="queue-summary-copy">
-                  No library assets saved yet.
-                </p>
-              ) : null}
-
-              <div className="profile-example-list">
-                {libraryAssets.map((asset) => {
-                  const latestIndexJob = latestIndexJobByAssetId.get(asset.id);
-                  const hasActiveIndexJob =
-                    latestIndexJob?.status === "QUEUED" ||
-                    latestIndexJob?.status === "RUNNING";
-                  const canIndexAsset =
-                    asset.sourceType === "LOCAL_FILE_PATH" ||
-                    asset.sourceType === "LOCAL_FILE_UPLOAD";
-                  const selectedThumbnailSuggestionIds = new Set(
-                    asset.thumbnailOutputSet?.outputs.map(
-                      (output) => output.sourceSuggestionId,
-                    ) ?? [],
-                  );
-                  const isSavingThumbnailOutputs = Boolean(
-                    savingThumbnailOutputAssetIds[asset.id],
-                  );
-                  const hasTechnicalDetails = Boolean(
-                    asset.statusDetail ||
+                <div className="profile-example-list">
+                  {libraryAssets.map((asset) => {
+                    const latestIndexJob = latestIndexJobByAssetId.get(
+                      asset.id,
+                    );
+                    const hasActiveIndexJob =
+                      latestIndexJob?.status === "QUEUED" ||
+                      latestIndexJob?.status === "RUNNING";
+                    const canIndexAsset =
+                      asset.sourceType === "LOCAL_FILE_PATH" ||
+                      asset.sourceType === "LOCAL_FILE_UPLOAD";
+                    const selectedThumbnailSuggestionIds = new Set(
+                      asset.thumbnailOutputSet?.outputs.map(
+                        (output) => output.sourceSuggestionId,
+                      ) ?? [],
+                    );
+                    const isSavingThumbnailOutputs = Boolean(
+                      savingThumbnailOutputAssetIds[asset.id],
+                    );
+                    const hasTechnicalDetails = Boolean(
+                      asset.statusDetail ||
                       asset.indexSummary ||
-                      asset.indexArtifactSummary?.latestAudioFingerprintArtifactId ||
+                      asset.indexArtifactSummary
+                        ?.latestAudioFingerprintArtifactId ||
                       asset.featureSummary ||
                       latestIndexJob,
-                  );
-                  const hasThumbnailDetails = Boolean(
-                    asset.thumbnailOutputSet?.outputs.length ||
+                    );
+                    const hasThumbnailDetails = Boolean(
+                      asset.thumbnailOutputSet?.outputs.length ||
                       asset.thumbnailSuggestionSet,
-                  );
+                    );
 
-                  return (
-                    <article className="profile-example-card" key={asset.id}>
-                      <div className="profile-example-top">
-                        <span className="detail-label">
-                          {formatAssetType(asset.assetType)} •{" "}
-                          {formatAssetScope(asset.scope)}
-                        </span>
-                        <span className="session-state-pill active-session">
-                          {formatStatus(asset.status)}
-                        </span>
-                      </div>
-                      <strong>{asset.title || "Untitled media asset"}</strong>
-                      <p className="profile-example-source">{asset.sourceValue}</p>
-                      <p className="queue-summary-copy">
-                        {describeAssetPrimaryStatus(asset, latestIndexJob)}
-                      </p>
-                      {asset.assetType === "EDIT" &&
-                      asset.thumbnailSuggestionSet ? (
-                        <p className="queue-summary-copy">
-                          Likely thumbnail moments ready •{" "}
-                          {asset.thumbnailSuggestionSet.suggestions.length} picks
+                    return (
+                      <article className="profile-example-card" key={asset.id}>
+                        <div className="profile-example-top">
+                          <span className="detail-label">
+                            {formatAssetType(asset.assetType)} •{" "}
+                            {formatAssetScope(asset.scope)}
+                          </span>
+                          <span className="session-state-pill active-session">
+                            {formatStatus(asset.status)}
+                          </span>
+                        </div>
+                        <strong>{asset.title || "Untitled media asset"}</strong>
+                        <p className="profile-example-source">
+                          {asset.sourceValue}
                         </p>
-                      ) : null}
-                      {asset.note ? <p>{asset.note}</p> : null}
-                      {canIndexAsset ? (
-                        <div className="action-row">
-                          <button
-                            className="button-secondary"
-                            disabled={isCreatingMediaIndexJob || hasActiveIndexJob}
-                            onClick={() => {
-                              void onCreateMediaIndexJob({ assetId: asset.id });
-                            }}
-                            type="button"
-                          >
-                            {buildAssetAnalysisActionLabel(
-                              asset,
-                              latestIndexJob,
-                              hasActiveIndexJob,
-                            )}
-                          </button>
-                          {hasActiveIndexJob && latestIndexJob ? (
+                        <p className="queue-summary-copy">
+                          {describeAssetPrimaryStatus(asset, latestIndexJob)}
+                        </p>
+                        {asset.assetType === "EDIT" &&
+                        asset.thumbnailSuggestionSet ? (
+                          <p className="queue-summary-copy">
+                            Likely thumbnail moments ready •{" "}
+                            {asset.thumbnailSuggestionSet.suggestions.length}{" "}
+                            picks
+                          </p>
+                        ) : null}
+                        {asset.note ? <p>{asset.note}</p> : null}
+                        {canIndexAsset ? (
+                          <div className="action-row">
                             <button
                               className="button-secondary"
-                              disabled={Boolean(
-                                cancellingMediaIndexJobIds[latestIndexJob.id],
-                              )}
+                              disabled={
+                                isCreatingMediaIndexJob || hasActiveIndexJob
+                              }
                               onClick={() => {
-                                void onCancelMediaIndexJob({
-                                  jobId: latestIndexJob.id,
+                                void onCreateMediaIndexJob({
+                                  assetId: asset.id,
                                 });
                               }}
                               type="button"
                             >
-                              {cancellingMediaIndexJobIds[latestIndexJob.id]
-                                ? "Cancelling..."
-                                : "Cancel analysis"}
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      {hasTechnicalDetails ? (
-                        <details className="internal-details asset-card-details">
-                          <summary className="internal-details-summary">
-                            <span>Details</span>
-                            <span className="queue-count">Optional</span>
-                          </summary>
-                          {asset.statusDetail ? (
-                            <p className="queue-summary-copy">{asset.statusDetail}</p>
-                          ) : null}
-                          <p className="queue-summary-copy">
-                            Source {formatSourceType(asset.sourceType)}
-                            {asset.profileId ? ` • profile ${asset.profileId}` : ""}
-                          </p>
-                          {asset.indexSummary ? (
-                            <p className="queue-summary-copy">
-                              Analysis ready • {formatIndexSummary(asset.indexSummary)}
-                            </p>
-                          ) : null}
-                          {asset.indexArtifactSummary?.latestAudioFingerprintArtifactId ? (
-                            <p className="queue-summary-copy">
-                              Audio artifact ready •{" "}
-                              {formatAudioFingerprintMethod(
-                                asset.indexArtifactSummary.audioFingerprintMethod,
+                              {buildAssetAnalysisActionLabel(
+                                asset,
+                                latestIndexJob,
+                                hasActiveIndexJob,
                               )}
-                              {" • "}
-                              {asset.indexArtifactSummary.audioFingerprintBucketCount} buckets
-                              {asset.indexArtifactSummary.bucketDurationSeconds
-                                ? ` • ${formatDuration(asset.indexArtifactSummary.bucketDurationSeconds)} buckets`
-                                : ""}
-                              {asset.indexArtifactSummary.confidenceScore !== undefined
-                                ? ` • ${formatRatio(asset.indexArtifactSummary.confidenceScore)} confidence`
-                                : ""}
-                            </p>
-                          ) : null}
-                          {asset.featureSummary ? (
-                            <p className="queue-summary-copy">
-                              Local summary ready • duration{" "}
-                              {Math.round(asset.featureSummary.durationSeconds)}s
-                              {asset.featureSummary.transcriptAnchorTerms.length > 0
-                                ? ` • anchors ${formatTranscriptAnchors(asset.featureSummary.transcriptAnchorTerms)}`
-                                : ""}{" "}
-                              • top signals{" "}
-                              {formatTopReasons(asset.featureSummary.topReasonCodes)}
-                            </p>
-                          ) : null}
-                          {latestIndexJob ? (
-                            <p className="queue-summary-copy">
-                              Latest background job:{" "}
-                              {formatIndexJobStatus(latestIndexJob.status)}
-                              {" • "}
-                              {Math.round(latestIndexJob.progress * 100)}%
-                              {" • "}
-                              {latestIndexJob.statusDetail}
-                              {latestIndexJob.errorMessage
-                                ? ` • ${latestIndexJob.errorMessage}`
-                                : ""}
-                            </p>
-                          ) : null}
-                        </details>
-                      ) : null}
-                      {hasThumbnailDetails ? (
-                        <details className="internal-details asset-card-details">
-                          <summary className="internal-details-summary">
-                            <span>Likely thumbnail moments</span>
-                            <span className="queue-count">
-                              {asset.thumbnailSuggestionSet?.suggestions.length ??
-                                asset.thumbnailOutputSet?.outputs.length ??
-                                0}{" "}
-                              ready
-                            </span>
-                          </summary>
-                          {asset.thumbnailOutputSet?.outputs.length ? (
-                            <>
+                            </button>
+                            {hasActiveIndexJob && latestIndexJob ? (
+                              <button
+                                className="button-secondary"
+                                disabled={Boolean(
+                                  cancellingMediaIndexJobIds[latestIndexJob.id],
+                                )}
+                                onClick={() => {
+                                  void onCancelMediaIndexJob({
+                                    jobId: latestIndexJob.id,
+                                  });
+                                }}
+                                type="button"
+                              >
+                                {cancellingMediaIndexJobIds[latestIndexJob.id]
+                                  ? "Cancelling..."
+                                  : "Cancel analysis"}
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {hasTechnicalDetails ? (
+                          <details className="internal-details asset-card-details">
+                            <summary className="internal-details-summary">
+                              <span>Details</span>
+                              <span className="queue-count">Optional</span>
+                            </summary>
+                            {asset.statusDetail ? (
                               <p className="queue-summary-copy">
-                                Chosen thumbnails • {asset.thumbnailOutputSet.outputs.length} output
-                                {asset.thumbnailOutputSet.outputs.length === 1
-                                  ? ""
-                                  : "s"}
+                                {asset.statusDetail}
                               </p>
-                              <div className="thumbnail-suggestion-grid chosen">
-                                {asset.thumbnailOutputSet.outputs.map((output) => (
-                                  <figure
-                                    className="thumbnail-suggestion-card is-selected"
-                                    key={output.id}
-                                  >
-                                    <img
-                                      alt={`Chosen thumbnail at ${formatClockDuration(output.timestampSeconds)}`}
-                                      className="thumbnail-suggestion-image"
-                                      loading="lazy"
-                                      src={toLocalImageSrc(output.imagePath)}
-                                    />
-                                    <figcaption className="thumbnail-suggestion-meta">
-                                      <strong>
-                                        {formatClockDuration(output.timestampSeconds)}
-                                      </strong>
-                                      <span>
-                                        Output {output.position + 1} • score{" "}
-                                        {formatRatio(output.score)}
-                                      </span>
-                                      <button
-                                        className="button-secondary thumbnail-suggestion-action"
-                                        disabled={isSavingThumbnailOutputs}
-                                        onClick={() => {
-                                          void onReplaceThumbnailOutputs(asset.id, {
-                                            selectedSuggestionIds:
-                                              asset.thumbnailOutputSet?.outputs
-                                                .filter(
-                                                  (candidateOutput) =>
-                                                    candidateOutput.id !== output.id,
-                                                )
-                                                .map(
-                                                  (candidateOutput) =>
-                                                    candidateOutput.sourceSuggestionId,
-                                                ) ?? [],
-                                          });
-                                        }}
-                                        type="button"
+                            ) : null}
+                            <p className="queue-summary-copy">
+                              Source {formatSourceType(asset.sourceType)}
+                              {asset.profileId
+                                ? ` • profile ${asset.profileId}`
+                                : ""}
+                            </p>
+                            {asset.indexSummary ? (
+                              <p className="queue-summary-copy">
+                                Analysis ready •{" "}
+                                {formatIndexSummary(asset.indexSummary)}
+                              </p>
+                            ) : null}
+                            {asset.indexArtifactSummary
+                              ?.latestAudioFingerprintArtifactId ? (
+                              <p className="queue-summary-copy">
+                                Audio artifact ready •{" "}
+                                {formatAudioFingerprintMethod(
+                                  asset.indexArtifactSummary
+                                    .audioFingerprintMethod,
+                                )}
+                                {" • "}
+                                {
+                                  asset.indexArtifactSummary
+                                    .audioFingerprintBucketCount
+                                }{" "}
+                                buckets
+                                {asset.indexArtifactSummary
+                                  .bucketDurationSeconds
+                                  ? ` • ${formatDuration(asset.indexArtifactSummary.bucketDurationSeconds)} buckets`
+                                  : ""}
+                                {asset.indexArtifactSummary.confidenceScore !==
+                                undefined
+                                  ? ` • ${formatRatio(asset.indexArtifactSummary.confidenceScore)} confidence`
+                                  : ""}
+                              </p>
+                            ) : null}
+                            {asset.featureSummary ? (
+                              <p className="queue-summary-copy">
+                                Local summary ready • duration{" "}
+                                {Math.round(
+                                  asset.featureSummary.durationSeconds,
+                                )}
+                                s
+                                {asset.featureSummary.transcriptAnchorTerms
+                                  .length > 0
+                                  ? ` • anchors ${formatTranscriptAnchors(asset.featureSummary.transcriptAnchorTerms)}`
+                                  : ""}{" "}
+                                • top signals{" "}
+                                {formatTopReasons(
+                                  asset.featureSummary.topReasonCodes,
+                                )}
+                              </p>
+                            ) : null}
+                            {latestIndexJob ? (
+                              <p className="queue-summary-copy">
+                                Latest background job:{" "}
+                                {formatIndexJobStatus(latestIndexJob.status)}
+                                {" • "}
+                                {Math.round(latestIndexJob.progress * 100)}%
+                                {" • "}
+                                {latestIndexJob.statusDetail}
+                                {latestIndexJob.errorMessage
+                                  ? ` • ${latestIndexJob.errorMessage}`
+                                  : ""}
+                              </p>
+                            ) : null}
+                          </details>
+                        ) : null}
+                        {hasThumbnailDetails ? (
+                          <details className="internal-details asset-card-details">
+                            <summary className="internal-details-summary">
+                              <span>Likely thumbnail moments</span>
+                              <span className="queue-count">
+                                {asset.thumbnailSuggestionSet?.suggestions
+                                  .length ??
+                                  asset.thumbnailOutputSet?.outputs.length ??
+                                  0}{" "}
+                                ready
+                              </span>
+                            </summary>
+                            {asset.thumbnailOutputSet?.outputs.length ? (
+                              <>
+                                <p className="queue-summary-copy">
+                                  Chosen thumbnails •{" "}
+                                  {asset.thumbnailOutputSet.outputs.length}{" "}
+                                  output
+                                  {asset.thumbnailOutputSet.outputs.length === 1
+                                    ? ""
+                                    : "s"}
+                                </p>
+                                <div className="thumbnail-suggestion-grid chosen">
+                                  {asset.thumbnailOutputSet.outputs.map(
+                                    (output) => (
+                                      <figure
+                                        className="thumbnail-suggestion-card is-selected"
+                                        key={output.id}
                                       >
-                                        {isSavingThumbnailOutputs
-                                          ? "Saving..."
-                                          : "Remove output"}
-                                      </button>
-                                    </figcaption>
-                                  </figure>
-                                ))}
-                              </div>
-                            </>
-                          ) : null}
-                          {asset.thumbnailSuggestionSet ? (
-                            <>
-                              <p className="queue-summary-copy">
-                                {asset.thumbnailSuggestionSet.suggestions.length} picks
-                                {" • "}sampled{" "}
-                                {asset.thumbnailSuggestionSet.sampleWindowCount} windows
-                              </p>
-                              <div className="thumbnail-suggestion-grid">
-                                {asset.thumbnailSuggestionSet.suggestions.map(
-                                  (suggestion) => (
-                                    <figure
-                                      className={
-                                        selectedThumbnailSuggestionIds.has(
-                                          suggestion.id,
-                                        )
-                                          ? "thumbnail-suggestion-card is-selected"
-                                          : "thumbnail-suggestion-card"
-                                      }
-                                      key={suggestion.id}
-                                    >
-                                      <img
-                                        alt={`Thumbnail suggestion at ${formatClockDuration(suggestion.timestampSeconds)}`}
-                                        className="thumbnail-suggestion-image"
-                                        loading="lazy"
-                                        src={toLocalImageSrc(suggestion.imagePath)}
-                                      />
-                                      <figcaption className="thumbnail-suggestion-meta">
-                                        <strong>
-                                          {formatClockDuration(
-                                            suggestion.timestampSeconds,
+                                        <img
+                                          alt={`Chosen thumbnail at ${formatClockDuration(output.timestampSeconds)}`}
+                                          className="thumbnail-suggestion-image"
+                                          loading="lazy"
+                                          src={toLocalImageSrc(
+                                            output.imagePath,
                                           )}
-                                        </strong>
-                                        <span>
-                                          Score {formatRatio(suggestion.score)} • activity{" "}
-                                          {formatRatio(suggestion.activityScore)}
-                                        </span>
-                                        <span>{suggestion.note}</span>
-                                        <button
-                                          className={
-                                            selectedThumbnailSuggestionIds.has(
-                                              suggestion.id,
-                                            )
-                                              ? "button-primary thumbnail-suggestion-action"
-                                              : "button-secondary thumbnail-suggestion-action"
-                                          }
-                                          disabled={isSavingThumbnailOutputs}
-                                          onClick={() => {
-                                            const currentIds =
-                                              asset.thumbnailOutputSet?.outputs.map(
-                                                (output) =>
-                                                  output.sourceSuggestionId,
-                                              ) ?? [];
-                                            const nextSelectedSuggestionIds =
+                                        />
+                                        <figcaption className="thumbnail-suggestion-meta">
+                                          <strong>
+                                            {formatClockDuration(
+                                              output.timestampSeconds,
+                                            )}
+                                          </strong>
+                                          <span>
+                                            Output {output.position + 1} • score{" "}
+                                            {formatRatio(output.score)}
+                                          </span>
+                                          <button
+                                            className="button-secondary thumbnail-suggestion-action"
+                                            disabled={isSavingThumbnailOutputs}
+                                            onClick={() => {
+                                              void onReplaceThumbnailOutputs(
+                                                asset.id,
+                                                {
+                                                  selectedSuggestionIds:
+                                                    asset.thumbnailOutputSet?.outputs
+                                                      .filter(
+                                                        (candidateOutput) =>
+                                                          candidateOutput.id !==
+                                                          output.id,
+                                                      )
+                                                      .map(
+                                                        (candidateOutput) =>
+                                                          candidateOutput.sourceSuggestionId,
+                                                      ) ?? [],
+                                                },
+                                              );
+                                            }}
+                                            type="button"
+                                          >
+                                            {isSavingThumbnailOutputs
+                                              ? "Saving..."
+                                              : "Remove output"}
+                                          </button>
+                                        </figcaption>
+                                      </figure>
+                                    ),
+                                  )}
+                                </div>
+                              </>
+                            ) : null}
+                            {asset.thumbnailSuggestionSet ? (
+                              <>
+                                <p className="queue-summary-copy">
+                                  {
+                                    asset.thumbnailSuggestionSet.suggestions
+                                      .length
+                                  }{" "}
+                                  picks
+                                  {" • "}sampled{" "}
+                                  {
+                                    asset.thumbnailSuggestionSet
+                                      .sampleWindowCount
+                                  }{" "}
+                                  windows
+                                </p>
+                                <div className="thumbnail-suggestion-grid">
+                                  {asset.thumbnailSuggestionSet.suggestions.map(
+                                    (suggestion) => (
+                                      <figure
+                                        className={
+                                          selectedThumbnailSuggestionIds.has(
+                                            suggestion.id,
+                                          )
+                                            ? "thumbnail-suggestion-card is-selected"
+                                            : "thumbnail-suggestion-card"
+                                        }
+                                        key={suggestion.id}
+                                      >
+                                        <img
+                                          alt={`Thumbnail suggestion at ${formatClockDuration(suggestion.timestampSeconds)}`}
+                                          className="thumbnail-suggestion-image"
+                                          loading="lazy"
+                                          src={toLocalImageSrc(
+                                            suggestion.imagePath,
+                                          )}
+                                        />
+                                        <figcaption className="thumbnail-suggestion-meta">
+                                          <strong>
+                                            {formatClockDuration(
+                                              suggestion.timestampSeconds,
+                                            )}
+                                          </strong>
+                                          <span>
+                                            Score{" "}
+                                            {formatRatio(suggestion.score)} •
+                                            activity{" "}
+                                            {formatRatio(
+                                              suggestion.activityScore,
+                                            )}
+                                          </span>
+                                          <span>{suggestion.note}</span>
+                                          <button
+                                            className={
                                               selectedThumbnailSuggestionIds.has(
                                                 suggestion.id,
                                               )
-                                                ? currentIds.filter(
-                                                    (selectedSuggestionId) =>
-                                                      selectedSuggestionId !==
-                                                      suggestion.id,
-                                                  )
-                                                : [...currentIds, suggestion.id];
-                                            void onReplaceThumbnailOutputs(
-                                              asset.id,
-                                              {
-                                                selectedSuggestionIds:
-                                                  nextSelectedSuggestionIds,
-                                              },
-                                            );
-                                          }}
-                                          type="button"
-                                        >
-                                          {isSavingThumbnailOutputs
-                                            ? "Saving..."
-                                            : selectedThumbnailSuggestionIds.has(
+                                                ? "button-primary thumbnail-suggestion-action"
+                                                : "button-secondary thumbnail-suggestion-action"
+                                            }
+                                            disabled={isSavingThumbnailOutputs}
+                                            onClick={() => {
+                                              const currentIds =
+                                                asset.thumbnailOutputSet?.outputs.map(
+                                                  (output) =>
+                                                    output.sourceSuggestionId,
+                                                ) ?? [];
+                                              const nextSelectedSuggestionIds =
+                                                selectedThumbnailSuggestionIds.has(
                                                   suggestion.id,
                                                 )
-                                              ? "Chosen output"
-                                              : "Promote to output"}
-                                        </button>
-                                      </figcaption>
-                                    </figure>
-                                  ),
-                                )}
-                              </div>
-                            </>
-                          ) : null}
-                        </details>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            </article>
+                                                  ? currentIds.filter(
+                                                      (selectedSuggestionId) =>
+                                                        selectedSuggestionId !==
+                                                        suggestion.id,
+                                                    )
+                                                  : [
+                                                      ...currentIds,
+                                                      suggestion.id,
+                                                    ];
+                                              void onReplaceThumbnailOutputs(
+                                                asset.id,
+                                                {
+                                                  selectedSuggestionIds:
+                                                    nextSelectedSuggestionIds,
+                                                },
+                                              );
+                                            }}
+                                            type="button"
+                                          >
+                                            {isSavingThumbnailOutputs
+                                              ? "Saving..."
+                                              : selectedThumbnailSuggestionIds.has(
+                                                    suggestion.id,
+                                                  )
+                                                ? "Chosen output"
+                                                : "Promote to output"}
+                                          </button>
+                                        </figcaption>
+                                      </figure>
+                                    ),
+                                  )}
+                                </div>
+                              </>
+                            ) : null}
+                          </details>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              </article>
             </details>
 
             <details className="utility-block internal-details advanced-lab-section">
@@ -1590,342 +1698,394 @@ export function ProfileWorkspace({
                 </span>
               </summary>
 
-            <article className="utility-block">
-              <div className="panel-header">
-                <div>
-                  <span className="detail-label">VOD/edit comparison</span>
-                  <h2>Compare a VOD to its edit</h2>
-                  <p>
-                    Use this when you want HighlightSmith to compare a source
-                    VOD against its finished edit to inspect what got kept,
-                    removed, or potentially missed.
-                  </p>
-                </div>
-              </div>
-
-              <div className="analysis-form">
-                <div className="analysis-inline-grid">
-                  <label className="search-block">
-                    <span className="input-label">Source VOD</span>
-                    <select
-                      className="search-input"
-                      disabled={isCreatingMediaPair || vodAssetOptions.length === 0}
-                      onChange={(event) => setSelectedVodAssetId(event.target.value)}
-                      value={selectedVodAssetId}
-                    >
-                      <option value="">
-                        {vodAssetOptions.length === 0
-                          ? "No VOD assets yet"
-                          : "Choose source VOD"}
-                      </option>
-                      {vodAssetOptions.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.title || asset.sourceValue}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="search-block">
-                    <span className="input-label">Edited video</span>
-                    <select
-                      className="search-input"
-                      disabled={
-                        isCreatingMediaPair || editAssetOptions.length === 0
-                      }
-                      onChange={(event) => setSelectedEditAssetId(event.target.value)}
-                      value={selectedEditAssetId}
-                    >
-                      <option value="">
-                        {editAssetOptions.length === 0
-                          ? "No edit assets yet"
-                          : "Choose edited video"}
-                      </option>
-                      {editAssetOptions.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.title || asset.sourceValue}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+              <article className="utility-block">
+                <div className="panel-header">
+                  <div>
+                    <span className="detail-label">VOD/edit comparison</span>
+                    <h2>Compare a VOD to its edit</h2>
+                    <p>
+                      Use this when you want vaexcore pulse to compare a source
+                      VOD against its finished edit to inspect what got kept,
+                      removed, or potentially missed.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="analysis-inline-grid">
-                  <label className="search-block">
-                    <span className="input-label">Pair scope</span>
-                    <select
-                      className="search-input"
-                      disabled={isCreatingMediaPair}
-                      onChange={(event) =>
-                        setPairScope(event.target.value as MediaLibraryAssetScope)
-                      }
-                      value={pairScope}
-                    >
-                      <option value="GLOBAL">Global</option>
-                      <option value="PROFILE">Selected profile</option>
-                    </select>
-                  </label>
+                <div className="analysis-form">
+                  <div className="analysis-inline-grid">
+                    <label className="search-block">
+                      <span className="input-label">Source VOD</span>
+                      <select
+                        className="search-input"
+                        disabled={
+                          isCreatingMediaPair || vodAssetOptions.length === 0
+                        }
+                        onChange={(event) =>
+                          setSelectedVodAssetId(event.target.value)
+                        }
+                        value={selectedVodAssetId}
+                      >
+                        <option value="">
+                          {vodAssetOptions.length === 0
+                            ? "No VOD assets yet"
+                            : "Choose source VOD"}
+                        </option>
+                        {vodAssetOptions.map((asset) => (
+                          <option key={asset.id} value={asset.id}>
+                            {asset.title || asset.sourceValue}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="search-block">
+                      <span className="input-label">Edited video</span>
+                      <select
+                        className="search-input"
+                        disabled={
+                          isCreatingMediaPair || editAssetOptions.length === 0
+                        }
+                        onChange={(event) =>
+                          setSelectedEditAssetId(event.target.value)
+                        }
+                        value={selectedEditAssetId}
+                      >
+                        <option value="">
+                          {editAssetOptions.length === 0
+                            ? "No edit assets yet"
+                            : "Choose edited video"}
+                        </option>
+                        {editAssetOptions.map((asset) => (
+                          <option key={asset.id} value={asset.id}>
+                            {asset.title || asset.sourceValue}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="analysis-inline-grid">
+                    <label className="search-block">
+                      <span className="input-label">Pair scope</span>
+                      <select
+                        className="search-input"
+                        disabled={isCreatingMediaPair}
+                        onChange={(event) =>
+                          setPairScope(
+                            event.target.value as MediaLibraryAssetScope,
+                          )
+                        }
+                        value={pairScope}
+                      >
+                        <option value="GLOBAL">Global</option>
+                        <option value="PROFILE">Selected profile</option>
+                      </select>
+                    </label>
+
+                    <label className="search-block">
+                      <span className="input-label">Optional title</span>
+                      <input
+                        className="search-input"
+                        disabled={isCreatingMediaPair}
+                        onChange={(event) => setPairTitle(event.target.value)}
+                        placeholder="March 12 VOD/edit comparison"
+                        type="text"
+                        value={pairTitle}
+                      />
+                    </label>
+                  </div>
 
                   <label className="search-block">
-                    <span className="input-label">Optional title</span>
+                    <span className="input-label">Optional note</span>
                     <input
                       className="search-input"
                       disabled={isCreatingMediaPair}
-                      onChange={(event) => setPairTitle(event.target.value)}
-                      placeholder="March 12 VOD/edit comparison"
+                      onChange={(event) => setPairNote(event.target.value)}
+                      placeholder="What should VCP learn from this comparison?"
                       type="text"
-                      value={pairTitle}
+                      value={pairNote}
                     />
                   </label>
-                </div>
 
-                <label className="search-block">
-                  <span className="input-label">Optional note</span>
-                  <input
-                    className="search-input"
-                    disabled={isCreatingMediaPair}
-                    onChange={(event) => setPairNote(event.target.value)}
-                    placeholder="What should HS learn from this comparison?"
-                    type="text"
-                    value={pairNote}
-                  />
-                </label>
-
-                <div className="action-row">
-                  <button
-                    className="button-primary"
-                    disabled={
-                      isCreatingMediaPair ||
-                      !selectedVodAssetId ||
-                      !selectedEditAssetId ||
-                      (pairScope === "PROFILE" && !selectedProfileId)
-                    }
-                    onClick={() => {
-                      void handleCreateMediaPair();
-                    }}
-                    type="button"
-                  >
-                    {isCreatingMediaPair
-                      ? "Saving comparison..."
-                      : "Save VOD/edit comparison"}
-                  </button>
-                </div>
-              </div>
-            </article>
-
-            <article className="utility-block">
-              <div className="panel-header">
-                <div>
-                  <span className="detail-label">Saved VOD/edit audits</span>
-                  <h2>Comparison history</h2>
-                </div>
-                <span className="queue-count">
-                  {isLoadingMediaPairs || isLoadingMediaAlignmentJobs
-                    ? "Refreshing…"
-                    : `${mediaEditPairs.length} saved`}
-                </span>
-              </div>
-
-              {mediaEditPairs.length === 0 ? (
-                <p className="queue-summary-copy">
-                  No VOD/edit audits saved yet.
-                </p>
-              ) : null}
-
-              <div className="profile-example-list">
-                {mediaEditPairs.map((pair) => {
-              const latestAlignmentJob = latestAlignmentJobByPairId.get(pair.id);
-              const pairMatches = mediaAlignmentMatches.filter(
-                (match) => match.pairId === pair.id,
-              );
-              const hasActiveAlignmentJob =
-                latestAlignmentJob?.status === "QUEUED" ||
-                latestAlignmentJob?.status === "RUNNING";
-              const sourceAsset = mediaAssetById.get(pair.vodAssetId);
-              const editAsset = mediaAssetById.get(pair.editAssetId);
-              const sourceAssetHasAudioFingerprint =
-                mediaAssetHasAudioFingerprint(sourceAsset);
-              const editAssetHasAudioFingerprint =
-                mediaAssetHasAudioFingerprint(editAsset);
-              const sourceIndexJob = latestIndexJobByAssetId.get(pair.vodAssetId);
-              const editIndexJob = latestIndexJobByAssetId.get(pair.editAssetId);
-              const sourceIndexInFlight =
-                sourceIndexJob?.status === "QUEUED" ||
-                sourceIndexJob?.status === "RUNNING";
-              const editIndexInFlight =
-                editIndexJob?.status === "QUEUED" ||
-                editIndexJob?.status === "RUNNING";
-              const pairAlignmentBlockedReason = describePairAlignmentBlockedReason(
-                sourceAsset,
-                editAsset,
-              );
-              const pairAlignmentButtonLabel = pairAlignmentBlockedReason
-                ? describePairAlignmentBlockedAction(
-                    sourceAssetHasAudioFingerprint,
-                    editAssetHasAudioFingerprint,
-                  )
-                : "Align edit to VOD";
-
-              return (
-              <article className="profile-example-card" key={pair.id}>
-                <div className="profile-example-top">
-                  <span className="detail-label">VOD + edit audit</span>
-                  <span className="session-state-pill active-session">
-                    {formatPairStatus(pair.status)}
-                  </span>
-                </div>
-                <strong>{pair.title || "Untitled VOD/edit audit"}</strong>
-                <p className="queue-summary-copy">
-                  Source asset {pair.vodAssetId} • edit asset {pair.editAssetId}
-                </p>
-                {pair.note ? <p>{pair.note}</p> : null}
-                <p className="queue-summary-copy">{pair.statusDetail}</p>
-                {pair.keepRatio !== undefined ? (
-                  <p className="queue-summary-copy">
-                    Source {formatDuration(pair.sourceDurationSeconds)} • edit{" "}
-                    {formatDuration(pair.editDurationSeconds)} • keep ratio{" "}
-                    {formatRatio(pair.keepRatio)} • compression{" "}
-                    {pair.compressionRatio?.toFixed(2)}x
-                  </p>
-                ) : null}
-                {latestAlignmentJob ? (
-                  <p className="queue-summary-copy">
-                    Latest alignment job:{" "}
-                    {formatAlignmentJobStatus(latestAlignmentJob.status)}
-                    {" • "}
-                    {Math.round(latestAlignmentJob.progress * 100)}%
-                    {" • "}
-                    {latestAlignmentJob.statusDetail}
-                    {latestAlignmentJob.errorMessage
-                      ? ` • ${latestAlignmentJob.errorMessage}`
-                      : ""}
-                  </p>
-                ) : null}
-                {pairAlignmentBlockedReason ? (
-                  <p className="queue-summary-copy">
-                    Alignment blocked • {pairAlignmentBlockedReason}
-                  </p>
-                ) : null}
-                {pairMatches.length > 0 ? (
-                  <div className="profile-example-list">
-                    {pairMatches.slice(0, 3).map((match) => (
-                      <article className="profile-example-card" key={match.id}>
-                        <div className="profile-example-top">
-                          <span className="detail-label">
-                            Alignment match
-                          </span>
-                          <span className="session-state-pill next-target">
-                            {formatRatio(match.confidenceScore)} confidence
-                          </span>
-                        </div>
-                        <p className="queue-summary-copy">
-                          Source{" "}
-                          {formatDuration(match.sourceRange.startSeconds)}-
-                          {formatDuration(match.sourceRange.endSeconds)}
-                          {" • "}Edit{" "}
-                          {formatDuration(match.queryRange.startSeconds)}-
-                          {formatDuration(match.queryRange.endSeconds)}
-                          {" • "}score {formatRatio(match.score)}
-                        </p>
-                        <p>{match.note}</p>
-                      </article>
-                    ))}
+                  <div className="action-row">
+                    <button
+                      className="button-primary"
+                      disabled={
+                        isCreatingMediaPair ||
+                        !selectedVodAssetId ||
+                        !selectedEditAssetId ||
+                        (pairScope === "PROFILE" && !selectedProfileId)
+                      }
+                      onClick={() => {
+                        void handleCreateMediaPair();
+                      }}
+                      type="button"
+                    >
+                      {isCreatingMediaPair
+                        ? "Saving comparison..."
+                        : "Save VOD/edit comparison"}
+                    </button>
                   </div>
-                ) : null}
-                {pair.alignmentSegments.length > 0 ? (
-                  <div className="profile-example-list">
-                    {pair.alignmentSegments.map((segment) => (
-                      <article
-                        className="profile-example-card"
-                        key={segment.id}
-                      >
-                        <div className="profile-example-top">
-                          <span className="detail-label">
-                            {formatAlignmentKind(segment.kind)}
-                          </span>
-                          <span className="session-state-pill next-target">
-                            {formatRatio(segment.confidenceScore)} confidence
-                          </span>
-                        </div>
-                        <p className="queue-summary-copy">
-                          {formatAlignmentRange("Source", segment.sourceRange)}
-                          {" • "}
-                          {formatAlignmentRange("Edit", segment.editRange)}
-                        </p>
-                        <p>{segment.note}</p>
-                      </article>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="action-row">
-                  {!sourceAssetHasAudioFingerprint && sourceAsset ? (
-                    <button
-                      className="button-secondary"
-                      disabled={isCreatingMediaIndexJob || sourceIndexInFlight}
-                      onClick={() => {
-                        void onCreateMediaIndexJob({ assetId: sourceAsset.id });
-                      }}
-                      type="button"
-                    >
-                      {sourceIndexInFlight
-                        ? "Analyzing source..."
-                        : "Analyze source VOD"}
-                    </button>
-                  ) : null}
-                  {!editAssetHasAudioFingerprint && editAsset ? (
-                    <button
-                      className="button-secondary"
-                      disabled={isCreatingMediaIndexJob || editIndexInFlight}
-                      onClick={() => {
-                        void onCreateMediaIndexJob({ assetId: editAsset.id });
-                      }}
-                      type="button"
-                    >
-                      {editIndexInFlight
-                        ? "Analyzing edit..."
-                        : "Analyze edited video"}
-                    </button>
-                  ) : null}
-                  <button
-                    className="button-secondary"
-                    disabled={
-                      isCreatingMediaAlignmentJob ||
-                      hasActiveAlignmentJob ||
-                      Boolean(pairAlignmentBlockedReason)
-                    }
-                    onClick={() => {
-                      void onCreateMediaAlignmentJob({ pairId: pair.id });
-                    }}
-                    type="button"
-                  >
-                    {hasActiveAlignmentJob
-                      ? "Aligning..."
-                      : pairAlignmentButtonLabel}
-                  </button>
-                  {hasActiveAlignmentJob && latestAlignmentJob ? (
-                    <button
-                      className="button-secondary"
-                      disabled={Boolean(
-                        cancellingMediaAlignmentJobIds[latestAlignmentJob.id],
-                      )}
-                      onClick={() => {
-                        void onCancelMediaAlignmentJob({
-                          jobId: latestAlignmentJob.id,
-                        });
-                      }}
-                      type="button"
-                    >
-                      {cancellingMediaAlignmentJobIds[latestAlignmentJob.id]
-                        ? "Cancelling..."
-                        : "Cancel alignment"}
-                    </button>
-                  ) : null}
                 </div>
               </article>
-              );
-                })}
-              </div>
-            </article>
+
+              <article className="utility-block">
+                <div className="panel-header">
+                  <div>
+                    <span className="detail-label">Saved VOD/edit audits</span>
+                    <h2>Comparison history</h2>
+                  </div>
+                  <span className="queue-count">
+                    {isLoadingMediaPairs || isLoadingMediaAlignmentJobs
+                      ? "Refreshing…"
+                      : `${mediaEditPairs.length} saved`}
+                  </span>
+                </div>
+
+                {mediaEditPairs.length === 0 ? (
+                  <p className="queue-summary-copy">
+                    No VOD/edit audits saved yet.
+                  </p>
+                ) : null}
+
+                <div className="profile-example-list">
+                  {mediaEditPairs.map((pair) => {
+                    const latestAlignmentJob = latestAlignmentJobByPairId.get(
+                      pair.id,
+                    );
+                    const pairMatches = mediaAlignmentMatches.filter(
+                      (match) => match.pairId === pair.id,
+                    );
+                    const hasActiveAlignmentJob =
+                      latestAlignmentJob?.status === "QUEUED" ||
+                      latestAlignmentJob?.status === "RUNNING";
+                    const sourceAsset = mediaAssetById.get(pair.vodAssetId);
+                    const editAsset = mediaAssetById.get(pair.editAssetId);
+                    const sourceAssetHasAudioFingerprint =
+                      mediaAssetHasAudioFingerprint(sourceAsset);
+                    const editAssetHasAudioFingerprint =
+                      mediaAssetHasAudioFingerprint(editAsset);
+                    const sourceIndexJob = latestIndexJobByAssetId.get(
+                      pair.vodAssetId,
+                    );
+                    const editIndexJob = latestIndexJobByAssetId.get(
+                      pair.editAssetId,
+                    );
+                    const sourceIndexInFlight =
+                      sourceIndexJob?.status === "QUEUED" ||
+                      sourceIndexJob?.status === "RUNNING";
+                    const editIndexInFlight =
+                      editIndexJob?.status === "QUEUED" ||
+                      editIndexJob?.status === "RUNNING";
+                    const pairAlignmentBlockedReason =
+                      describePairAlignmentBlockedReason(
+                        sourceAsset,
+                        editAsset,
+                      );
+                    const pairAlignmentButtonLabel = pairAlignmentBlockedReason
+                      ? describePairAlignmentBlockedAction(
+                          sourceAssetHasAudioFingerprint,
+                          editAssetHasAudioFingerprint,
+                        )
+                      : "Align edit to VOD";
+
+                    return (
+                      <article className="profile-example-card" key={pair.id}>
+                        <div className="profile-example-top">
+                          <span className="detail-label">VOD + edit audit</span>
+                          <span className="session-state-pill active-session">
+                            {formatPairStatus(pair.status)}
+                          </span>
+                        </div>
+                        <strong>
+                          {pair.title || "Untitled VOD/edit audit"}
+                        </strong>
+                        <p className="queue-summary-copy">
+                          Source asset {pair.vodAssetId} • edit asset{" "}
+                          {pair.editAssetId}
+                        </p>
+                        {pair.note ? <p>{pair.note}</p> : null}
+                        <p className="queue-summary-copy">
+                          {pair.statusDetail}
+                        </p>
+                        {pair.keepRatio !== undefined ? (
+                          <p className="queue-summary-copy">
+                            Source {formatDuration(pair.sourceDurationSeconds)}{" "}
+                            • edit {formatDuration(pair.editDurationSeconds)} •
+                            keep ratio {formatRatio(pair.keepRatio)} •
+                            compression {pair.compressionRatio?.toFixed(2)}x
+                          </p>
+                        ) : null}
+                        {latestAlignmentJob ? (
+                          <p className="queue-summary-copy">
+                            Latest alignment job:{" "}
+                            {formatAlignmentJobStatus(
+                              latestAlignmentJob.status,
+                            )}
+                            {" • "}
+                            {Math.round(latestAlignmentJob.progress * 100)}%
+                            {" • "}
+                            {latestAlignmentJob.statusDetail}
+                            {latestAlignmentJob.errorMessage
+                              ? ` • ${latestAlignmentJob.errorMessage}`
+                              : ""}
+                          </p>
+                        ) : null}
+                        {pairAlignmentBlockedReason ? (
+                          <p className="queue-summary-copy">
+                            Alignment blocked • {pairAlignmentBlockedReason}
+                          </p>
+                        ) : null}
+                        {pairMatches.length > 0 ? (
+                          <div className="profile-example-list">
+                            {pairMatches.slice(0, 3).map((match) => (
+                              <article
+                                className="profile-example-card"
+                                key={match.id}
+                              >
+                                <div className="profile-example-top">
+                                  <span className="detail-label">
+                                    Alignment match
+                                  </span>
+                                  <span className="session-state-pill next-target">
+                                    {formatRatio(match.confidenceScore)}{" "}
+                                    confidence
+                                  </span>
+                                </div>
+                                <p className="queue-summary-copy">
+                                  Source{" "}
+                                  {formatDuration(
+                                    match.sourceRange.startSeconds,
+                                  )}
+                                  -
+                                  {formatDuration(match.sourceRange.endSeconds)}
+                                  {" • "}Edit{" "}
+                                  {formatDuration(
+                                    match.queryRange.startSeconds,
+                                  )}
+                                  -{formatDuration(match.queryRange.endSeconds)}
+                                  {" • "}score {formatRatio(match.score)}
+                                </p>
+                                <p>{match.note}</p>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
+                        {pair.alignmentSegments.length > 0 ? (
+                          <div className="profile-example-list">
+                            {pair.alignmentSegments.map((segment) => (
+                              <article
+                                className="profile-example-card"
+                                key={segment.id}
+                              >
+                                <div className="profile-example-top">
+                                  <span className="detail-label">
+                                    {formatAlignmentKind(segment.kind)}
+                                  </span>
+                                  <span className="session-state-pill next-target">
+                                    {formatRatio(segment.confidenceScore)}{" "}
+                                    confidence
+                                  </span>
+                                </div>
+                                <p className="queue-summary-copy">
+                                  {formatAlignmentRange(
+                                    "Source",
+                                    segment.sourceRange,
+                                  )}
+                                  {" • "}
+                                  {formatAlignmentRange(
+                                    "Edit",
+                                    segment.editRange,
+                                  )}
+                                </p>
+                                <p>{segment.note}</p>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="action-row">
+                          {!sourceAssetHasAudioFingerprint && sourceAsset ? (
+                            <button
+                              className="button-secondary"
+                              disabled={
+                                isCreatingMediaIndexJob || sourceIndexInFlight
+                              }
+                              onClick={() => {
+                                void onCreateMediaIndexJob({
+                                  assetId: sourceAsset.id,
+                                });
+                              }}
+                              type="button"
+                            >
+                              {sourceIndexInFlight
+                                ? "Analyzing source..."
+                                : "Analyze source VOD"}
+                            </button>
+                          ) : null}
+                          {!editAssetHasAudioFingerprint && editAsset ? (
+                            <button
+                              className="button-secondary"
+                              disabled={
+                                isCreatingMediaIndexJob || editIndexInFlight
+                              }
+                              onClick={() => {
+                                void onCreateMediaIndexJob({
+                                  assetId: editAsset.id,
+                                });
+                              }}
+                              type="button"
+                            >
+                              {editIndexInFlight
+                                ? "Analyzing edit..."
+                                : "Analyze edited video"}
+                            </button>
+                          ) : null}
+                          <button
+                            className="button-secondary"
+                            disabled={
+                              isCreatingMediaAlignmentJob ||
+                              hasActiveAlignmentJob ||
+                              Boolean(pairAlignmentBlockedReason)
+                            }
+                            onClick={() => {
+                              void onCreateMediaAlignmentJob({
+                                pairId: pair.id,
+                              });
+                            }}
+                            type="button"
+                          >
+                            {hasActiveAlignmentJob
+                              ? "Aligning..."
+                              : pairAlignmentButtonLabel}
+                          </button>
+                          {hasActiveAlignmentJob && latestAlignmentJob ? (
+                            <button
+                              className="button-secondary"
+                              disabled={Boolean(
+                                cancellingMediaAlignmentJobIds[
+                                  latestAlignmentJob.id
+                                ],
+                              )}
+                              onClick={() => {
+                                void onCancelMediaAlignmentJob({
+                                  jobId: latestAlignmentJob.id,
+                                });
+                              }}
+                              type="button"
+                            >
+                              {cancellingMediaAlignmentJobIds[
+                                latestAlignmentJob.id
+                              ]
+                                ? "Cancelling..."
+                                : "Cancel alignment"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </article>
             </details>
           </div>
         </details>
@@ -2043,7 +2203,9 @@ function formatIndexSummary(
   summary: NonNullable<MediaLibraryAsset["indexSummary"]>,
 ): string {
   const resolution =
-    summary.width && summary.height ? ` • ${summary.width}x${summary.height}` : "";
+    summary.width && summary.height
+      ? ` • ${summary.width}x${summary.height}`
+      : "";
   const codecs = [
     summary.videoCodec ? `video ${summary.videoCodec}` : null,
     summary.audioCodec ? `audio ${summary.audioCodec}` : null,
@@ -2121,7 +2283,9 @@ function formatAlignmentRange(
   return `${label} ${formatDuration(range.startSeconds)}-${formatDuration(range.endSeconds)}`;
 }
 
-function formatStatus(status: ExampleClip["status"] | MediaLibraryAsset["status"]): string {
+function formatStatus(
+  status: ExampleClip["status"] | MediaLibraryAsset["status"],
+): string {
   if (status === "LOCAL_FILE_AVAILABLE") {
     return "Local file found";
   }
@@ -2217,14 +2381,14 @@ function describeBackgroundActivity(
   activeAlignmentJobCount: number,
 ): string {
   if (activeIndexJobCount > 0 && activeAlignmentJobCount > 0) {
-    return `HS is analyzing ${activeIndexJobCount} asset${activeIndexJobCount === 1 ? "" : "s"} and comparing ${activeAlignmentJobCount} VOD/edit pair${activeAlignmentJobCount === 1 ? "" : "s"}.`;
+    return `VCP is analyzing ${activeIndexJobCount} asset${activeIndexJobCount === 1 ? "" : "s"} and comparing ${activeAlignmentJobCount} VOD/edit pair${activeAlignmentJobCount === 1 ? "" : "s"}.`;
   }
 
   if (activeIndexJobCount > 0) {
-    return `HS is analyzing ${activeIndexJobCount} asset${activeIndexJobCount === 1 ? "" : "s"} right now.`;
+    return `VCP is analyzing ${activeIndexJobCount} asset${activeIndexJobCount === 1 ? "" : "s"} right now.`;
   }
 
-  return `HS is comparing ${activeAlignmentJobCount} VOD/edit pair${activeAlignmentJobCount === 1 ? "" : "s"} right now.`;
+  return `VCP is comparing ${activeAlignmentJobCount} VOD/edit pair${activeAlignmentJobCount === 1 ? "" : "s"} right now.`;
 }
 
 function describeAssetPrimaryStatus(
@@ -2236,14 +2400,14 @@ function describeAssetPrimaryStatus(
     latestIndexJob?.status === "RUNNING"
   ) {
     if (asset.assetType === "VOD") {
-      return "HS is scanning this VOD in the background.";
+      return "VCP is scanning this VOD in the background.";
     }
 
     if (asset.assetType === "EDIT") {
-      return "HS is analyzing this edited video in the background.";
+      return "VCP is analyzing this edited video in the background.";
     }
 
-    return "HS is analyzing this clip in the background.";
+    return "VCP is analyzing this clip in the background.";
   }
 
   if (latestIndexJob?.status === "FAILED") {

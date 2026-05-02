@@ -1,3 +1,3 @@
 fn main() {
-    highlightsmith_desktop_lib::run();
+    vaexcore_pulse_desktop_lib::run();
 }

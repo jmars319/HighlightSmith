@@ -1,6 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import { startTransition, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SurfaceCard } from "./components/SurfaceCard";
 import { TabRail } from "./components/TabRail";
 import {
@@ -9,6 +9,8 @@ import {
   mobileTabs,
   type MobileTab,
 } from "./data/companion";
+
+const pulseLogo = require("../assets/vaexcore-pulse-logo.png") as number;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<MobileTab>("dashboard");
@@ -287,7 +289,13 @@ export default function App() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.kicker}>HighlightSmith Companion</Text>
+          <Image
+            accessibilityLabel="vaexcore pulse logo"
+            resizeMode="cover"
+            source={pulseLogo}
+            style={styles.logo}
+          />
+          <Text style={styles.kicker}>vaexcore pulse companion</Text>
           <Text style={styles.title}>
             Browse the queue without pretending to run the workstation.
           </Text>
@@ -364,6 +372,11 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: 10,
+  },
+  logo: {
+    width: 86,
+    height: 86,
+    borderRadius: 8,
   },
   kicker: {
     color: "#f4b061",

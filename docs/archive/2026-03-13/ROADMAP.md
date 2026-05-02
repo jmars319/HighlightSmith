@@ -1,8 +1,8 @@
-# HighlightSmith - Visual Development Roadmap
+# vaexcore pulse - Visual Development Roadmap
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                      HIGHLIGHTSMITH PROJECT ROADMAP                      │
+│                      VAEXCORE_PULSE PROJECT ROADMAP                      │
 │                                                                          │
 │  Local-first highlight detection for Twitch/YouTube streamers          │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -38,7 +38,7 @@ PHASE 0: PROOF OF CONCEPT (1-2 weeks)
 💰 COST: ~$20-50 in OpenAI API testing
 
 FILES TO USE:
-├── highlightsmith-prototype/
+├── vaexcore-pulse-prototype/
 │   ├── analyze_vod.py      ← Main script
 │   ├── requirements.txt
 │   └── .env.example
@@ -78,7 +78,7 @@ PHASE 1: BACKEND API (1-2 weeks)
 💰 COST: $10-20/month VPS (optional)
 
 FILES TO USE:
-├── highlightsmith-backend/
+├── vaexcore-pulse-backend/
 │   ├── app/
 │   │   ├── main.py             ← FastAPI app
 │   │   ├── api/v1/analyze.py   ← Endpoint logic
@@ -317,19 +317,19 @@ FILES PROVIDED IN THIS FRAMEWORK
 📄 Documentation:
 ├── README.md                   ← Master guide (start here)
 ├── QUICK_START.md             ← 5-minute quickstart
-├── HIGHLIGHTSMITH_SPEC.md     ← Complete specification
+├── VAEXCORE_PULSE_SPEC.md     ← Complete specification
 ├── COPILOT_INSTRUCTIONS.md    ← AI coding assistant config
 └── ROADMAP.md                 ← This file
 
 🐍 Phase 0 (Prototype):
-├── highlightsmith-prototype/
+├── vaexcore-pulse-prototype/
 │   ├── analyze_vod.py         ← Main analysis script
 │   ├── requirements.txt
 │   ├── .env.example
 │   └── README.md
 
 🚀 Phase 1 (Backend):
-└── highlightsmith-backend/
+└── vaexcore-pulse-backend/
     ├── app/
     │   ├── main.py            ← FastAPI entry point
     │   ├── api/v1/analyze.py  ← Analysis endpoint
@@ -349,7 +349,7 @@ NEXT ACTIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 This Week:
-└─ [ ] Read HIGHLIGHTSMITH_SPEC.md
+└─ [ ] Read VAEXCORE_PULSE_SPEC.md
 └─ [ ] Set up prototype environment
 └─ [ ] Test on 1 VOD
 └─ [ ] Evaluate accuracy

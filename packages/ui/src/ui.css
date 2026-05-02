@@ -1,31 +1,56 @@
-.hs-layout {
+.vcp-layout {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr) minmax(280px, 360px);
   gap: 20px;
 }
 
-.hs-sidebar,
-.hs-content,
-.hs-aside,
-.hs-block,
-.hs-candidate-card {
+.vcp-sidebar,
+.vcp-content,
+.vcp-aside,
+.vcp-block,
+.vcp-candidate-card {
   min-width: 0;
   border-radius: 20px;
   border: 1px solid var(--surface-card-border, rgba(255, 255, 255, 0.08));
   background: var(--panel-strong, rgba(10, 12, 17, 0.62));
 }
 
-.hs-sidebar,
-.hs-content,
-.hs-aside {
+.vcp-sidebar,
+.vcp-content,
+.vcp-aside {
   padding: 20px;
 }
 
-.hs-sidebar {
+.vcp-sidebar {
   overflow: hidden;
 }
 
-.hs-sidebar h1 {
+.vcp-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vcp-brand-mark {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow:
+    0 0 22px rgba(255, 57, 243, 0.2),
+    0 0 28px rgba(40, 189, 248, 0.16);
+}
+
+.vcp-brand-mark img,
+.vcp-brand-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vcp-sidebar h1 {
   margin: 10px 0 0;
   font-size: clamp(1.7rem, 2.1vw, 2.2rem);
   line-height: 0.98;
@@ -33,9 +58,9 @@
   max-width: 9ch;
 }
 
-.hs-kicker,
-.hs-block-label,
-.hs-meta {
+.vcp-kicker,
+.vcp-block-label,
+.vcp-meta {
   display: block;
   color: var(--text-faint, rgba(255, 255, 255, 0.62));
   font-size: 0.75rem;
@@ -43,30 +68,30 @@
   text-transform: uppercase;
 }
 
-.hs-subtitle,
-.hs-muted,
-.hs-secondary {
+.vcp-subtitle,
+.vcp-muted,
+.vcp-secondary {
   color: var(--text-subtle, rgba(255, 255, 255, 0.72));
 }
 
-.hs-subtitle {
+.vcp-subtitle {
   margin: 14px 0 0;
   font-size: 0.98rem;
 }
 
-.hs-nav {
+.vcp-nav {
   display: grid;
   gap: 8px;
   margin-top: 18px;
 }
 
-.hs-nav-item,
-.hs-controls-row button,
-.hs-candidate-card {
+.vcp-nav-item,
+.vcp-controls-row button,
+.vcp-candidate-card {
   font: inherit;
 }
 
-.hs-nav-item {
+.vcp-nav-item {
   border: 0;
   border-radius: 999px;
   padding: 10px 12px;
@@ -75,46 +100,46 @@
   text-align: left;
 }
 
-.hs-nav-item.active {
+.vcp-nav-item.active {
   background: var(--filter-active-bg, rgba(244, 177, 96, 0.2));
 }
 
-.hs-block {
+.vcp-block {
   padding: 16px;
 }
 
-.hs-candidate-card {
+.vcp-candidate-card {
   width: 100%;
   padding: 16px;
   text-align: left;
   color: inherit;
 }
 
-.hs-candidate-card.selected {
+.vcp-candidate-card.selected {
   border-color: var(--active-border, rgba(244, 177, 96, 0.4));
 }
 
-.hs-candidate-row,
-.hs-controls-row {
+.vcp-candidate-row,
+.vcp-controls-row {
   display: flex;
   justify-content: space-between;
   gap: 10px;
   align-items: center;
 }
 
-.hs-controls-row {
+.vcp-controls-row {
   margin-top: 12px;
   flex-wrap: wrap;
   align-items: stretch;
 }
 
-.hs-controls-row-label {
+.vcp-controls-row-label {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.hs-controls-row button,
-.hs-controls-row input {
+.vcp-controls-row button,
+.vcp-controls-row input {
   border-radius: 12px;
   border: 1px solid var(--surface-input-border, rgba(255, 255, 255, 0.1));
   padding: 10px 12px;
@@ -122,34 +147,34 @@
   color: var(--text-color, white);
 }
 
-.hs-controls-row input {
+.vcp-controls-row input {
   flex: 1;
   min-width: 0;
 }
 
-.hs-controls-row button {
+.vcp-controls-row button {
   white-space: normal;
 }
 
-.hs-candidate-card strong,
-.hs-candidate-card p,
-.hs-meta,
-.hs-subtitle,
-.hs-sidebar h1,
-.hs-block blockquote {
+.vcp-candidate-card strong,
+.vcp-candidate-card p,
+.vcp-meta,
+.vcp-subtitle,
+.vcp-sidebar h1,
+.vcp-block blockquote {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.hs-candidate-row {
+.vcp-candidate-row {
   align-items: flex-start;
 }
 
-.hs-block blockquote {
+.vcp-block blockquote {
   margin: 10px 0 0;
 }
 
-.hs-badge {
+.vcp-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -159,30 +184,30 @@
   font-size: 0.75rem;
 }
 
-.hs-badge-high {
+.vcp-badge-high {
   background: rgba(244, 177, 96, 0.18);
 }
 
-.hs-badge-medium {
+.vcp-badge-medium {
   background: rgba(92, 161, 176, 0.2);
 }
 
-.hs-badge-low {
+.vcp-badge-low {
   background: rgba(189, 208, 110, 0.18);
 }
 
-.hs-badge-experimental {
+.vcp-badge-experimental {
   background: rgba(177, 128, 230, 0.18);
 }
 
 @media (max-width: 1180px) {
-  .hs-layout {
+  .vcp-layout {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 640px) {
-  .hs-controls-row-label {
+  .vcp-controls-row-label {
     grid-template-columns: 1fr;
   }
 }

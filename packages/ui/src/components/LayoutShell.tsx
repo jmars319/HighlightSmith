@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 type LayoutShellProps = {
   appName: string;
+  brandMark?: ReactNode;
   title: string;
   subtitle: string;
   navItems: Array<{ id: string; label: string }>;
@@ -13,6 +14,7 @@ type LayoutShellProps = {
 
 export function LayoutShell({
   appName,
+  brandMark,
   title,
   subtitle,
   navItems,
@@ -22,17 +24,20 @@ export function LayoutShell({
   aside,
 }: LayoutShellProps) {
   return (
-    <div className="hs-layout">
-      <aside className="hs-sidebar">
-        <p className="hs-kicker">{appName}</p>
+    <div className="vcp-layout">
+      <aside className="vcp-sidebar">
+        <div className="vcp-brand">
+          {brandMark ? <div className="vcp-brand-mark">{brandMark}</div> : null}
+          <p className="vcp-kicker">{appName}</p>
+        </div>
         <h1>{title}</h1>
-        <p className="hs-subtitle">{subtitle}</p>
-        <nav className="hs-nav">
+        <p className="vcp-subtitle">{subtitle}</p>
+        <nav className="vcp-nav">
           {navItems.map((item) => (
             <button
               key={item.id}
               className={
-                item.id === activeId ? "hs-nav-item active" : "hs-nav-item"
+                item.id === activeId ? "vcp-nav-item active" : "vcp-nav-item"
               }
               onClick={() => onSelect(item.id)}
               type="button"
@@ -42,8 +47,8 @@ export function LayoutShell({
           ))}
         </nav>
       </aside>
-      <section className="hs-content">{children}</section>
-      {aside ? <aside className="hs-aside">{aside}</aside> : null}
+      <section className="vcp-content">{children}</section>
+      {aside ? <aside className="vcp-aside">{aside}</aside> : null}
     </div>
   );
 }

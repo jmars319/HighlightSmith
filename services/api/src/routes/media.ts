@@ -26,7 +26,7 @@ export const mediaRoutes: FastifyPluginAsync = async (fastify) => {
     const resolvedPath = resolve(mediaPath);
     const previewCacheDirectory = resolve(
       os.tmpdir(),
-      "highlightsmith-preview-clips",
+      "vaexcore-pulse-preview-clips",
     );
     const relativePath = relative(previewCacheDirectory, resolvedPath);
     if (
@@ -37,7 +37,7 @@ export const mediaRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(403).send({
         error: "media_path_forbidden",
         message:
-          "HighlightSmith only serves its own generated preview clips through this route.",
+          "vaexcore pulse only serves its own generated preview clips through this route.",
       });
     }
 

@@ -2,7 +2,7 @@
 
 ## Product Shape
 
-HighlightSmith is a signal-driven highlight scouting system. It is not an autonomous editor.
+vaexcore pulse is a signal-driven highlight scouting system. It is not an autonomous editor.
 
 Core flow:
 

@@ -1,8 +1,8 @@
 import type {
   CandidateWindow,
   ReviewDecision,
-} from "@highlightsmith/shared-types";
-import { describeCandidatePlainly } from "@highlightsmith/domain";
+} from "@vaexcore/pulse-shared-types";
+import { describeCandidatePlainly } from "@vaexcore/pulse-domain";
 import { formatLongTime } from "../lib/format";
 import {
   candidateHasReviewRisk,
@@ -35,7 +35,7 @@ export function CandidateTimeline({
       <section className="timeline-panel glass-panel empty-state">
         <p className="eyebrow">Video map</p>
         <h2>No moments found</h2>
-        <p>HS did not find any strong moments in this session.</p>
+        <p>VCP did not find any strong moments in this session.</p>
       </section>
     );
   }
@@ -45,9 +45,11 @@ export function CandidateTimeline({
     candidates[0];
   const laneMarkers = assignTimelineLanes(candidates);
   const laneCount =
-    laneMarkers.reduce((maxLane, marker) => Math.max(maxLane, marker.lane), 0) + 1;
+    laneMarkers.reduce((maxLane, marker) => Math.max(maxLane, marker.lane), 0) +
+    1;
   const demotedCount = candidates.filter(candidateHasReviewRisk).length;
-  const selectedCandidateDescription = describeCandidatePlainly(selectedCandidate);
+  const selectedCandidateDescription =
+    describeCandidatePlainly(selectedCandidate);
 
   return (
     <section className="timeline-panel glass-panel">
@@ -57,7 +59,8 @@ export function CandidateTimeline({
           <h2>Moment timeline</h2>
           <p className="timeline-summary-copy">
             {candidates.length} suggested moments across{" "}
-            {formatLongTime(durationSeconds)} • {demotedCount} need a closer look
+            {formatLongTime(durationSeconds)} • {demotedCount} need a closer
+            look
           </p>
         </div>
         <span className="queue-count">{laneCount} tracks</span>
@@ -165,7 +168,8 @@ export function CandidateTimeline({
           {formatLongTime(selectedCandidate.candidateWindow.endSeconds)}
         </p>
         <p>
-          Suggested clip {formatLongTime(selectedCandidate.suggestedSegment.startSeconds)} to{" "}
+          Suggested clip{" "}
+          {formatLongTime(selectedCandidate.suggestedSegment.startSeconds)} to{" "}
           {formatLongTime(selectedCandidate.suggestedSegment.endSeconds)}
         </p>
         {selectedCandidate.reviewTags.length > 0 ? (
@@ -186,7 +190,9 @@ export function CandidateTimeline({
   );
 }
 
-function assignTimelineLanes(candidates: CandidateWindow[]): TimelineLaneMarker[] {
+function assignTimelineLanes(
+  candidates: CandidateWindow[],
+): TimelineLaneMarker[] {
   const sortedCandidates = [...candidates].sort(
     (left, right) =>
       left.candidateWindow.startSeconds - right.candidateWindow.startSeconds,

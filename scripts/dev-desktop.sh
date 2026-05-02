@@ -8,5 +8,5 @@ require_cmd pnpm
 require_cmd cargo
 info "Starting desktopapp"
 note "The Tauri window should open and the web UI will be served at http://127.0.0.1:1420"
-print_command pnpm --filter @highlightsmith/desktopapp tauri:dev
-run_from_root pnpm --filter @highlightsmith/desktopapp tauri:dev
+print_command pnpm --filter @vaexcore/pulse-desktopapp tauri:dev
+run_from_root pnpm --filter @vaexcore/pulse-desktopapp tauri:dev

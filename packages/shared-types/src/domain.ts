@@ -623,9 +623,7 @@ export type ReviewDecision = z.infer<typeof reviewDecisionSchema>;
 export type ExampleClipSourceType = z.infer<typeof exampleClipSourceTypeSchema>;
 export type ExampleReferenceKind = z.infer<typeof exampleReferenceKindSchema>;
 export type ExampleClipStatus = z.infer<typeof exampleClipStatusSchema>;
-export type MediaLibraryAssetType = z.infer<
-  typeof mediaLibraryAssetTypeSchema
->;
+export type MediaLibraryAssetType = z.infer<typeof mediaLibraryAssetTypeSchema>;
 export type MediaLibraryAssetScope = z.infer<
   typeof mediaLibraryAssetScopeSchema
 >;
@@ -656,9 +654,7 @@ export type ExampleClipFeatureSummary = z.infer<
 >;
 export type ExampleClip = z.infer<typeof exampleClipSchema>;
 export type MediaIndexSummary = z.infer<typeof mediaIndexSummarySchema>;
-export type MediaIndexAudioBucket = z.infer<
-  typeof mediaIndexAudioBucketSchema
->;
+export type MediaIndexAudioBucket = z.infer<typeof mediaIndexAudioBucketSchema>;
 export type MediaIndexArtifactSummary = z.infer<
   typeof mediaIndexArtifactSummarySchema
 >;

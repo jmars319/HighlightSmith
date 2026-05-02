@@ -1,4 +1,4 @@
-# HighlightSmith - Project Specification
+# vaexcore pulse - Project Specification
 
 **Version:** 0.1.0  
 **Target:** Solo developer with AI coding assistants  

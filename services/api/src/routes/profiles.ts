@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   addExampleClipRequestSchema,
   createClipProfileRequestSchema,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 import {
   addProfileExample,
   AnalyzerBridgeError,

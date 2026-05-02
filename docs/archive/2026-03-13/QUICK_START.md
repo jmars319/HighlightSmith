@@ -1,4 +1,4 @@
-# HighlightSmith - Quick Start Guide
+# vaexcore pulse - Quick Start Guide
 
 ## 🎯 What You Have
 
@@ -12,11 +12,11 @@ A complete framework to build a local-first highlight detection tool for streame
 ## ⚡ Get Started (5 minutes)
 
 ### Step 1: Read the Spec (5 min)
-Open `HIGHLIGHTSMITH_SPEC.md` - it's your product bible.
+Open `VAEXCORE_PULSE_SPEC.md` - it's your product bible.
 
 ### Step 2: Test the Prototype (30 min)
 ```bash
-cd highlightsmith-prototype
+cd vaexcore-pulse-prototype
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
@@ -68,17 +68,17 @@ CHAOS_KEYWORDS = [
 ## 📁 What's in the Package
 
 ```
-highlightsmith/
+vaexcore-pulse/
 ├── README.md                    ← Master guide (you are here)
 ├── QUICK_START.md              ← This file
-├── HIGHLIGHTSMITH_SPEC.md      ← Complete specification
+├── VAEXCORE_PULSE_SPEC.md      ← Complete specification
 ├── COPILOT_INSTRUCTIONS.md     ← AI assistant config
 │
-├── highlightsmith-prototype/   ← Phase 0: Proof of concept
+├── vaexcore-pulse-prototype/   ← Phase 0: Proof of concept
 │   ├── analyze_vod.py         ← Main script (START HERE)
 │   └── README.md
 │
-└── highlightsmith-backend/     ← Phase 1: FastAPI service
+└── vaexcore-pulse-backend/     ← Phase 1: FastAPI service
     ├── app/                   ← Backend code
     │   ├── main.py           ← FastAPI entry
     │   ├── api/v1/analyze.py ← Analysis endpoint
@@ -103,7 +103,7 @@ python analyze_vod.py stream3.mp4
 
 ### Week 3-4: Backend
 ```bash
-cd highlightsmith-backend
+cd vaexcore-pulse-backend
 uvicorn app.main:app --reload
 
 # Test with curl/Postman
@@ -173,10 +173,10 @@ npm create tauri-app
 
 ## 🔗 Key Resources
 
-- **Spec:** `HIGHLIGHTSMITH_SPEC.md` (read this first)
+- **Spec:** `VAEXCORE_PULSE_SPEC.md` (read this first)
 - **Copilot Config:** `COPILOT_INSTRUCTIONS.md` (use with AI tools)
-- **Prototype:** `highlightsmith-prototype/README.md`
-- **Backend:** `highlightsmith-backend/README.md`
+- **Prototype:** `vaexcore-pulse-prototype/README.md`
+- **Backend:** `vaexcore-pulse-backend/README.md`
 
 ## ⚠️ Common Pitfalls
 
@@ -194,7 +194,7 @@ npm create tauri-app
 
 ## 🚀 Next Actions
 
-1. [ ] Read `HIGHLIGHTSMITH_SPEC.md` (30 min)
+1. [ ] Read `VAEXCORE_PULSE_SPEC.md` (30 min)
 2. [ ] Set up prototype environment (10 min)
 3. [ ] Test on first VOD (30 min)
 4. [ ] Evaluate results and decide next step

@@ -1,7 +1,7 @@
 import type {
   ProjectSession,
   ReviewDecision,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 
 export const sqliteSchemaVersion = 7;
 

@@ -1,4 +1,4 @@
-import type { ClipProfile } from "@highlightsmith/shared-types";
+import type { ClipProfile } from "@vaexcore/pulse-shared-types";
 
 const systemProfileTimestamp = "2026-04-11T00:00:00.000Z";
 

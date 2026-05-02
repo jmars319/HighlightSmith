@@ -1,4 +1,4 @@
-import type { CandidateWindow, ReviewTag } from "@highlightsmith/shared-types";
+import type { CandidateWindow, ReviewTag } from "@vaexcore/pulse-shared-types";
 
 const reviewTagLabels: Record<ReviewTag, string> = {
   DEAD_AIR_RISK: "Dead air risk",

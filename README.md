@@ -1,6 +1,6 @@
-# HighlightSmith
+# vaexcore pulse
 
-HighlightSmith is a local-first highlight scouting system for long-form stream recordings. It analyzes measurable signals, surfaces likely moments worth reviewing, suggests clip boundaries, and keeps final editorial control with the human creator.
+vaexcore pulse is a local-first highlight scouting system for long-form stream recordings. It analyzes measurable signals, surfaces likely moments worth reviewing, suggests clip boundaries, and keeps final editorial control with the human creator.
 
 This repository is the monorepo foundation for the project. It is structured to feel like a real product codebase now, while staying honest about what is still placeholder logic.
 
@@ -53,10 +53,7 @@ That runs environment checks and installs workspace dependencies.
 ## Run Surfaces And Services
 
 ```bash
-pnpm install:launcher
-pnpm launch:hs
-pnpm stop:hs
-pnpm dev:hs
+pnpm dev:pulse
 pnpm dev:desktop
 pnpm dev:web
 pnpm dev:mobile
@@ -65,14 +62,34 @@ pnpm dev:api
 pnpm dev:both
 ```
 
-`install:launcher` installs a real macOS app bundle at `~/Applications/HighlightSmith.app` that starts HighlightSmith without leaving Terminal open.
-`launch:hs` reuses or starts the local analyzer + API services in the background, rebuilds the desktop app only when its source has changed, and opens the compiled Tauri app.
-`stop:hs` stops the background analyzer, API, and tracked desktop app process started by the launcher.
-`dev:hs` remains the live development stack: analyzer, then API, then the Tauri dev app after both health checks pass.
-On macOS, you can also double-click `Launch HighlightSmith.command` in the repo root to run the same no-terminal launcher flow from Finder.
+`dev:pulse` remains the live development stack: analyzer, then API, then the Tauri dev app after both health checks pass.
 `dev:both` starts analyzer + API + webapp together as the easiest multi-surface development loop from the repo root.
 The API bridge currently runs directly from TypeScript with `tsx`.
 `dev:desktop` remains the primary product-development loop.
+
+## Package The macOS App
+
+```bash
+pnpm app:build
+pnpm app:zip
+pnpm release:check
+pnpm release:unsigned
+pnpm diagnostics
+```
+
+`app:build` builds a real unsigned Tauri `.app` bundle at `release/mac-<arch>/vaexcore pulse.app`.
+`app:zip` creates the unsigned zip, `.zip.sha256`, JSON manifest, and tester handoff markdown.
+`release:check` runs build/test/release smoke checks.
+`release:unsigned` runs the full unsigned release flow.
+`diagnostics` creates a safe local support bundle that reports paths and environment metadata without config contents or secrets.
+
+The packaged macOS identity is:
+
+- Product name: `vaexcore pulse`
+- Package name: `vaexcore-pulse`
+- Bundle name: `vaexcore pulse.app`
+- App ID: `com.vaexil.vaexcore.pulse`
+- App data path: `~/Library/Application Support/vaexcore pulse`
 
 ## Verify The Repo
 
@@ -88,7 +105,7 @@ pnpm health
 pnpm run doctor
 ```
 
-Use `pnpm health` as the primary repo health check. `pnpm doctor` is a built-in pnpm command and does not run the HighlightSmith script.
+Use `pnpm health` as the primary repo health check. `pnpm doctor` is a built-in pnpm command and does not run the vaexcore pulse script.
 
 ## Local Tool Versions
 

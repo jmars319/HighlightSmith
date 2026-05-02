@@ -1,8 +1,8 @@
-# GitHub Copilot Instructions for HighlightSmith
+# GitHub Copilot Instructions for vaexcore pulse
 
 ## Project Overview
 
-HighlightSmith is a local-first video highlight detection tool for Twitch/YouTube streamers. It analyzes VOD files locally, sends lightweight features to a cloud backend for AI-powered highlight scoring, and allows users to export clips without uploading full videos.
+vaexcore pulse is a local-first video highlight detection tool for Twitch/YouTube streamers. It analyzes VOD files locally, sends lightweight features to a cloud backend for AI-powered highlight scoring, and allows users to export clips without uploading full videos.
 
 **Key Architecture:**
 - **Desktop App:** Tauri (Rust + React/TypeScript) - handles video processing locally
@@ -591,7 +591,7 @@ log.error('Analysis failed:', error);
 ## File Organization
 
 ```
-highlightsmith/
+vaexcore-pulse/
 ├── backend/                 # Python FastAPI backend
 │   ├── app/
 │   │   ├── api/v1/         # API endpoints
@@ -619,7 +619,7 @@ highlightsmith/
 
 ## When in Doubt
 
-1. **Check the spec** - HIGHLIGHTSMITH_SPEC.md has the answers
+1. **Check the spec** - VAEXCORE_PULSE_SPEC.md has the answers
 2. **Keep it simple** - Don't over-engineer for future features
 3. **Make it work, then make it good** - Optimize after validation
 4. **Log liberally** - You'll thank yourself when debugging
@@ -629,4 +629,4 @@ highlightsmith/
 ---
 
 **Last updated:** 2024-11-16
-**For project:** HighlightSmith v0.1
+**For project:** vaexcore pulse v0.1

@@ -2793,7 +2793,7 @@ class SessionStore:
         except Exception as error:  # pragma: no cover - defensive local-media guard
             return (
                 None,
-                "Local clip file is present, but HighlightSmith could not build a heuristic summary yet: "
+                "Local clip file is present, but vaexcore pulse could not build a heuristic summary yet: "
                 f"{error}",
             )
 
@@ -3092,7 +3092,7 @@ class SessionStore:
             if Path(source_value).expanduser().exists():
                 return (
                     ExampleClipStatus.LOCAL_FILE_AVAILABLE,
-                    "Local clip reference saved. HighlightSmith will try to prepare a local heuristic summary for matching.",
+                    "Local clip reference saved. vaexcore pulse will try to prepare a local heuristic summary for matching.",
                 )
             return (
                 ExampleClipStatus.MISSING_LOCAL_FILE,
@@ -3101,7 +3101,7 @@ class SessionStore:
 
         return (
             ExampleClipStatus.REFERENCE_ONLY,
-            "Remote clip retrieval is not enabled yet. HighlightSmith is storing this reference for future matching work.",
+            "Remote clip retrieval is not enabled yet. vaexcore pulse is storing this reference for future matching work.",
         )
 
     def _refresh_session_summary(

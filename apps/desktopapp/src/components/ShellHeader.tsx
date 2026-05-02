@@ -39,7 +39,7 @@ export function ShellHeader({
     <header className="workspace-header glass-panel">
       <div className="workspace-header-main">
         <div>
-          <p className="eyebrow">HighlightSmith</p>
+          <p className="eyebrow">vaexcore pulse</p>
           <h1 className="workspace-title">Clip review workspace</h1>
           <p className="workspace-copy">
             Scan one video, review likely moments quickly, and keep the full
@@ -48,7 +48,11 @@ export function ShellHeader({
         </div>
 
         <div className="hero-actions">
-          <button className="button-primary" onClick={onPickMedia} type="button">
+          <button
+            className="button-primary"
+            onClick={onPickMedia}
+            type="button"
+          >
             Choose video
           </button>
           <button

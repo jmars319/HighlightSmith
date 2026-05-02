@@ -18,6 +18,7 @@ from ..contracts import (
     MediaIndexSummary,
     MediaThumbnailSuggestion,
 )
+from ..paths import resolve_thumbnail_output_root
 from .ingest import inspect_media_with_metadata
 
 MEDIA_INDEX_VERSION = "MEDIA_INDEX_V1"
@@ -37,7 +38,7 @@ THUMBNAIL_ANALYSIS_WIDTH = 160
 THUMBNAIL_ANALYSIS_HEIGHT = 90
 THUMBNAIL_EXPORT_WIDTH = 960
 FFMPEG_FRAME_TIMEOUT_SECONDS = 30
-THUMBNAIL_OUTPUT_ROOT = Path(".local/thumbnail-suggestions")
+THUMBNAIL_OUTPUT_ROOT = resolve_thumbnail_output_root()
 
 
 def build_media_index_summary(source_path: str) -> MediaIndexSummary:

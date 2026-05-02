@@ -1,5 +1,5 @@
 {
-  "name": "@highlightsmith/ai-assist",
+  "name": "@vaexcore/pulse-ai-assist",
   "private": true,
   "version": "0.2.0",
   "type": "module",
@@ -10,6 +10,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@highlightsmith/shared-types": "workspace:*"
+    "@vaexcore/pulse-shared-types": "workspace:*"
   }
 }

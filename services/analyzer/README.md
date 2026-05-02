@@ -1,6 +1,6 @@
-# HighlightSmith Analyzer
+# vaexcore pulse Analyzer
 
-Offline-first Python analysis scaffold for HighlightSmith.
+Offline-first Python analysis scaffold for vaexcore pulse.
 
 ## Current Status
 
@@ -18,13 +18,13 @@ Offline-first Python analysis scaffold for HighlightSmith.
 ## Run Mock Analysis
 
 ```bash
-PYTHONPATH=services/analyzer/src python3 -m highlightsmith_analyzer.cli --mock
+PYTHONPATH=services/analyzer/src python3 -m vaexcore_pulse_analyzer.cli --mock
 ```
 
 ## Run Analyzer Service
 
 ```bash
-PYTHONPATH=services/analyzer/src python3 -m highlightsmith_analyzer.server
+PYTHONPATH=services/analyzer/src python3 -m vaexcore_pulse_analyzer.server
 ```
 
 This starts a lightweight local HTTP server with:
@@ -67,9 +67,14 @@ session payload as the current source of truth.
 ## Persist Mock Analysis To SQLite
 
 ```bash
-mkdir -p .local
-PYTHONPATH=services/analyzer/src python3 -m highlightsmith_analyzer.cli --mock --persist --database .local/highlightsmith.sqlite3
+PYTHONPATH=services/analyzer/src python3 -m vaexcore_pulse_analyzer.cli --mock --persist
 ```
+
+By default, persisted app data is stored under
+`~/Library/Application Support/vaexcore pulse/vaexcore-pulse.sqlite3`. Set
+`VAEXCORE_PULSE_ANALYZER_DATABASE_PATH` or pass `--database` for a custom
+location. An existing legacy `.local/vaexcore-pulse.sqlite3` is still honored
+as a fallback.
 
 ## Run Tests
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "HighlightSmith",
-  "version": "0.1.0",
-  "identifier": "com.highlightsmith.desktop",
+  "productName": "vaexcore pulse",
+  "version": "0.2.0",
+  "identifier": "com.vaexil.vaexcore.pulse",
   "build": {
     "beforeDevCommand": "pnpm dev:web",
     "beforeBuildCommand": "pnpm build:web",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "HighlightSmith",
+        "title": "vaexcore pulse",
         "width": 1540,
         "height": 960,
         "minWidth": 1120,

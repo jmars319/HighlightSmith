@@ -4,7 +4,7 @@ import type {
   ContentProfile,
   ReasonCode,
   ScoreContribution,
-} from "@highlightsmith/shared-types";
+} from "@vaexcore/pulse-shared-types";
 
 const reasonLabels: Record<ReasonCode, string> = {
   LOUDNESS_SPIKE: "Loudness spike",
