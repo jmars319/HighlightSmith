@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "dev:web": "vite --host 127.0.0.1 --port 1420",
+    "dev:web": "vite --host 127.0.0.1 --port 1421",
     "build:web": "tsc -p tsconfig.json && vite build",
     "build:desktop": "cargo check --manifest-path src-tauri/Cargo.toml && tsc -p tsconfig.json && vite build",
     "preview": "vite preview",

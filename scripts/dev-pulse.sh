@@ -40,7 +40,7 @@ trap cleanup EXIT INT TERM
 info "Starting analyzer, API bridge, and desktop app"
 note "Analyzer:  http://127.0.0.1:9010"
 note "API:       http://127.0.0.1:4010"
-note "Desktop:   http://127.0.0.1:1420"
+note "Desktop:   http://127.0.0.1:1421"
 
 ( cd "${REPO_ROOT}" && exec bash ./scripts/dev-analyzer.sh ) &
 analyzer_pid=$!
