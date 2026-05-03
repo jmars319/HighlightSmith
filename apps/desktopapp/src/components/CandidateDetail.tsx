@@ -36,8 +36,10 @@ type CandidateDetailProps = {
   selectedCandidateVisibleInQueue: boolean;
   visibleCandidateCount: number;
   canPreview: boolean;
+  canExportAcceptedToStudio: boolean;
   onAccept: () => void;
   onReject: () => void;
+  onExportAcceptedToStudio: () => void;
   onExpandSetup: () => void;
   onExpandResolution: () => void;
   onPreviewDetectedMoment: () => void;
@@ -50,8 +52,10 @@ type CandidateDetailProps = {
   labelDraft: string;
   onSaveLabel: () => void;
   onReturnToProjects: () => void;
+  isExportingToStudio: boolean;
   isSavingReview: boolean;
   reviewError: string | null;
+  studioExportStatus: string | null;
 };
 
 export function CandidateDetail({
@@ -69,8 +73,10 @@ export function CandidateDetail({
   selectedCandidateVisibleInQueue,
   visibleCandidateCount,
   canPreview,
+  canExportAcceptedToStudio,
   onAccept,
   onReject,
+  onExportAcceptedToStudio,
   onExpandSetup,
   onExpandResolution,
   onPreviewDetectedMoment,
@@ -83,8 +89,10 @@ export function CandidateDetail({
   labelDraft,
   onSaveLabel,
   onReturnToProjects,
+  isExportingToStudio,
   isSavingReview,
   reviewError,
+  studioExportStatus,
 }: CandidateDetailProps) {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
@@ -430,9 +438,20 @@ export function CandidateDetail({
                     Copy JSON
                   </button>
                 ) : null}
+                <button
+                  className="button-secondary"
+                  disabled={!canExportAcceptedToStudio || isExportingToStudio}
+                  onClick={onExportAcceptedToStudio}
+                  type="button"
+                >
+                  {isExportingToStudio ? "Sending to Studio" : "Send to Studio"}
+                </button>
               </div>
               {copyFeedback ? (
                 <p className="review-status-copy">{copyFeedback}</p>
+              ) : null}
+              {studioExportStatus ? (
+                <p className="review-status-copy">{studioExportStatus}</p>
               ) : null}
               <details className="internal-details nested-export-details">
                 <summary className="internal-details-summary">

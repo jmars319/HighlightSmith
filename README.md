@@ -139,7 +139,7 @@ Still stubbed on purpose:
 
 ## Optional vaexcore studio Connection
 
-When vaexcore studio is running, Pulse looks for Studio's local discovery file and subscribes to the Studio event stream. A `recording.stopped` event stages the completed recording in Pulse so it can be scanned without manually copying the file path.
+When vaexcore studio is running, Pulse looks for Studio's local discovery file, checks `GET /recordings/recent`, and subscribes to the Studio event stream. A `recording.stopped` event stages the completed recording in Pulse so it can be scanned without manually copying the file path. After review, Pulse can send kept moments back to Studio as `marker.created` records with source metadata.
 
 For browser-only dev runs, configure:
 

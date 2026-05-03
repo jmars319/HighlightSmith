@@ -98,6 +98,15 @@ import {
   saveSessionResumeState,
 } from "./lib/resumeState";
 import { fetchWithLocalApiMessage, localApiTimeouts } from "./lib/localApi";
+import {
+  fetchLatestStudioRecording,
+  studioEventSocketUrl,
+  studioRecordingFromMessage,
+  studioRequestHeaders,
+  type StudioDiscovery,
+  type StudioIntakeState,
+  type StudioRecordingCandidate,
+} from "./lib/studioIntegration";
 
 type FilterValue = ConfidenceBand | "ALL";
 type DesktopPage = "projects" | "new-analysis" | "candidate-review";
@@ -115,27 +124,6 @@ type StartGuide = {
   steps: string[];
   ctaLabel: string | null;
   ctaAction: "profile-setup" | "pick-media" | null;
-};
-type StudioConnectionState = "checking" | "connected" | "unavailable";
-type StudioDiscovery = {
-  apiUrl: string;
-  wsUrl: string;
-  token: string | null;
-  discovered: boolean;
-  source: string;
-  detail: string;
-};
-type StudioRecordingCandidate = {
-  sessionId: string;
-  outputPath: string;
-  profileId: string | null;
-  stoppedAt: string;
-};
-type StudioIntakeState = {
-  connection: StudioConnectionState;
-  detail: string;
-  apiUrl: string | null;
-  latestRecording: StudioRecordingCandidate | null;
 };
 type ThemeMode = "dark" | "light";
 type SettingsSectionId = "profile-setup" | "appearance" | "window-behavior";
@@ -266,6 +254,10 @@ function DesktopApp() {
     apiUrl: null,
     latestRecording: null,
   });
+  const [studioExportStatus, setStudioExportStatus] = useState<string | null>(
+    null,
+  );
+  const [isExportingToStudio, setIsExportingToStudio] = useState(false);
   const pulseRuntimeStatus = usePulseRuntimeStatus(apiBaseUrl);
   const isPulseReady = isPulseRuntimeReady(pulseRuntimeStatus);
   const sessionCandidates = projectSession?.candidates ?? [];
@@ -498,11 +490,22 @@ function DesktopApp() {
           return;
         }
 
+        const latestRecording = await fetchLatestStudioRecording(
+          discovery,
+        ).catch(() => null);
+
+        if (!isSubscribed) {
+          return;
+        }
+
         setStudioIntake((current) => ({
           ...current,
           connection: "connected",
-          detail: "Connected to vaexcore studio. Waiting for stopped recordings.",
+          detail: latestRecording
+            ? `Found Studio recording ${extractSourceName(latestRecording.outputPath)}.`
+            : "Connected to vaexcore studio. Waiting for stopped recordings.",
           apiUrl: discovery.apiUrl,
+          latestRecording: latestRecording ?? current.latestRecording,
         }));
 
         socket = new WebSocket(studioEventSocketUrl(discovery));
@@ -1331,6 +1334,89 @@ function DesktopApp() {
       setAnalysisTitle(buildSuggestedSessionTitle(recording.outputPath));
     }
     setActivePage("new-analysis");
+  }
+
+  async function handleExportAcceptedToStudio() {
+    if (!projectSession || isExportingToStudio) {
+      return;
+    }
+
+    const keptCandidates = acceptedCandidates(
+      projectSession.candidates,
+      decisionsByCandidateId,
+    );
+    if (keptCandidates.length === 0) {
+      setStudioExportStatus("No kept moments are ready to send.");
+      return;
+    }
+
+    setIsExportingToStudio(true);
+    setStudioExportStatus("Sending kept moments to Studio...");
+
+    try {
+      const discovery = await resolveStudioDiscovery();
+      const recordingSessionId =
+        studioIntake.latestRecording?.outputPath ===
+        projectSession.mediaSource.path
+          ? studioIntake.latestRecording.sessionId
+          : null;
+
+      const results = await Promise.all(
+        keptCandidates.map(async (candidate) => {
+          const decision = decisionsByCandidateId[candidate.id];
+          const segment =
+            decision?.adjustedSegment ?? candidate.suggestedSegment;
+          const label = decision?.label ?? candidate.editableLabel;
+          const headers = new Headers(studioRequestHeaders(discovery));
+          headers.set("content-type", "application/json");
+          const response = await fetch(`${discovery.apiUrl}/marker/create`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              label: `Pulse keep: ${label}`,
+              source_app: "vaexcore-pulse",
+              source_event_id: `pulse:${projectSession.id}:${candidate.id}`,
+              recording_session_id: recordingSessionId,
+              media_path: projectSession.mediaSource.path,
+              start_seconds: segment.startSeconds,
+              end_seconds: segment.endSeconds,
+              metadata: {
+                pulseSessionId: projectSession.id,
+                pulseSessionTitle: projectSession.title,
+                candidateId: candidate.id,
+                confidenceBand: candidate.confidenceBand,
+                scoreEstimate: candidate.scoreEstimate,
+                reasonCodes: candidate.reasonCodes,
+                reviewTags: candidate.reviewTags,
+                transcriptSnippet: candidate.transcriptSnippet,
+              },
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Studio marker create returned ${response.status}`);
+          }
+
+          return response;
+        }),
+      );
+
+      setStudioExportStatus(`Sent ${results.length} kept moments to Studio.`);
+      setStudioIntake((current) => ({
+        ...current,
+        connection: "connected",
+        detail: "Studio accepted the latest kept moments.",
+        apiUrl: discovery.apiUrl,
+      }));
+    } catch (error) {
+      setStudioExportStatus(
+        error instanceof Error
+          ? `Studio export failed: ${error.message}`
+          : "Studio export failed.",
+      );
+    } finally {
+      setIsExportingToStudio(false);
+    }
   }
 
   async function handleCreateProfile(input: CreateClipProfileRequest) {
@@ -2490,6 +2576,9 @@ function DesktopApp() {
             candidateCount={sessionCandidates.length}
             candidateIndex={Math.max(selectedCandidateIndex, 0)}
             canPreview={Boolean(projectSession?.mediaSource.path)}
+            canExportAcceptedToStudio={Boolean(
+              projectSession && acceptedCount > 0,
+            )}
             decision={selectedDecision}
             exportPreview={timestampPreview}
             onPreviewDetectedMoment={() =>
@@ -2510,8 +2599,12 @@ function DesktopApp() {
               selectedCandidate ? (labelDrafts[selectedCandidate.id] ?? "") : ""
             }
             onAccept={handleAccept}
+            onExportAcceptedToStudio={() => {
+              void handleExportAcceptedToStudio();
+            }}
             onExpandResolution={handleExpandResolution}
             onExpandSetup={handleExpandSetup}
+            isExportingToStudio={isExportingToStudio}
             isSavingReview={isSavingReview}
             onLabelChange={handleLabelChange}
             onOpenNextPendingSession={() => {
@@ -2526,6 +2619,7 @@ function DesktopApp() {
             profile={currentProfile}
             jsonPreview={jsonPreview}
             reviewError={reviewError}
+            studioExportStatus={studioExportStatus}
             visibleCandidateCount={queueCandidates.length}
           />
         </div>
@@ -4459,82 +4553,6 @@ async function resolveStudioDiscovery(): Promise<StudioDiscovery> {
     discovered: false,
     source: "default",
     detail: "Using the default Studio localhost URL.",
-  };
-}
-
-function studioRequestHeaders(discovery: StudioDiscovery): HeadersInit {
-  const headers: Record<string, string> = {
-    "x-vaexcore-client-id": "vaexcore-pulse",
-    "x-vaexcore-client-name": "vaexcore pulse",
-  };
-
-  if (discovery.token) {
-    headers["x-vaexcore-token"] = discovery.token;
-  }
-
-  return headers;
-}
-
-function studioEventSocketUrl(discovery: StudioDiscovery): string {
-  const url = new URL(discovery.wsUrl);
-  url.searchParams.set("client_id", "vaexcore-pulse-events");
-  url.searchParams.set("client_name", "vaexcore pulse events");
-  url.searchParams.set("limit", "25");
-  if (discovery.token) {
-    url.searchParams.set("token", discovery.token);
-  }
-  return url.toString();
-}
-
-function studioRecordingFromMessage(
-  rawMessage: unknown,
-): StudioRecordingCandidate | null {
-  if (typeof rawMessage !== "string") {
-    return null;
-  }
-
-  let event: unknown;
-  try {
-    event = JSON.parse(rawMessage);
-  } catch {
-    return null;
-  }
-
-  if (!event || typeof event !== "object") {
-    return null;
-  }
-
-  const typedEvent = event as {
-    type?: unknown;
-    timestamp?: unknown;
-    payload?: unknown;
-  };
-  if (typedEvent.type !== "recording.stopped") {
-    return null;
-  }
-
-  const payload =
-    typedEvent.payload && typeof typedEvent.payload === "object"
-      ? (typedEvent.payload as Record<string, unknown>)
-      : {};
-  const outputPath = typeof payload.output_path === "string"
-    ? payload.output_path.trim()
-    : "";
-
-  if (!outputPath || !isSupportedInput(outputPath)) {
-    return null;
-  }
-
-  return {
-    sessionId:
-      typeof payload.session_id === "string" ? payload.session_id : "unknown",
-    outputPath,
-    profileId:
-      typeof payload.profile_id === "string" ? payload.profile_id : null,
-    stoppedAt:
-      typeof typedEvent.timestamp === "string"
-        ? typedEvent.timestamp
-        : new Date().toISOString(),
   };
 }
 

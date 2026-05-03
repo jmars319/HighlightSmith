@@ -26,6 +26,7 @@
     "release:check": "bash ./scripts/release-check.sh",
     "release:unsigned": "bash ./scripts/release-unsigned.sh",
     "diagnostics": "bash ./scripts/diagnostics.sh",
+    "smoke:studio": "pnpm exec tsx scripts/smoke-studio-integration.ts",
     "test": "pnpm exec tsx --test packages/shared-types/src/mock.test.ts packages/domain/src/index.test.ts services/api/src/app.test.ts",
     "typecheck": "pnpm --recursive --if-present typecheck",
     "lint": "pnpm exec prettier --check .",
