@@ -476,6 +476,10 @@ h3 {
   gap: 12px;
 }
 
+.compact-panel-header {
+  align-items: flex-start;
+}
+
 .utility-block,
 .detail-card,
 .breakdown-panel,
@@ -838,6 +842,20 @@ h3 {
 .analysis-summary-path,
 .session-overview-path {
   word-break: break-word;
+}
+
+.studio-recording-card {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface-recessed);
+  border: 1px solid var(--surface-card-border);
+}
+
+.studio-recording-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-strong);
 }
 
 .analysis-summary-card p,

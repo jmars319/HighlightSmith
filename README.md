@@ -118,6 +118,7 @@ Real now:
 
 - coherent pnpm workspace wiring
 - desktop-first review surface with local analysis and backlog workflow
+- optional vaexcore studio discovery for stopped recordings
 - webapp companion surface for lighter browsing and inspection
 - mobileapp companion scaffold with shared mock-derived views
 - shared contracts, profiles, scoring helpers, and UI primitives
@@ -135,6 +136,17 @@ Still stubbed on purpose:
 - persistent desktopapp SQLite adapter
 - API-backed mobile companion data
 - any AI-dependent logic in the core engine
+
+## Optional vaexcore studio Connection
+
+When vaexcore studio is running, Pulse looks for Studio's local discovery file and subscribes to the Studio event stream. A `recording.stopped` event stages the completed recording in Pulse so it can be scanned without manually copying the file path.
+
+For browser-only dev runs, configure:
+
+```bash
+VITE_VAEXCORE_STUDIO_API_URL=http://127.0.0.1:51287
+VITE_VAEXCORE_STUDIO_API_TOKEN=
+```
 
 ## Documentation
 

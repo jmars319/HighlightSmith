@@ -116,6 +116,27 @@ type StartGuide = {
   ctaLabel: string | null;
   ctaAction: "profile-setup" | "pick-media" | null;
 };
+type StudioConnectionState = "checking" | "connected" | "unavailable";
+type StudioDiscovery = {
+  apiUrl: string;
+  wsUrl: string;
+  token: string | null;
+  discovered: boolean;
+  source: string;
+  detail: string;
+};
+type StudioRecordingCandidate = {
+  sessionId: string;
+  outputPath: string;
+  profileId: string | null;
+  stoppedAt: string;
+};
+type StudioIntakeState = {
+  connection: StudioConnectionState;
+  detail: string;
+  apiUrl: string | null;
+  latestRecording: StudioRecordingCandidate | null;
+};
 type ThemeMode = "dark" | "light";
 type SettingsSectionId = "profile-setup" | "appearance" | "window-behavior";
 type PulseRuntimeStatus = "checking" | "starting" | "ready" | "slow";
@@ -239,6 +260,12 @@ function DesktopApp() {
   const deferredSearchValue = useDeferredValue(searchValue);
   const apiBaseUrl =
     import.meta.env.VITE_VAEXCORE_PULSE_API_BASE_URL ?? "http://127.0.0.1:4010";
+  const [studioIntake, setStudioIntake] = useState<StudioIntakeState>({
+    connection: "checking",
+    detail: "Looking for vaexcore studio.",
+    apiUrl: null,
+    latestRecording: null,
+  });
   const pulseRuntimeStatus = usePulseRuntimeStatus(apiBaseUrl);
   const isPulseReady = isPulseRuntimeReady(pulseRuntimeStatus);
   const sessionCandidates = projectSession?.candidates ?? [];
@@ -436,6 +463,98 @@ function DesktopApp() {
   useEffect(() => {
     persistThemeMode(themeMode);
   }, [themeMode]);
+
+  useEffect(() => {
+    let isSubscribed = true;
+    let socket: WebSocket | null = null;
+
+    async function connectStudio() {
+      const discovery = await resolveStudioDiscovery();
+      if (!isSubscribed) {
+        return;
+      }
+
+      setStudioIntake((current) => ({
+        ...current,
+        connection: "checking",
+        detail: discovery.detail,
+        apiUrl: discovery.apiUrl,
+      }));
+
+      try {
+        const healthResponse = await fetch(`${discovery.apiUrl}/health`, {
+          headers: studioRequestHeaders(discovery),
+        });
+
+        if (!healthResponse.ok) {
+          throw new Error(
+            healthResponse.status === 401 || healthResponse.status === 403
+              ? "Studio is reachable but requires an API token."
+              : `Studio health returned ${healthResponse.status}.`,
+          );
+        }
+
+        if (!isSubscribed) {
+          return;
+        }
+
+        setStudioIntake((current) => ({
+          ...current,
+          connection: "connected",
+          detail: "Connected to vaexcore studio. Waiting for stopped recordings.",
+          apiUrl: discovery.apiUrl,
+        }));
+
+        socket = new WebSocket(studioEventSocketUrl(discovery));
+        socket.addEventListener("message", (event) => {
+          const nextRecording = studioRecordingFromMessage(event.data);
+          if (!nextRecording || !isSubscribed) {
+            return;
+          }
+
+          setStudioIntake((current) => ({
+            ...current,
+            connection: "connected",
+            detail: `Studio stopped recording ${extractSourceName(nextRecording.outputPath)}.`,
+            apiUrl: discovery.apiUrl,
+            latestRecording: nextRecording,
+          }));
+        });
+        socket.addEventListener("close", () => {
+          if (!isSubscribed) {
+            return;
+          }
+          setStudioIntake((current) => ({
+            ...current,
+            connection: current.latestRecording ? "connected" : "unavailable",
+            detail: current.latestRecording
+              ? "Studio event stream closed; latest stopped recording is still available."
+              : "Studio event stream closed.",
+          }));
+        });
+      } catch (error) {
+        if (!isSubscribed) {
+          return;
+        }
+        setStudioIntake((current) => ({
+          ...current,
+          connection: "unavailable",
+          detail:
+            error instanceof Error
+              ? error.message
+              : "Studio is not reachable right now.",
+          apiUrl: discovery.apiUrl,
+        }));
+      }
+    }
+
+    void connectStudio();
+
+    return () => {
+      isSubscribed = false;
+      socket?.close();
+    };
+  }, []);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -1203,6 +1322,15 @@ function DesktopApp() {
         "Could not open the file picker. You can paste a full file path instead.",
       );
     }
+  }
+
+  function handleUseStudioRecording(recording: StudioRecordingCandidate) {
+    setSelectedMediaPath(recording.outputPath);
+    setAnalysisError(null);
+    if (!analysisTitle.trim()) {
+      setAnalysisTitle(buildSuggestedSessionTitle(recording.outputPath));
+    }
+    setActivePage("new-analysis");
   }
 
   async function handleCreateProfile(input: CreateClipProfileRequest) {
@@ -2163,6 +2291,63 @@ function DesktopApp() {
                   {analysisLaunchState.statusLabel}
                 </span>
               </div>
+            </article>
+
+            <article className="utility-block">
+              <div className="panel-header compact-panel-header">
+                <div>
+                  <span className="detail-label">Studio intake</span>
+                  <h2>
+                    {studioIntake.connection === "connected"
+                      ? "Studio connected"
+                      : studioIntake.connection === "checking"
+                        ? "Checking Studio"
+                        : "Studio not connected"}
+                  </h2>
+                  <p>{studioIntake.detail}</p>
+                </div>
+                <span
+                  className={`analysis-readiness-pill ${
+                    studioIntake.connection === "connected"
+                      ? "ready"
+                      : "blocked"
+                  }`}
+                >
+                  {studioIntake.connection === "connected"
+                    ? "Connected"
+                    : studioIntake.connection === "checking"
+                      ? "Checking"
+                      : "Offline"}
+                </span>
+              </div>
+              {studioIntake.latestRecording ? (
+                <div className="studio-recording-card">
+                  <span className="detail-label">Latest recording</span>
+                  <strong>
+                    {extractSourceName(studioIntake.latestRecording.outputPath)}
+                  </strong>
+                  <p className="analysis-summary-path">
+                    {studioIntake.latestRecording.outputPath}
+                  </p>
+                  <div className="action-row">
+                    <button
+                      className="button-secondary"
+                      disabled={isAnalyzing}
+                      onClick={() =>
+                        handleUseStudioRecording(studioIntake.latestRecording!)
+                      }
+                      type="button"
+                    >
+                      Use recording
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p>
+                  Stop a Studio recording and Pulse will offer it here for the
+                  next scan.
+                </p>
+              )}
             </article>
 
             {showStartGuide ? (
@@ -4249,6 +4434,108 @@ function isTauriRuntime(): boolean {
         .__TAURI_INTERNALS__,
     )
   );
+}
+
+async function resolveStudioDiscovery(): Promise<StudioDiscovery> {
+  if (isTauriRuntime()) {
+    try {
+      return await invoke<StudioDiscovery>("studio_api_discovery");
+    } catch {
+      // Fall through to the browser/dev defaults below.
+    }
+  }
+
+  const apiUrl =
+    import.meta.env.VITE_VAEXCORE_STUDIO_API_URL ?? "http://127.0.0.1:51287";
+  const wsUrl =
+    import.meta.env.VITE_VAEXCORE_STUDIO_WS_URL ??
+    `${apiUrl.replace(/^http/, "ws").replace(/\/+$/, "")}/events`;
+  const token = import.meta.env.VITE_VAEXCORE_STUDIO_API_TOKEN ?? null;
+
+  return {
+    apiUrl,
+    wsUrl,
+    token,
+    discovered: false,
+    source: "default",
+    detail: "Using the default Studio localhost URL.",
+  };
+}
+
+function studioRequestHeaders(discovery: StudioDiscovery): HeadersInit {
+  const headers: Record<string, string> = {
+    "x-vaexcore-client-id": "vaexcore-pulse",
+    "x-vaexcore-client-name": "vaexcore pulse",
+  };
+
+  if (discovery.token) {
+    headers["x-vaexcore-token"] = discovery.token;
+  }
+
+  return headers;
+}
+
+function studioEventSocketUrl(discovery: StudioDiscovery): string {
+  const url = new URL(discovery.wsUrl);
+  url.searchParams.set("client_id", "vaexcore-pulse-events");
+  url.searchParams.set("client_name", "vaexcore pulse events");
+  url.searchParams.set("limit", "25");
+  if (discovery.token) {
+    url.searchParams.set("token", discovery.token);
+  }
+  return url.toString();
+}
+
+function studioRecordingFromMessage(
+  rawMessage: unknown,
+): StudioRecordingCandidate | null {
+  if (typeof rawMessage !== "string") {
+    return null;
+  }
+
+  let event: unknown;
+  try {
+    event = JSON.parse(rawMessage);
+  } catch {
+    return null;
+  }
+
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+
+  const typedEvent = event as {
+    type?: unknown;
+    timestamp?: unknown;
+    payload?: unknown;
+  };
+  if (typedEvent.type !== "recording.stopped") {
+    return null;
+  }
+
+  const payload =
+    typedEvent.payload && typeof typedEvent.payload === "object"
+      ? (typedEvent.payload as Record<string, unknown>)
+      : {};
+  const outputPath = typeof payload.output_path === "string"
+    ? payload.output_path.trim()
+    : "";
+
+  if (!outputPath || !isSupportedInput(outputPath)) {
+    return null;
+  }
+
+  return {
+    sessionId:
+      typeof payload.session_id === "string" ? payload.session_id : "unknown",
+    outputPath,
+    profileId:
+      typeof payload.profile_id === "string" ? payload.profile_id : null,
+    stoppedAt:
+      typeof typedEvent.timestamp === "string"
+        ? typedEvent.timestamp
+        : new Date().toISOString(),
+  };
 }
 
 function usePulseRuntimeStatus(apiBaseUrl: string): PulseRuntimeStatus {
