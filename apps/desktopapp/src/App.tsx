@@ -258,6 +258,9 @@ function DesktopApp() {
     null,
   );
   const [isExportingToStudio, setIsExportingToStudio] = useState(false);
+  const [studioExportedCandidateIds, setStudioExportedCandidateIds] = useState<
+    Record<string, boolean>
+  >({});
   const pulseRuntimeStatus = usePulseRuntimeStatus(apiBaseUrl);
   const isPulseReady = isPulseRuntimeReady(pulseRuntimeStatus);
   const sessionCandidates = projectSession?.candidates ?? [];
@@ -1361,12 +1364,13 @@ function DesktopApp() {
           ? studioIntake.latestRecording.sessionId
           : null;
 
-      const results = await Promise.all(
+      const confirmedSourceEventIds = await Promise.all(
         keptCandidates.map(async (candidate) => {
           const decision = decisionsByCandidateId[candidate.id];
           const segment =
             decision?.adjustedSegment ?? candidate.suggestedSegment;
           const label = decision?.label ?? candidate.editableLabel;
+          const sourceEventId = `pulse:${projectSession.id}:${candidate.id}`;
           const headers = new Headers(studioRequestHeaders(discovery));
           headers.set("content-type", "application/json");
           const response = await fetch(`${discovery.apiUrl}/marker/create`, {
@@ -1375,7 +1379,7 @@ function DesktopApp() {
             body: JSON.stringify({
               label: `Pulse keep: ${label}`,
               source_app: "vaexcore-pulse",
-              source_event_id: `pulse:${projectSession.id}:${candidate.id}`,
+              source_event_id: sourceEventId,
               recording_session_id: recordingSessionId,
               media_path: projectSession.mediaSource.path,
               start_seconds: segment.startSeconds,
@@ -1397,11 +1401,28 @@ function DesktopApp() {
             throw new Error(`Studio marker create returned ${response.status}`);
           }
 
-          return response;
+          const body = (await response.json().catch(() => null)) as {
+            ok?: boolean;
+          } | null;
+          if (body?.ok !== true) {
+            throw new Error(
+              "Studio marker create returned an invalid response",
+            );
+          }
+
+          return sourceEventId;
         }),
       );
 
-      setStudioExportStatus(`Sent ${results.length} kept moments to Studio.`);
+      setStudioExportedCandidateIds((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          confirmedSourceEventIds.map((sourceEventId) => [sourceEventId, true]),
+        ),
+      }));
+      setStudioExportStatus(
+        `Confirmed ${confirmedSourceEventIds.length} kept moments in Studio.`,
+      );
       setStudioIntake((current) => ({
         ...current,
         connection: "connected",
@@ -2581,6 +2602,13 @@ function DesktopApp() {
             )}
             decision={selectedDecision}
             exportPreview={timestampPreview}
+            isCurrentCandidateSentToStudio={Boolean(
+              projectSession &&
+              selectedCandidate &&
+              studioExportedCandidateIds[
+                `pulse:${projectSession.id}:${selectedCandidate.id}`
+              ],
+            )}
             onPreviewDetectedMoment={() =>
               handleOpenMomentPreview(
                 selectedCandidate?.id ?? null,

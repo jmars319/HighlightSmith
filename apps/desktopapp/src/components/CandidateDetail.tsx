@@ -52,6 +52,7 @@ type CandidateDetailProps = {
   labelDraft: string;
   onSaveLabel: () => void;
   onReturnToProjects: () => void;
+  isCurrentCandidateSentToStudio: boolean;
   isExportingToStudio: boolean;
   isSavingReview: boolean;
   reviewError: string | null;
@@ -89,6 +90,7 @@ export function CandidateDetail({
   labelDraft,
   onSaveLabel,
   onReturnToProjects,
+  isCurrentCandidateSentToStudio,
   isExportingToStudio,
   isSavingReview,
   reviewError,
@@ -452,6 +454,11 @@ export function CandidateDetail({
               ) : null}
               {studioExportStatus ? (
                 <p className="review-status-copy">{studioExportStatus}</p>
+              ) : null}
+              {isCurrentCandidateSentToStudio ? (
+                <p className="review-status-copy">
+                  This selected moment is confirmed in Studio.
+                </p>
               ) : null}
               <details className="internal-details nested-export-details">
                 <summary className="internal-details-summary">
