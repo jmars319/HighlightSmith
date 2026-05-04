@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, WINDOW_SUBMENU_ID};
 use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
 
@@ -25,6 +25,8 @@ const MENU_LAUNCH_SUITE: &str = "launch-suite";
 const ANALYZER_PORT: u16 = 9010;
 const API_PORT: u16 = 4010;
 const VAEXCORE_SUITE_APPS: &[&str] = &["vaexcore studio", "vaexcore pulse", "vaexcore console"];
+const SUITE_DISCOVERY_SCHEMA_VERSION: u8 = 1;
+const SUITE_DISCOVERY_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 
 #[derive(Default)]
 struct ManagedLocalServices {
@@ -40,6 +42,24 @@ struct SuiteLaunchResult {
     detail: String,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SuiteDiscoveryDocument {
+    schema_version: u8,
+    app_id: String,
+    app_name: String,
+    bundle_identifier: String,
+    version: String,
+    pid: u32,
+    started_at: String,
+    updated_at: String,
+    api_url: Option<String>,
+    ws_url: Option<String>,
+    health_url: Option<String>,
+    capabilities: Vec<String>,
+    launch_name: String,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -47,8 +67,9 @@ pub fn run() {
         .manage(Mutex::new(ManagedLocalServices::default()))
         .setup(|app| {
             let app_handle = app.handle().clone();
-            thread::spawn(move || {
-                if let Err(error) = ensure_local_services(&app_handle) {
+            thread::spawn(move || match ensure_local_services(&app_handle) {
+                Ok(()) => start_suite_discovery_heartbeat(),
+                Err(error) => {
                     eprintln!("Unable to start vaexcore pulse local services: {error}");
                 }
             });
@@ -332,6 +353,65 @@ fn launch_macos_app(app_name: &str) -> SuiteLaunchResult {
             detail: "Launch Suite is only implemented for macOS Applications.".to_string(),
         }
     }
+}
+
+fn start_suite_discovery_heartbeat() {
+    let started_at = suite_timestamp();
+
+    thread::spawn(move || loop {
+        let api_url = format!("http://127.0.0.1:{API_PORT}");
+        let document = SuiteDiscoveryDocument {
+            schema_version: SUITE_DISCOVERY_SCHEMA_VERSION,
+            app_id: "vaexcore-pulse".to_string(),
+            app_name: APP_NAME.to_string(),
+            bundle_identifier: "com.vaexil.vaexcore.pulse".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            pid: std::process::id(),
+            started_at: started_at.clone(),
+            updated_at: suite_timestamp(),
+            api_url: Some(api_url.clone()),
+            ws_url: None,
+            health_url: Some(format!("{api_url}/health")),
+            capabilities: vec![
+                "pulse.api".to_string(),
+                "highlight.review".to_string(),
+                "studio.recording.intake".to_string(),
+                "suite.launcher".to_string(),
+            ],
+            launch_name: APP_NAME.to_string(),
+        };
+
+        if let Err(error) = write_suite_discovery_document(&document) {
+            eprintln!("Unable to write vaexcore pulse suite discovery: {error}");
+        }
+
+        thread::sleep(SUITE_DISCOVERY_HEARTBEAT_INTERVAL);
+    });
+}
+
+fn write_suite_discovery_document(document: &SuiteDiscoveryDocument) -> std::io::Result<()> {
+    let directory = suite_discovery_dir();
+    fs::create_dir_all(&directory)?;
+    let path = directory.join(format!("{}.json", document.app_id));
+    let serialized = serde_json::to_vec_pretty(document)?;
+    fs::write(path, serialized)
+}
+
+fn suite_discovery_dir() -> PathBuf {
+    env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("Library")
+        .join("Application Support")
+        .join("vaexcore")
+        .join("suite")
+}
+
+fn suite_timestamp() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs().to_string())
+        .unwrap_or_else(|_| "0".to_string())
 }
 
 fn open_settings_window_for<R: Runtime>(
