@@ -117,6 +117,11 @@ type AnalysisReadiness = {
   detail: string;
   tone: "ready" | "blocked";
 };
+type SuiteLaunchResult = {
+  appName: string;
+  ok: boolean;
+  detail: string;
+};
 type StartGuide = {
   statusLabel: string;
   headline: string;
@@ -261,6 +266,9 @@ function DesktopApp() {
   const [studioExportedCandidateIds, setStudioExportedCandidateIds] = useState<
     Record<string, boolean>
   >({});
+  const [suiteLaunchStatus, setSuiteLaunchStatus] = useState<string | null>(
+    null,
+  );
   const pulseRuntimeStatus = usePulseRuntimeStatus(apiBaseUrl);
   const isPulseReady = isPulseRuntimeReady(pulseRuntimeStatus);
   const sessionCandidates = projectSession?.candidates ?? [];
@@ -2051,6 +2059,32 @@ function DesktopApp() {
     setActivePage("projects");
   }
 
+  async function handleLaunchSuite() {
+    setSuiteLaunchStatus("Opening vaexcore apps...");
+
+    if (!isTauriRuntime()) {
+      setSuiteLaunchStatus("Launch Suite is available in the desktop app.");
+      return;
+    }
+
+    try {
+      const results = await invoke<SuiteLaunchResult[]>("launch_vaexcore_suite");
+      const failed = results.filter((result) => !result.ok);
+
+      setSuiteLaunchStatus(
+        failed.length > 0
+          ? formatSuiteLaunchFailure(failed)
+          : "Launch requested for Studio, Pulse, and Console.",
+      );
+    } catch (error) {
+      setSuiteLaunchStatus(
+        error instanceof Error
+          ? error.message
+          : "Unable to launch the vaexcore suite.",
+      );
+    }
+  }
+
   async function handleOpenNextPendingSession() {
     if (!nextPendingSession) {
       setProjectsError(null);
@@ -2831,9 +2865,13 @@ function DesktopApp() {
           currentProfileLabel={currentProfile.name}
           currentSessionLabel={projectSession?.title ?? "No session loaded"}
           onPickMedia={handlePickMedia}
+          onLaunchSuite={() => {
+            void handleLaunchSuite();
+          }}
           pendingCount={pendingReviewCount}
           rejectedCount={rejectedCount}
           selectedMediaPath={selectedMediaPath || "No video selected yet."}
+          suiteLaunchStatus={suiteLaunchStatus}
           totalCount={sessionCandidates.length}
         />
         {renderDesktopPage()}
@@ -4556,6 +4594,11 @@ function isTauriRuntime(): boolean {
         .__TAURI_INTERNALS__,
     )
   );
+}
+
+function formatSuiteLaunchFailure(results: SuiteLaunchResult[]): string {
+  const appNames = results.map((result) => result.appName).join(", ");
+  return `Could not launch ${appNames}. Install the app bundles in Applications, then try again.`;
 }
 
 async function resolveStudioDiscovery(): Promise<StudioDiscovery> {

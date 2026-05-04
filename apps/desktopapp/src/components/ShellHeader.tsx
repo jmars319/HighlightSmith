@@ -8,6 +8,8 @@ type ShellHeaderProps = {
   totalCount: number;
   activeSessionStateLabel: string;
   onPickMedia: () => Promise<void> | void;
+  onLaunchSuite: () => Promise<void> | void;
+  suiteLaunchStatus: string | null;
 };
 
 export function ShellHeader({
@@ -20,6 +22,8 @@ export function ShellHeader({
   totalCount,
   activeSessionStateLabel,
   onPickMedia,
+  onLaunchSuite,
+  suiteLaunchStatus,
 }: ShellHeaderProps) {
   const selectedVideoLabel = selectedMediaPath
     ? extractFileLabel(selectedMediaPath)
@@ -51,6 +55,16 @@ export function ShellHeader({
           >
             Choose video
           </button>
+          <button
+            className="button-secondary"
+            onClick={onLaunchSuite}
+            type="button"
+          >
+            Launch Suite
+          </button>
+          {suiteLaunchStatus ? (
+            <p className="suite-launch-status">{suiteLaunchStatus}</p>
+          ) : null}
         </div>
       </div>
 

@@ -21,13 +21,23 @@ const MENU_SHOW_MAIN: &str = "show-main-window";
 const MENU_CLOSE_MAIN: &str = "close-main-window";
 const MENU_CLOSE_MAIN_FILE: &str = "close-main-window-file";
 const MENU_QUIT_APP: &str = "quit-app";
+const MENU_LAUNCH_SUITE: &str = "launch-suite";
 const ANALYZER_PORT: u16 = 9010;
 const API_PORT: u16 = 4010;
+const VAEXCORE_SUITE_APPS: &[&str] = &["vaexcore studio", "vaexcore pulse", "vaexcore console"];
 
 #[derive(Default)]
 struct ManagedLocalServices {
     analyzer: Option<Child>,
     api: Option<Child>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SuiteLaunchResult {
+    app_name: String,
+    ok: bool,
+    detail: String,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -57,6 +67,17 @@ pub fn run() {
             } else if event.id() == MENU_QUIT_APP {
                 stop_local_services(app);
                 app.exit(0);
+            } else if event.id() == MENU_LAUNCH_SUITE {
+                thread::spawn(|| {
+                    for result in launch_vaexcore_suite() {
+                        if !result.ok {
+                            eprintln!(
+                                "Unable to launch {} from vaexcore suite: {}",
+                                result.app_name, result.detail
+                            );
+                        }
+                    }
+                });
             }
         })
         .on_window_event(|window, event| {
@@ -73,7 +94,8 @@ pub fn run() {
             inspect_media_playback,
             prepare_media_preview_clip,
             open_media_in_quicktime,
-            open_settings_window
+            open_settings_window,
+            launch_vaexcore_suite
         ])
         .build(tauri::generate_context!())
         .expect("failed to build vaexcore pulse desktop shell");
@@ -152,6 +174,14 @@ fn build_app_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R
                     &PredefinedMenuItem::separator(app)?,
                     &MenuItem::with_id(
                         app,
+                        MENU_LAUNCH_SUITE,
+                        "Launch vaexcore Suite",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &MenuItem::with_id(
+                        app,
                         MENU_SHOW_MAIN,
                         "Show Main Window",
                         true,
@@ -203,6 +233,14 @@ fn build_app_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R
                     &PredefinedMenuItem::separator(app)?,
                     &MenuItem::with_id(
                         app,
+                        MENU_LAUNCH_SUITE,
+                        "Launch vaexcore Suite",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &MenuItem::with_id(
+                        app,
                         MENU_CLOSE_MAIN_FILE,
                         "Close Main Window (Pulse Keeps Running)",
                         true,
@@ -247,6 +285,53 @@ fn build_app_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R
 #[tauri::command]
 fn open_settings_window(app: tauri::AppHandle, section: Option<String>) -> Result<(), String> {
     open_settings_window_for(&app, section.as_deref())
+}
+
+#[tauri::command]
+fn launch_vaexcore_suite() -> Vec<SuiteLaunchResult> {
+    VAEXCORE_SUITE_APPS
+        .iter()
+        .map(|app_name| launch_macos_app(app_name))
+        .collect()
+}
+
+fn launch_macos_app(app_name: &str) -> SuiteLaunchResult {
+    #[cfg(target_os = "macos")]
+    {
+        match Command::new("open").args(["-a", app_name]).output() {
+            Ok(output) if output.status.success() => SuiteLaunchResult {
+                app_name: app_name.to_string(),
+                ok: true,
+                detail: "Launch requested.".to_string(),
+            },
+            Ok(output) => {
+                let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                SuiteLaunchResult {
+                    app_name: app_name.to_string(),
+                    ok: false,
+                    detail: if detail.is_empty() {
+                        format!("open exited with status {}.", output.status)
+                    } else {
+                        detail
+                    },
+                }
+            }
+            Err(error) => SuiteLaunchResult {
+                app_name: app_name.to_string(),
+                ok: false,
+                detail: error.to_string(),
+            },
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        SuiteLaunchResult {
+            app_name: app_name.to_string(),
+            ok: false,
+            detail: "Launch Suite is only implemented for macOS Applications.".to_string(),
+        }
+    }
 }
 
 fn open_settings_window_for<R: Runtime>(
@@ -543,9 +628,8 @@ fn studio_api_discovery() -> StudioApiDiscovery {
 
             if let Some(api_url) = api_url {
                 return StudioApiDiscovery {
-                    ws_url: configured_ws_url.unwrap_or_else(|| {
-                        ws_url.unwrap_or_else(|| ws_url_from_api_url(&api_url))
-                    }),
+                    ws_url: configured_ws_url
+                        .unwrap_or_else(|| ws_url.unwrap_or_else(|| ws_url_from_api_url(&api_url))),
                     api_url,
                     token,
                     discovered: true,
@@ -625,10 +709,7 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
             format_name: None,
             video_codec: None,
             audio_codec: None,
-            detail: format!(
-                "Pulse could not find this file: {}",
-                media_path
-            ),
+            detail: format!("Pulse could not find this file: {}", media_path),
         });
     }
 
@@ -671,7 +752,10 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
             let detail = if error.kind() == std::io::ErrorKind::NotFound {
                 "The file is available, but Pulse could not inspect it.".to_string()
             } else {
-                format!("The file is available, but Pulse could not inspect it: {}", error)
+                format!(
+                    "The file is available, but Pulse could not inspect it: {}",
+                    error
+                )
             };
 
             return Ok(MediaPlaybackInspection {
@@ -876,12 +960,7 @@ fn prepare_media_preview_clip(
                 .ok_or_else(|| "Pulse could not prepare a video preview.".to_string())?,
         ])
         .output()
-        .map_err(|error| {
-            format!(
-                "Pulse could not prepare a video preview: {}",
-                error
-            )
-        })?;
+        .map_err(|error| format!("Pulse could not prepare a video preview: {}", error))?;
 
     if !ffmpeg_output.status.success() {
         let _ = fs::remove_file(&preview_path);
@@ -889,10 +968,7 @@ fn prepare_media_preview_clip(
             .trim()
             .to_string();
         if stderr.is_empty() {
-            return Err(
-                "Pulse could not prepare a preview for this moment."
-                    .to_string(),
-            );
+            return Err("Pulse could not prepare a preview for this moment.".to_string());
         }
 
         return Err(format!(
@@ -970,10 +1046,7 @@ end tell
                 Err("Could not open this file in QuickTime.".to_string())
             }
         }
-        Err(error) => Err(format!(
-            "Could not open QuickTime: {}",
-            error
-        )),
+        Err(error) => Err(format!("Could not open QuickTime: {}", error)),
     }
 }
 
