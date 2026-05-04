@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::collections::hash_map::DefaultHasher;
 use std::env;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
@@ -32,6 +32,11 @@ const SUITE_DISCOVERY_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 struct ManagedLocalServices {
     analyzer: Option<Child>,
     api: Option<Child>,
+}
+
+struct SpawnedLocalService {
+    child: Child,
+    log_path: PathBuf,
 }
 
 #[derive(Clone, Serialize)]
@@ -501,21 +506,33 @@ fn ensure_local_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), St
     let repo_root = resolve_repo_root()?;
 
     if !port_is_open(ANALYZER_PORT) {
-        let analyzer = spawn_analyzer(&repo_root)?;
+        let mut analyzer = spawn_analyzer(&repo_root)?;
+        wait_for_port_or_child_exit(
+            "Analyzer",
+            ANALYZER_PORT,
+            &mut analyzer.child,
+            &analyzer.log_path,
+            Duration::from_secs(30),
+        )?;
         app.state::<Mutex<ManagedLocalServices>>()
             .lock()
             .map_err(|_| "Unable to track analyzer process.".to_string())?
-            .analyzer = Some(analyzer);
-        wait_for_port("Analyzer", ANALYZER_PORT, Duration::from_secs(30))?;
+            .analyzer = Some(analyzer.child);
     }
 
     if !port_is_open(API_PORT) {
-        let api = spawn_api_bridge(&repo_root)?;
+        let mut api = spawn_api_bridge(&repo_root)?;
+        wait_for_port_or_child_exit(
+            "API bridge",
+            API_PORT,
+            &mut api.child,
+            &api.log_path,
+            Duration::from_secs(30),
+        )?;
         app.state::<Mutex<ManagedLocalServices>>()
             .lock()
             .map_err(|_| "Unable to track API bridge process.".to_string())?
-            .api = Some(api);
-        wait_for_port("API bridge", API_PORT, Duration::from_secs(30))?;
+            .api = Some(api.child);
     }
 
     Ok(())
@@ -527,18 +544,30 @@ fn stop_local_services<R: Runtime>(app: &tauri::AppHandle<R>) {
         return;
     };
 
+    let mut spawned_api = false;
     if let Some(mut api) = services.api.take() {
+        spawned_api = true;
         let _ = api.kill();
         let _ = api.wait();
     }
 
+    if spawned_api {
+        stop_port_listener(API_PORT);
+    }
+
+    let mut spawned_analyzer = false;
     if let Some(mut analyzer) = services.analyzer.take() {
+        spawned_analyzer = true;
         let _ = analyzer.kill();
         let _ = analyzer.wait();
     }
+
+    if spawned_analyzer {
+        stop_port_listener(ANALYZER_PORT);
+    }
 }
 
-fn spawn_analyzer(repo_root: &Path) -> Result<Child, String> {
+fn spawn_analyzer(repo_root: &Path) -> Result<SpawnedLocalService, String> {
     let python = find_executable(
         "python3",
         &[
@@ -549,46 +578,63 @@ fn spawn_analyzer(repo_root: &Path) -> Result<Child, String> {
     )
     .ok_or_else(|| "python3 is required to start the local analyzer.".to_string())?;
     let python_path = repo_root.join("services/analyzer/src");
+    let (log_path, stdout, stderr) = service_stdio("analyzer")?;
 
-    Command::new(python)
+    let child = Command::new(python)
         .current_dir(repo_root)
         .env("PYTHONPATH", python_path)
         .env("PATH", command_path())
         .arg("-m")
         .arg("vaexcore_pulse_analyzer.server")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(stdout)
+        .stderr(stderr)
         .spawn()
-        .map_err(|error| format!("Failed to start the local analyzer: {error}"))
+        .map_err(|error| format!("Failed to start the local analyzer: {error}"))?;
+
+    Ok(SpawnedLocalService { child, log_path })
 }
 
-fn spawn_api_bridge(repo_root: &Path) -> Result<Child, String> {
-    let pnpm = find_executable(
-        "pnpm",
+fn spawn_api_bridge(repo_root: &Path) -> Result<SpawnedLocalService, String> {
+    let node = find_executable(
+        "node",
         &[
-            "/opt/homebrew/bin/pnpm",
-            "/usr/local/bin/pnpm",
-            "/usr/bin/pnpm",
+            "/opt/homebrew/opt/node@22/bin/node",
+            "/opt/homebrew/opt/node/bin/node",
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            "/usr/bin/node",
         ],
     )
-    .ok_or_else(|| "pnpm is required to start the local API bridge.".to_string())?;
+    .ok_or_else(|| "node is required to start the local API bridge.".to_string())?;
+    let api_dir = repo_root.join("services/api");
+    let tsx_cli = api_dir.join("node_modules/tsx/dist/cli.mjs");
 
-    Command::new(pnpm)
-        .current_dir(repo_root)
+    if !tsx_cli.exists() {
+        return Err(format!(
+            "Pulse API bridge dependencies are missing at {}. Run pnpm install in the Pulse repo.",
+            tsx_cli.display()
+        ));
+    }
+
+    let (log_path, stdout, stderr) = service_stdio("api-bridge")?;
+
+    let child = Command::new(node)
+        .current_dir(api_dir)
         .env("PATH", command_path())
         .env(
             "VAEXCORE_PULSE_ANALYZER_URL",
             format!("http://127.0.0.1:{ANALYZER_PORT}"),
         )
-        .arg("--filter")
-        .arg("@vaexcore/pulse-api")
-        .arg("start")
+        .arg(tsx_cli)
+        .arg("src/server.ts")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(stdout)
+        .stderr(stderr)
         .spawn()
-        .map_err(|error| format!("Failed to start the local API bridge: {error}"))
+        .map_err(|error| format!("Failed to start the local API bridge: {error}"))?;
+
+    Ok(SpawnedLocalService { child, log_path })
 }
 
 fn resolve_repo_root() -> Result<PathBuf, String> {
@@ -634,7 +680,9 @@ fn find_executable(name: &str, fallback_paths: &[&str]) -> Option<PathBuf> {
 
 fn command_path() -> String {
     let current_path = env::var("PATH").unwrap_or_default();
-    format!("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:{current_path}")
+    format!(
+        "/opt/homebrew/opt/node@22/bin:/opt/homebrew/opt/node/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:{current_path}"
+    )
 }
 
 fn port_is_open(port: u16) -> bool {
@@ -642,12 +690,64 @@ fn port_is_open(port: u16) -> bool {
     TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_ok()
 }
 
-fn wait_for_port(service_name: &str, port: u16, timeout: Duration) -> Result<(), String> {
+fn stop_port_listener(port: u16) {
+    let lsof = find_executable("lsof", &["/usr/sbin/lsof", "/usr/bin/lsof"])
+        .unwrap_or_else(|| PathBuf::from("/usr/sbin/lsof"));
+    let Ok(output) = Command::new(lsof)
+        .args(["-nP", &format!("-tiTCP:{port}"), "-sTCP:LISTEN"])
+        .output()
+    else {
+        return;
+    };
+
+    if !output.status.success() {
+        return;
+    }
+
+    let pids = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|pid| !pid.is_empty() && pid.chars().all(|character| character.is_ascii_digit()))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    for pid in pids {
+        let _ = Command::new("/bin/kill").args(["-TERM", &pid]).output();
+    }
+
+    let started_at = SystemTime::now();
+    while port_is_open(port)
+        && started_at
+            .elapsed()
+            .unwrap_or_else(|_| Duration::from_secs(0))
+            < Duration::from_secs(2)
+    {
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn wait_for_port_or_child_exit(
+    service_name: &str,
+    port: u16,
+    child: &mut Child,
+    log_path: &Path,
+    timeout: Duration,
+) -> Result<(), String> {
     let started_at = SystemTime::now();
 
     loop {
         if port_is_open(port) {
             return Ok(());
+        }
+
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("Could not check {service_name}: {error}"))?
+        {
+            return Err(format!(
+                "{service_name} exited before opening port {port} ({status}). See {}.",
+                log_path.display()
+            ));
         }
 
         if started_at
@@ -656,12 +756,53 @@ fn wait_for_port(service_name: &str, port: u16, timeout: Duration) -> Result<(),
             >= timeout
         {
             return Err(format!(
-                "{service_name} is still starting. Try again in a few seconds."
+                "{service_name} did not finish starting on port {port}. See {}.",
+                log_path.display()
             ));
         }
 
         thread::sleep(Duration::from_millis(300));
     }
+}
+
+fn service_stdio(service_name: &str) -> Result<(PathBuf, Stdio, Stdio), String> {
+    let log_directory = pulse_log_dir();
+    fs::create_dir_all(&log_directory).map_err(|error| {
+        format!(
+            "Could not create Pulse service log directory {}: {error}",
+            log_directory.display()
+        )
+    })?;
+    let log_path = log_directory.join(format!("{service_name}.log"));
+    let log_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|error| {
+            format!(
+                "Could not open Pulse service log file {}: {error}",
+                log_path.display()
+            )
+        })?;
+    let stderr = log_file.try_clone().map_err(|error| {
+        format!(
+            "Could not prepare Pulse service log file {}: {error}",
+            log_path.display()
+        )
+    })?;
+
+    Ok((log_path, Stdio::from(log_file), Stdio::from(stderr)))
+}
+
+fn pulse_log_dir() -> PathBuf {
+    env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| env::temp_dir())
+        .join("Library")
+        .join("Application Support")
+        .join("vaexcore")
+        .join("pulse")
+        .join("logs")
 }
 
 fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
