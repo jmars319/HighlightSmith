@@ -60,6 +60,28 @@ struct SuiteDiscoveryDocument {
     launch_name: String,
 }
 
+#[derive(Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PulseRecordingHandoffDocument {
+    schema_version: u8,
+    request_id: String,
+    source_app: String,
+    source_app_name: String,
+    target_app: String,
+    requested_at: String,
+    recording: PulseRecordingHandoffRecording,
+}
+
+#[derive(Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PulseRecordingHandoffRecording {
+    session_id: String,
+    output_path: String,
+    profile_id: Option<String>,
+    profile_name: Option<String>,
+    stopped_at: String,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -116,7 +138,8 @@ pub fn run() {
             prepare_media_preview_clip,
             open_media_in_quicktime,
             open_settings_window,
-            launch_vaexcore_suite
+            launch_vaexcore_suite,
+            consume_pulse_recording_handoff
         ])
         .build(tauri::generate_context!())
         .expect("failed to build vaexcore pulse desktop shell");
@@ -316,6 +339,15 @@ fn launch_vaexcore_suite() -> Vec<SuiteLaunchResult> {
         .collect()
 }
 
+#[tauri::command]
+fn consume_pulse_recording_handoff() -> Option<PulseRecordingHandoffDocument> {
+    let path = suite_handoff_dir().join("pulse-recording-intake.json");
+    let contents = fs::read(&path).ok()?;
+    let handoff = serde_json::from_slice::<PulseRecordingHandoffDocument>(&contents).ok()?;
+    let _ = fs::remove_file(path);
+    Some(handoff)
+}
+
 fn launch_macos_app(app_name: &str) -> SuiteLaunchResult {
     #[cfg(target_os = "macos")]
     {
@@ -405,6 +437,10 @@ fn suite_discovery_dir() -> PathBuf {
         .join("Application Support")
         .join("vaexcore")
         .join("suite")
+}
+
+fn suite_handoff_dir() -> PathBuf {
+    suite_discovery_dir().join("handoffs")
 }
 
 fn suite_timestamp() -> String {

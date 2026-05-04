@@ -122,6 +122,21 @@ type SuiteLaunchResult = {
   ok: boolean;
   detail: string;
 };
+type PulseRecordingHandoff = {
+  schemaVersion: number;
+  requestId: string;
+  sourceApp: string;
+  sourceAppName: string;
+  targetApp: string;
+  requestedAt: string;
+  recording: {
+    sessionId: string;
+    outputPath: string;
+    profileId: string | null;
+    profileName: string | null;
+    stoppedAt: string;
+  };
+};
 type StartGuide = {
   statusLabel: string;
   headline: string;
@@ -567,6 +582,37 @@ function DesktopApp() {
     return () => {
       isSubscribed = false;
       socket?.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let isSubscribed = true;
+
+    async function consumeHandoff() {
+      try {
+        const handoff = await invoke<PulseRecordingHandoff | null>(
+          "consume_pulse_recording_handoff",
+        );
+        if (handoff && isSubscribed) {
+          applyPulseRecordingHandoff(handoff);
+        }
+      } catch {
+        // Handoff polling is best-effort and should not interrupt review work.
+      }
+    }
+
+    void consumeHandoff();
+    const interval = window.setInterval(() => {
+      void consumeHandoff();
+    }, 2500);
+
+    return () => {
+      isSubscribed = false;
+      window.clearInterval(interval);
     };
   }, []);
 
@@ -1347,6 +1393,26 @@ function DesktopApp() {
     setActivePage("new-analysis");
   }
 
+  function applyPulseRecordingHandoff(handoff: PulseRecordingHandoff) {
+    const recording: StudioRecordingCandidate = {
+      sessionId: handoff.recording.sessionId,
+      outputPath: handoff.recording.outputPath,
+      profileId: handoff.recording.profileId,
+      stoppedAt: handoff.recording.stoppedAt,
+    };
+
+    setStudioIntake((current) => ({
+      ...current,
+      connection: "connected",
+      detail: `${handoff.sourceAppName} sent ${extractSourceName(recording.outputPath)} for review.`,
+      latestRecording: recording,
+    }));
+    setSelectedMediaPath(recording.outputPath);
+    setAnalysisTitle(buildSuggestedSessionTitle(recording.outputPath));
+    setAnalysisError(null);
+    setActivePage("new-analysis");
+  }
+
   async function handleExportAcceptedToStudio() {
     if (!projectSession || isExportingToStudio) {
       return;
@@ -1363,6 +1429,7 @@ function DesktopApp() {
 
     setIsExportingToStudio(true);
     setStudioExportStatus("Sending kept moments to Studio...");
+    const exportedAt = new Date().toISOString();
 
     try {
       const discovery = await resolveStudioDiscovery();
@@ -1378,7 +1445,10 @@ function DesktopApp() {
           const segment =
             decision?.adjustedSegment ?? candidate.suggestedSegment;
           const label = decision?.label ?? candidate.editableLabel;
-          const sourceEventId = `pulse:${projectSession.id}:${candidate.id}`;
+          const sourceEventId = studioPulseSourceEventId(
+            projectSession.id,
+            candidate.id,
+          );
           const headers = new Headers(studioRequestHeaders(discovery));
           headers.set("content-type", "application/json");
           const response = await fetch(`${discovery.apiUrl}/marker/create`, {
@@ -1393,13 +1463,35 @@ function DesktopApp() {
               start_seconds: segment.startSeconds,
               end_seconds: segment.endSeconds,
               metadata: {
+                contract: "vaexcore.studio.marker.v1",
+                schemaVersion: 1,
+                exportedAt,
+                reviewStatus: "accepted",
+                source: {
+                  appId: "vaexcore-pulse",
+                  appName: "vaexcore pulse",
+                  workflow: "accepted-highlight-export",
+                },
                 pulseSessionId: projectSession.id,
                 pulseSessionTitle: projectSession.title,
                 candidateId: candidate.id,
+                sourceEventId,
+                recordingSessionId,
+                media: {
+                  path: projectSession.mediaSource.path,
+                  durationSeconds: projectSession.mediaSource.durationSeconds,
+                },
+                timestamps: {
+                  startSeconds: segment.startSeconds,
+                  endSeconds: segment.endSeconds,
+                  durationSeconds: segment.endSeconds - segment.startSeconds,
+                  adjusted: Boolean(decision?.adjustedSegment),
+                },
                 confidenceBand: candidate.confidenceBand,
                 scoreEstimate: candidate.scoreEstimate,
                 reasonCodes: candidate.reasonCodes,
                 reviewTags: candidate.reviewTags,
+                label,
                 transcriptSnippet: candidate.transcriptSnippet,
               },
             }),
@@ -2640,7 +2732,7 @@ function DesktopApp() {
               projectSession &&
               selectedCandidate &&
               studioExportedCandidateIds[
-                `pulse:${projectSession.id}:${selectedCandidate.id}`
+                studioPulseSourceEventId(projectSession.id, selectedCandidate.id)
               ],
             )}
             onPreviewDetectedMoment={() =>
@@ -4599,6 +4691,10 @@ function isTauriRuntime(): boolean {
 function formatSuiteLaunchFailure(results: SuiteLaunchResult[]): string {
   const appNames = results.map((result) => result.appName).join(", ");
   return `Could not launch ${appNames}. Install the app bundles in Applications, then try again.`;
+}
+
+function studioPulseSourceEventId(sessionId: string, candidateId: string): string {
+  return `vaexcore-pulse:session:${sessionId}:candidate:${candidateId}:accepted`;
 }
 
 async function resolveStudioDiscovery(): Promise<StudioDiscovery> {
