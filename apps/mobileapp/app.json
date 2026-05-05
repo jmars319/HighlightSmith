@@ -4,7 +4,7 @@
     "slug": "vaexcore-pulse-companion",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/vaexcore-pulse-logo.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
