@@ -3,6 +3,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::hash::{Hash, Hasher};
+use std::io::Write;
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -91,6 +92,20 @@ struct SuiteCommandDocument {
     command: String,
     requested_at: String,
     payload: serde_json::Value,
+}
+
+#[derive(Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SuiteTimelineEvent {
+    schema_version: u8,
+    event_id: String,
+    source_app: String,
+    source_app_name: String,
+    kind: String,
+    title: String,
+    detail: String,
+    created_at: String,
+    metadata: serde_json::Value,
 }
 
 #[derive(Clone, Serialize, serde::Deserialize)]
@@ -379,6 +394,21 @@ fn consume_pulse_recording_handoff() -> Option<PulseRecordingHandoffDocument> {
     let contents = fs::read(&path).ok()?;
     let handoff = serde_json::from_slice::<PulseRecordingHandoffDocument>(&contents).ok()?;
     let _ = fs::remove_file(path);
+    if let Err(error) = append_suite_timeline_event(
+        "recording.handoff",
+        "Pulse received recording",
+        &format!(
+            "{} sent {} for review.",
+            handoff.source_app_name, handoff.recording.output_path
+        ),
+        serde_json::json!({
+            "requestId": handoff.request_id,
+            "sessionId": handoff.recording.session_id,
+            "outputPath": handoff.recording.output_path,
+        }),
+    ) {
+        eprintln!("Unable to append vaexcore pulse suite timeline event: {error}");
+    }
     Some(handoff)
 }
 
@@ -396,6 +426,21 @@ fn consume_suite_commands() -> Vec<SuiteCommandDocument> {
             let contents = fs::read(&path).ok()?;
             let command = serde_json::from_slice::<SuiteCommandDocument>(&contents).ok()?;
             let _ = fs::remove_file(path);
+            if let Err(error) = append_suite_timeline_event(
+                "suite.command",
+                "Pulse consumed suite command",
+                &format!(
+                    "Handled {} from {}.",
+                    command.command, command.source_app_name
+                ),
+                serde_json::json!({
+                    "commandId": command.command_id,
+                    "command": command.command,
+                    "sourceApp": command.source_app,
+                }),
+            ) {
+                eprintln!("Unable to append vaexcore pulse suite timeline event: {error}");
+            }
             Some(command)
         })
         .collect::<Vec<_>>();
@@ -466,6 +511,7 @@ fn start_suite_discovery_heartbeat() {
                 "studio.recording.intake".to_string(),
                 "suite.commands".to_string(),
                 "suite.launcher".to_string(),
+                "suite.timeline".to_string(),
             ],
             launch_name: APP_NAME.to_string(),
             suite_session_id: session.as_ref().map(|session| session.session_id.clone()),
@@ -512,6 +558,36 @@ fn suite_session_file() -> PathBuf {
 
 fn suite_command_dir() -> PathBuf {
     suite_discovery_dir().join("commands")
+}
+
+fn suite_timeline_file() -> PathBuf {
+    suite_discovery_dir().join("timeline.jsonl")
+}
+
+fn append_suite_timeline_event(
+    kind: &str,
+    title: &str,
+    detail: &str,
+    metadata: serde_json::Value,
+) -> std::io::Result<()> {
+    fs::create_dir_all(suite_discovery_dir())?;
+    let event = SuiteTimelineEvent {
+        schema_version: SUITE_DISCOVERY_SCHEMA_VERSION,
+        event_id: format!("pulse-{}-{}", suite_timestamp(), std::process::id()),
+        source_app: "vaexcore-pulse".to_string(),
+        source_app_name: APP_NAME.to_string(),
+        kind: kind.to_string(),
+        title: title.to_string(),
+        detail: detail.to_string(),
+        created_at: suite_timestamp(),
+        metadata,
+    };
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(suite_timeline_file())?;
+    writeln!(file, "{}", serde_json::to_string(&event)?)?;
+    Ok(())
 }
 
 fn read_suite_session_document() -> Option<SuiteSessionDocument> {
