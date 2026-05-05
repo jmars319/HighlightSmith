@@ -39,11 +39,11 @@ export function ShellHeader({
     <header className="workspace-header glass-panel">
       <div className="workspace-header-main">
         <div>
-          <p className="eyebrow">vaexcore pulse</p>
-          <h1 className="workspace-title">Clip review workspace</h1>
+          <p className="eyebrow">VAEXCORE PULSE</p>
+          <h1 className="workspace-title">Review Workspace</h1>
           <p className="workspace-copy">
-            Scan one video, review likely moments quickly, and keep the full
-            process on your own machine.
+            Scan one video, review likely moments quickly, and hand finished
+            choices back into the suite.
           </p>
         </div>
 

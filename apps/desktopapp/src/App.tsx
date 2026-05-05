@@ -179,7 +179,7 @@ const themeModeStorageKey = "vaexcore-pulse.desktop.theme-mode";
 const settingsSectionSelectedEvent = "settings-section-selected";
 const profileLibraryChangedEvent = "profile-library-changed";
 const desktopPages: DesktopNavItem[] = [
-  { id: "new-analysis", label: "Start" },
+  { id: "new-analysis", label: "Scan Intake" },
   { id: "candidate-review", label: "Review" },
   { id: "projects", label: "Backlog" },
 ];
@@ -210,7 +210,9 @@ export default function App() {
 }
 
 function DesktopApp() {
-  const [activePage, setActivePage] = useState<DesktopPage>("new-analysis");
+  const [activePage, setActivePage] = useState<DesktopPage>(() =>
+    initialDesktopPage(),
+  );
   const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
     resolveInitialThemeMode(),
   );
@@ -2976,7 +2978,7 @@ function DesktopApp() {
           </button>
         }
         subtitle="Scan long videos, review likely moments quickly, and build references from your own edits."
-        title="Creator Workspace"
+        title="Review Workspace"
       >
         <ShellHeader
           activeSessionStateLabel={
@@ -3017,6 +3019,13 @@ function DesktopApp() {
       </LayoutShell>
     </div>
   );
+}
+
+function initialDesktopPage(): DesktopPage {
+  const requested = new URLSearchParams(window.location.search).get("page");
+  return desktopPages.some((page) => page.id === requested)
+    ? (requested as DesktopPage)
+    : "new-analysis";
 }
 
 function SettingsWindowApp() {

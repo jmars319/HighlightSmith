@@ -10,7 +10,7 @@
 .vcp-block,
 .vcp-candidate-card {
   min-width: 0;
-  border-radius: 20px;
+  border-radius: var(--vxc-radius, 8px);
   border: 1px solid var(--surface-card-border, rgba(255, 255, 255, 0.08));
   background: var(--panel-strong, rgba(10, 12, 17, 0.62));
 }
@@ -22,7 +22,16 @@
 }
 
 .vcp-sidebar {
+  position: relative;
   overflow: hidden;
+}
+
+.vcp-sidebar::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  content: "";
+  background: linear-gradient(90deg, var(--vxc-cyan, #39d9ff), var(--vxc-magenta, #ff3bf4));
 }
 
 .vcp-brand {
@@ -99,7 +108,7 @@
 
 .vcp-nav-item {
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--vxc-radius-small, 6px);
   padding: 10px 12px;
   color: var(--text-color, white);
   background: var(--button-secondary-bg, rgba(255, 255, 255, 0.06));
@@ -109,6 +118,7 @@
 .vcp-nav-item.active {
   background: var(--filter-active-bg, rgba(201, 63, 215, 0.18));
   color: var(--filter-active-text, #fac6ff);
+  box-shadow: inset 3px 0 0 var(--vxc-cyan, #39d9ff);
 }
 
 .vcp-block {
@@ -147,7 +157,7 @@
 
 .vcp-controls-row button,
 .vcp-controls-row input {
-  border-radius: 12px;
+  border-radius: var(--vxc-radius-small, 6px);
   border: 1px solid var(--surface-input-border, rgba(255, 255, 255, 0.1));
   padding: 10px 12px;
   background: var(--surface-input, rgba(255, 255, 255, 0.06));
