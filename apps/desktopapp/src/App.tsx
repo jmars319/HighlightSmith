@@ -137,6 +137,16 @@ type PulseRecordingHandoff = {
     stoppedAt: string;
   };
 };
+type SuiteCommand = {
+  schemaVersion: number;
+  commandId: string;
+  sourceApp: string;
+  sourceAppName: string;
+  targetApp: string;
+  command: string;
+  requestedAt: string;
+  payload: unknown;
+};
 type StartGuide = {
   statusLabel: string;
   headline: string;
@@ -148,6 +158,17 @@ type StartGuide = {
 type ThemeMode = "dark" | "light";
 type SettingsSectionId = "profile-setup" | "appearance" | "window-behavior";
 type PulseRuntimeStatus = "checking" | "starting" | "ready" | "slow";
+
+function isPulseRecordingHandoff(value: unknown): value is PulseRecordingHandoff {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const recording = (value as { recording?: unknown }).recording;
+  if (!recording || typeof recording !== "object") {
+    return false;
+  }
+  return typeof (recording as { outputPath?: unknown }).outputPath === "string";
+}
 type DesktopNavItem = { id: DesktopPage; label: string };
 type ProfileLibraryChangedPayload = {
   profileId?: string;
@@ -599,6 +620,18 @@ function DesktopApp() {
         );
         if (handoff && isSubscribed) {
           applyPulseRecordingHandoff(handoff);
+        }
+        const commands = await invoke<SuiteCommand[]>("consume_suite_commands");
+        for (const command of commands) {
+          if (
+            command.command === "open-review" &&
+            isPulseRecordingHandoff(command.payload) &&
+            isSubscribed
+          ) {
+            applyPulseRecordingHandoff(command.payload);
+          } else if (command.command === "focus-review" && isSubscribed) {
+            setActivePage("candidate-review");
+          }
         }
       } catch {
         // Handoff polling is best-effort and should not interrupt review work.

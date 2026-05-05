@@ -63,6 +63,34 @@ struct SuiteDiscoveryDocument {
     health_url: Option<String>,
     capabilities: Vec<String>,
     launch_name: String,
+    suite_session_id: Option<String>,
+    activity: Option<String>,
+    activity_detail: Option<String>,
+}
+
+#[derive(Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SuiteSessionDocument {
+    schema_version: u8,
+    session_id: String,
+    title: String,
+    status: String,
+    owner_app: String,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SuiteCommandDocument {
+    schema_version: u8,
+    command_id: String,
+    source_app: String,
+    source_app_name: String,
+    target_app: String,
+    command: String,
+    requested_at: String,
+    payload: serde_json::Value,
 }
 
 #[derive(Clone, Serialize, serde::Deserialize)]
@@ -144,7 +172,8 @@ pub fn run() {
             open_media_in_quicktime,
             open_settings_window,
             launch_vaexcore_suite,
-            consume_pulse_recording_handoff
+            consume_pulse_recording_handoff,
+            consume_suite_commands
         ])
         .build(tauri::generate_context!())
         .expect("failed to build vaexcore pulse desktop shell");
@@ -353,6 +382,27 @@ fn consume_pulse_recording_handoff() -> Option<PulseRecordingHandoffDocument> {
     Some(handoff)
 }
 
+#[tauri::command]
+fn consume_suite_commands() -> Vec<SuiteCommandDocument> {
+    let directory = suite_command_dir().join("vaexcore-pulse");
+    let Ok(entries) = fs::read_dir(&directory) else {
+        return Vec::new();
+    };
+
+    let mut commands = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let contents = fs::read(&path).ok()?;
+            let command = serde_json::from_slice::<SuiteCommandDocument>(&contents).ok()?;
+            let _ = fs::remove_file(path);
+            Some(command)
+        })
+        .collect::<Vec<_>>();
+    commands.sort_by(|left, right| left.requested_at.cmp(&right.requested_at));
+    commands
+}
+
 fn launch_macos_app(app_name: &str) -> SuiteLaunchResult {
     #[cfg(target_os = "macos")]
     {
@@ -397,6 +447,7 @@ fn start_suite_discovery_heartbeat() {
 
     thread::spawn(move || loop {
         let api_url = format!("http://127.0.0.1:{API_PORT}");
+        let session = read_suite_session_document();
         let document = SuiteDiscoveryDocument {
             schema_version: SUITE_DISCOVERY_SCHEMA_VERSION,
             app_id: "vaexcore-pulse".to_string(),
@@ -413,9 +464,16 @@ fn start_suite_discovery_heartbeat() {
                 "pulse.api".to_string(),
                 "highlight.review".to_string(),
                 "studio.recording.intake".to_string(),
+                "suite.commands".to_string(),
                 "suite.launcher".to_string(),
             ],
             launch_name: APP_NAME.to_string(),
+            suite_session_id: session.as_ref().map(|session| session.session_id.clone()),
+            activity: Some("review-workspace".to_string()),
+            activity_detail: session
+                .as_ref()
+                .map(|session| format!("Reviewing within {}", session.title))
+                .or_else(|| Some("Ready for Studio review handoffs".to_string())),
         };
 
         if let Err(error) = write_suite_discovery_document(&document) {
@@ -446,6 +504,19 @@ fn suite_discovery_dir() -> PathBuf {
 
 fn suite_handoff_dir() -> PathBuf {
     suite_discovery_dir().join("handoffs")
+}
+
+fn suite_session_file() -> PathBuf {
+    suite_discovery_dir().join("session.json")
+}
+
+fn suite_command_dir() -> PathBuf {
+    suite_discovery_dir().join("commands")
+}
+
+fn read_suite_session_document() -> Option<SuiteSessionDocument> {
+    let contents = fs::read(suite_session_file()).ok()?;
+    serde_json::from_slice(&contents).ok()
 }
 
 fn suite_timestamp() -> String {
