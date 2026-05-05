@@ -4,7 +4,7 @@ use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
-use std::net::{SocketAddr, TcpStream};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -48,7 +48,7 @@ struct SuiteLaunchResult {
     detail: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SuiteDiscoveryDocument {
     schema_version: u8,
@@ -106,6 +106,45 @@ struct SuiteTimelineEvent {
     detail: String,
     created_at: String,
     metadata: serde_json::Value,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SuiteAppStatus {
+    app_id: String,
+    app_name: String,
+    launch_name: String,
+    bundle_identifier: String,
+    installed: bool,
+    running: bool,
+    reachable: bool,
+    stale: bool,
+    discovery_file: String,
+    pid: Option<u32>,
+    api_url: Option<String>,
+    health_url: Option<String>,
+    updated_at: Option<String>,
+    capabilities: Vec<String>,
+    suite_session_id: Option<String>,
+    activity: Option<String>,
+    activity_detail: Option<String>,
+    detail: String,
+}
+
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SuiteTimelineInput {
+    kind: String,
+    title: String,
+    detail: String,
+    metadata: serde_json::Value,
+}
+
+struct SuiteAppDefinition {
+    app_id: &'static str,
+    app_name: &'static str,
+    launch_name: &'static str,
+    bundle_identifier: &'static str,
 }
 
 #[derive(Clone, Serialize, serde::Deserialize)]
@@ -187,6 +226,10 @@ pub fn run() {
             open_media_in_quicktime,
             open_settings_window,
             launch_vaexcore_suite,
+            suite_status,
+            suite_session,
+            suite_timeline,
+            append_suite_timeline,
             consume_pulse_recording_handoff,
             consume_suite_commands
         ])
@@ -389,6 +432,30 @@ fn launch_vaexcore_suite() -> Vec<SuiteLaunchResult> {
 }
 
 #[tauri::command]
+fn suite_status() -> Vec<SuiteAppStatus> {
+    suite_app_definitions()
+        .iter()
+        .map(suite_app_status)
+        .collect()
+}
+
+#[tauri::command]
+fn suite_session() -> Option<SuiteSessionDocument> {
+    read_suite_session_document()
+}
+
+#[tauri::command]
+fn suite_timeline(limit: Option<usize>) -> Vec<SuiteTimelineEvent> {
+    read_suite_timeline_events(limit.unwrap_or(50))
+}
+
+#[tauri::command]
+fn append_suite_timeline(input: SuiteTimelineInput) -> Result<(), String> {
+    append_suite_timeline_event(&input.kind, &input.title, &input.detail, input.metadata)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn consume_pulse_recording_handoff() -> Option<PulseRecordingHandoffDocument> {
     let path = suite_handoff_dir().join("pulse-recording-intake.json");
     let contents = fs::read(&path).ok()?;
@@ -538,6 +605,118 @@ fn write_suite_discovery_document(document: &SuiteDiscoveryDocument) -> std::io:
     fs::write(path, serialized)
 }
 
+fn suite_app_definitions() -> [SuiteAppDefinition; 3] {
+    [
+        SuiteAppDefinition {
+            app_id: "vaexcore-studio",
+            app_name: "vaexcore studio",
+            launch_name: "vaexcore studio",
+            bundle_identifier: "com.vaexcore.studio",
+        },
+        SuiteAppDefinition {
+            app_id: "vaexcore-pulse",
+            app_name: "vaexcore pulse",
+            launch_name: "vaexcore pulse",
+            bundle_identifier: "com.vaexil.vaexcore.pulse",
+        },
+        SuiteAppDefinition {
+            app_id: "vaexcore-console",
+            app_name: "vaexcore console",
+            launch_name: "vaexcore console",
+            bundle_identifier: "com.vaexil.vaexcore.console",
+        },
+    ]
+}
+
+fn suite_app_status(definition: &SuiteAppDefinition) -> SuiteAppStatus {
+    let discovery_file = suite_discovery_file(definition.app_id);
+    let installed = Path::new("/Applications")
+        .join(format!("{}.app", definition.launch_name))
+        .exists();
+    let discovery = read_suite_discovery_document(&discovery_file);
+    let pid = discovery.as_ref().map(|document| document.pid);
+    let running = pid.is_some_and(process_is_running);
+    let stale = suite_discovery_is_stale(&discovery_file);
+    let reachable = discovery
+        .as_ref()
+        .and_then(|document| document.health_url.as_deref())
+        .is_some_and(health_url_is_reachable);
+    let detail = suite_status_detail(installed, discovery.is_some(), running, stale, reachable);
+
+    SuiteAppStatus {
+        app_id: definition.app_id.to_string(),
+        app_name: discovery
+            .as_ref()
+            .map(|document| document.app_name.clone())
+            .unwrap_or_else(|| definition.app_name.to_string()),
+        launch_name: definition.launch_name.to_string(),
+        bundle_identifier: definition.bundle_identifier.to_string(),
+        installed,
+        running,
+        reachable,
+        stale,
+        discovery_file: discovery_file.display().to_string(),
+        pid,
+        api_url: discovery
+            .as_ref()
+            .and_then(|document| document.api_url.clone()),
+        health_url: discovery
+            .as_ref()
+            .and_then(|document| document.health_url.clone()),
+        updated_at: discovery
+            .as_ref()
+            .map(|document| document.updated_at.clone()),
+        capabilities: discovery
+            .as_ref()
+            .map(|document| document.capabilities.clone())
+            .unwrap_or_default(),
+        suite_session_id: discovery
+            .as_ref()
+            .and_then(|document| document.suite_session_id.clone()),
+        activity: discovery
+            .as_ref()
+            .and_then(|document| document.activity.clone()),
+        activity_detail: discovery
+            .as_ref()
+            .and_then(|document| document.activity_detail.clone()),
+        detail,
+    }
+}
+
+fn read_suite_discovery_document(path: &Path) -> Option<SuiteDiscoveryDocument> {
+    let contents = fs::read(path).ok()?;
+    serde_json::from_slice(&contents).ok()
+}
+
+fn suite_discovery_file(app_id: &str) -> PathBuf {
+    suite_discovery_dir().join(format!("{app_id}.json"))
+}
+
+fn suite_status_detail(
+    installed: bool,
+    discovered: bool,
+    running: bool,
+    stale: bool,
+    reachable: bool,
+) -> String {
+    if !installed {
+        return "Install this app in /Applications.".to_string();
+    }
+    if !discovered {
+        return "No suite heartbeat has been published yet.".to_string();
+    }
+    if !running {
+        return "Heartbeat exists, but the app process is not running.".to_string();
+    }
+    if stale {
+        return "The suite heartbeat is stale.".to_string();
+    }
+    if !reachable {
+        return "The app is running, but its local health endpoint is not reachable.".to_string();
+    }
+    "Ready.".to_string()
+}
+
 fn suite_discovery_dir() -> PathBuf {
     env::var("HOME")
         .map(PathBuf::from)
@@ -593,6 +772,58 @@ fn append_suite_timeline_event(
 fn read_suite_session_document() -> Option<SuiteSessionDocument> {
     let contents = fs::read(suite_session_file()).ok()?;
     serde_json::from_slice(&contents).ok()
+}
+
+fn read_suite_timeline_events(limit: usize) -> Vec<SuiteTimelineEvent> {
+    let contents = match fs::read_to_string(suite_timeline_file()) {
+        Ok(contents) => contents,
+        Err(_) => return Vec::new(),
+    };
+    let mut events = contents
+        .lines()
+        .filter_map(|line| serde_json::from_str::<SuiteTimelineEvent>(line).ok())
+        .collect::<Vec<_>>();
+    events.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    events.truncate(limit);
+    events
+}
+
+fn suite_discovery_is_stale(path: &Path) -> bool {
+    fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| modified.elapsed().ok())
+        .map(|elapsed| elapsed > Duration::from_secs(45))
+        .unwrap_or(true)
+}
+
+fn process_is_running(pid: u32) -> bool {
+    let pid_arg = pid.to_string();
+    Command::new("ps")
+        .args(["-p", pid_arg.as_str()])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+fn health_url_is_reachable(url: &str) -> bool {
+    let Some(address) = http_url_authority(url) else {
+        return false;
+    };
+    let Ok(mut addresses) = address.to_socket_addrs() else {
+        return false;
+    };
+    addresses
+        .any(|address| TcpStream::connect_timeout(&address, Duration::from_millis(450)).is_ok())
+}
+
+fn http_url_authority(url: &str) -> Option<&str> {
+    let rest = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))?;
+    rest.split('/')
+        .next()
+        .filter(|authority| !authority.is_empty())
 }
 
 fn suite_timestamp() -> String {

@@ -109,7 +109,7 @@ import {
 } from "./lib/studioIntegration";
 
 type FilterValue = ConfidenceBand | "ALL";
-type DesktopPage = "projects" | "new-analysis" | "candidate-review";
+type DesktopPage = "projects" | "new-analysis" | "candidate-review" | "suite";
 type AnalysisReadiness = {
   canAnalyze: boolean;
   statusLabel: string;
@@ -121,6 +121,54 @@ type SuiteLaunchResult = {
   appName: string;
   ok: boolean;
   detail: string;
+};
+type SuiteAppStatus = {
+  appId: string;
+  appName: string;
+  launchName: string;
+  bundleIdentifier: string;
+  installed: boolean;
+  running: boolean;
+  reachable: boolean;
+  stale: boolean;
+  discoveryFile: string;
+  pid: number | null;
+  apiUrl: string | null;
+  healthUrl: string | null;
+  updatedAt: string | null;
+  capabilities: string[];
+  suiteSessionId: string | null;
+  activity: string | null;
+  activityDetail: string | null;
+  detail: string;
+};
+type SuiteSession = {
+  schemaVersion: number;
+  sessionId: string;
+  title: string;
+  status: string;
+  ownerApp: string;
+  createdAt: string;
+  updatedAt: string;
+};
+type SuiteTimelineEvent = {
+  schemaVersion: number;
+  eventId: string;
+  sourceApp: string;
+  sourceAppName: string;
+  kind: string;
+  title: string;
+  detail: string;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+};
+type SuiteTimelineItem = {
+  id: string;
+  kind: "presence" | "recording" | "review" | "event";
+  title: string;
+  detail: string;
+  timestamp: string;
+  source: string;
 };
 type PulseRecordingHandoff = {
   schemaVersion: number;
@@ -182,6 +230,7 @@ const desktopPages: DesktopNavItem[] = [
   { id: "new-analysis", label: "Scan Intake" },
   { id: "candidate-review", label: "Review" },
   { id: "projects", label: "Backlog" },
+  { id: "suite", label: "Suite" },
 ];
 const settingsSections: Array<{
   id: SettingsSectionId;
@@ -307,6 +356,14 @@ function DesktopApp() {
   const [suiteLaunchStatus, setSuiteLaunchStatus] = useState<string | null>(
     null,
   );
+  const [suiteStatus, setSuiteStatus] = useState<SuiteAppStatus[]>([]);
+  const [suiteSession, setSuiteSession] = useState<SuiteSession | null>(null);
+  const [suiteTimelineEvents, setSuiteTimelineEvents] = useState<
+    SuiteTimelineEvent[]
+  >([]);
+  const [suiteRefreshError, setSuiteRefreshError] = useState<string | null>(
+    null,
+  );
   const pulseRuntimeStatus = usePulseRuntimeStatus(apiBaseUrl);
   const isPulseReady = isPulseRuntimeReady(pulseRuntimeStatus);
   const sessionCandidates = projectSession?.candidates ?? [];
@@ -382,6 +439,21 @@ function DesktopApp() {
       setProjectSummaries((current) =>
         upsertProjectSummary(current, buildProjectSummary(nextSession)),
       );
+      if (context.action === "ACCEPT" || context.action === "REJECT") {
+        void recordPulseTimelineEvent({
+          kind: `pulse.review.${context.action.toLowerCase()}`,
+          title:
+            context.action === "ACCEPT"
+              ? "Pulse moment kept"
+              : "Pulse moment skipped",
+          detail: `${nextSession.title} updated from Review.`,
+          metadata: {
+            pulseSessionId: nextSession.id,
+            candidateId: context.candidateId,
+            action: context.action,
+          },
+        });
+      }
     },
   });
 
@@ -485,6 +557,10 @@ function DesktopApp() {
     findNextPendingSessionSummary(projectSummaries, {
       excludeSessionIds: projectSession ? [projectSession.id] : [],
     }) ?? findNextPendingSessionSummary(projectSummaries);
+  const suiteTimeline = useMemo(
+    () => buildSuiteTimeline(suiteStatus, suiteTimelineEvents),
+    [suiteStatus, suiteTimelineEvents],
+  );
 
   const timestampPreview = projectSession
     ? toTimestampExport(
@@ -504,6 +580,49 @@ function DesktopApp() {
   useEffect(() => {
     persistThemeMode(themeMode);
   }, [themeMode]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let isSubscribed = true;
+
+    async function refresh() {
+      try {
+        const [nextStatus, nextSession, nextTimeline] = await Promise.all([
+          invoke<SuiteAppStatus[]>("suite_status"),
+          invoke<SuiteSession | null>("suite_session"),
+          invoke<SuiteTimelineEvent[]>("suite_timeline", { limit: 50 }),
+        ]);
+        if (!isSubscribed) {
+          return;
+        }
+        setSuiteStatus(nextStatus);
+        setSuiteSession(nextSession);
+        setSuiteTimelineEvents(nextTimeline);
+        setSuiteRefreshError(null);
+      } catch (error) {
+        if (isSubscribed) {
+          setSuiteRefreshError(
+            error instanceof Error
+              ? error.message
+              : "Unable to refresh suite status.",
+          );
+        }
+      }
+    }
+
+    void refresh();
+    const interval = window.setInterval(() => {
+      void refresh();
+    }, 3000);
+
+    return () => {
+      isSubscribed = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -633,6 +752,8 @@ function DesktopApp() {
             applyPulseRecordingHandoff(command.payload);
           } else if (command.command === "focus-review" && isSubscribed) {
             setActivePage("candidate-review");
+          } else if (command.command === "focus-suite" && isSubscribed) {
+            setActivePage("suite");
           }
         }
       } catch {
@@ -2103,6 +2224,17 @@ function DesktopApp() {
       setProjectSummaries((current) =>
         upsertProjectSummary(current, buildProjectSummary(nextSession)),
       );
+      void recordPulseTimelineEvent({
+        kind: "pulse.session.scanned",
+        title: "Pulse scan ready",
+        detail: `${nextSession.title} has ${nextSession.candidates.length} suggested moment${nextSession.candidates.length === 1 ? "" : "s"}.`,
+        metadata: {
+          pulseSessionId: nextSession.id,
+          sourcePath: nextSession.mediaSource.path,
+          candidateCount: nextSession.candidates.length,
+          profileId: nextSession.profileId,
+        },
+      });
       setProjectsError(null);
       setActivePage("candidate-review");
     } catch (error) {
@@ -2203,6 +2335,14 @@ function DesktopApp() {
           ? formatSuiteLaunchFailure(failed)
           : "Launch requested for Studio, Pulse, and Console.",
       );
+      const [nextStatus, nextSession, nextTimeline] = await Promise.all([
+        invoke<SuiteAppStatus[]>("suite_status"),
+        invoke<SuiteSession | null>("suite_session"),
+        invoke<SuiteTimelineEvent[]>("suite_timeline", { limit: 50 }),
+      ]);
+      setSuiteStatus(nextStatus);
+      setSuiteSession(nextSession);
+      setSuiteTimelineEvents(nextTimeline);
     } catch (error) {
       setSuiteLaunchStatus(
         error instanceof Error
@@ -2223,6 +2363,99 @@ function DesktopApp() {
   }
 
   function renderDesktopPage() {
+    if (activePage === "suite") {
+      return (
+        <section className="suite-dashboard-grid">
+          <article className="utility-block suite-session-panel">
+            <div>
+              <span className="detail-label">Suite session</span>
+              <h2>{suiteSession?.title ?? "No active suite session"}</h2>
+              <p>
+                {suiteSession
+                  ? `Session ${suiteSession.sessionId}`
+                  : "Studio creates the shared local session used by Studio, Pulse, and Console."}
+              </p>
+            </div>
+            <button
+              className="button-primary"
+              onClick={() => {
+                void handleLaunchSuite();
+              }}
+              type="button"
+            >
+              Launch Suite
+            </button>
+            {suiteLaunchStatus ? (
+              <p className="suite-launch-status">{suiteLaunchStatus}</p>
+            ) : null}
+            {suiteRefreshError ? (
+              <p className="analysis-error">{suiteRefreshError}</p>
+            ) : null}
+          </article>
+
+          <article className="utility-block suite-panel-wide">
+            <div className="panel-header compact-panel-header">
+              <div>
+                <span className="detail-label">Suite presence</span>
+                <h2>Studio, Pulse, and Console</h2>
+              </div>
+              <span className="queue-count">{suiteStatus.length} apps</span>
+            </div>
+            {suiteStatus.length === 0 ? (
+              <p>No suite heartbeat has been published yet.</p>
+            ) : (
+              <div className="suite-status-list">
+                {suiteStatus.map((app) => (
+                  <div className="suite-status-row" key={app.appId}>
+                    <div>
+                      <strong>{app.appName}</strong>
+                      <span>{app.activityDetail ?? app.detail}</span>
+                      <code>{app.healthUrl ?? app.discoveryFile}</code>
+                    </div>
+                    <span className={`session-state-pill ${suiteStatusTone(app)}`}>
+                      {suiteStatusLabel(app)}
+                    </span>
+                    <span className="session-state-pill active-session">
+                      {app.suiteSessionId ? "In session" : "No session"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className="utility-block suite-panel-wide">
+            <div className="panel-header compact-panel-header">
+              <div>
+                <span className="detail-label">Shared timeline</span>
+                <h2>Recent suite activity</h2>
+              </div>
+            </div>
+            {suiteTimeline.length === 0 ? (
+              <p>No shared suite activity yet.</p>
+            ) : (
+              <div className="suite-timeline-list">
+                {suiteTimeline.map((item) => (
+                  <div className="suite-timeline-row" key={item.id}>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <span>{item.detail}</span>
+                    </div>
+                    <span className={`session-state-pill ${timelineTone(item.kind)}`}>
+                      {item.source}
+                    </span>
+                    <span className="session-state-pill">
+                      {formatSuiteTimestamp(item.timestamp)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+        </section>
+      );
+    }
+
     if (activePage === "projects") {
       return (
         <section className="desktop-placeholder-grid">
@@ -2842,6 +3075,34 @@ function DesktopApp() {
       );
     }
 
+    if (activePage === "suite") {
+      const readyApps = suiteStatus.filter(
+        (app) => app.installed && app.running && app.reachable && !app.stale,
+      ).length;
+      return (
+        <div className="desktop-aside-stack">
+          <article className="utility-block">
+            <span className="detail-label">Suite snapshot</span>
+            <p>
+              {readyApps} of {suiteStatus.length || 3} apps ready
+            </p>
+            <p>
+              {suiteSession
+                ? `${suiteSession.title} is the active shared session.`
+                : "Open Studio to create the shared suite session."}
+            </p>
+          </article>
+          <article className="utility-block">
+            <span className="detail-label">Pulse role</span>
+            <p>
+              Pulse receives Studio recordings, scans video, and sends kept
+              moments back to Studio.
+            </p>
+          </article>
+        </div>
+      );
+    }
+
     if (activePage === "projects") {
       return (
         <div className="desktop-aside-stack">
@@ -2977,30 +3238,36 @@ function DesktopApp() {
             </svg>
           </button>
         }
-        subtitle="Scan long videos, review likely moments quickly, and build references from your own edits."
-        title="Review Workspace"
+        subtitle={
+          activePage === "suite"
+            ? "Watch the local suite session, shared timeline, and connected app presence."
+            : "Scan long videos, review likely moments quickly, and build references from your own edits."
+        }
+        title={activePage === "suite" ? "Suite Workspace" : "Review Workspace"}
       >
-        <ShellHeader
-          activeSessionStateLabel={
-            activeSessionReviewStateLabel
-              ? activeSessionReviewStateLabel
-              : normalizedSelectedMediaPath
-                ? "Video staged for scanning"
-                : "Choose a video or reopen a saved session."
-          }
-          acceptedCount={acceptedCount}
-          currentProfileLabel={currentProfile.name}
-          currentSessionLabel={projectSession?.title ?? "No session loaded"}
-          onPickMedia={handlePickMedia}
-          onLaunchSuite={() => {
-            void handleLaunchSuite();
-          }}
-          pendingCount={pendingReviewCount}
-          rejectedCount={rejectedCount}
-          selectedMediaPath={selectedMediaPath || "No video selected yet."}
-          suiteLaunchStatus={suiteLaunchStatus}
-          totalCount={sessionCandidates.length}
-        />
+        {activePage === "suite" ? null : (
+          <ShellHeader
+            activeSessionStateLabel={
+              activeSessionReviewStateLabel
+                ? activeSessionReviewStateLabel
+                : normalizedSelectedMediaPath
+                  ? "Video staged for scanning"
+                  : "Choose a video or reopen a saved session."
+            }
+            acceptedCount={acceptedCount}
+            currentProfileLabel={currentProfile.name}
+            currentSessionLabel={projectSession?.title ?? "No session loaded"}
+            onPickMedia={handlePickMedia}
+            onLaunchSuite={() => {
+              void handleLaunchSuite();
+            }}
+            pendingCount={pendingReviewCount}
+            rejectedCount={rejectedCount}
+            selectedMediaPath={selectedMediaPath || "No video selected yet."}
+            suiteLaunchStatus={suiteLaunchStatus}
+            totalCount={sessionCandidates.length}
+          />
+        )}
         {renderDesktopPage()}
         <MomentPreviewModal
           apiBaseUrl={apiBaseUrl}
@@ -4733,6 +5000,94 @@ function isTauriRuntime(): boolean {
 function formatSuiteLaunchFailure(results: SuiteLaunchResult[]): string {
   const appNames = results.map((result) => result.appName).join(", ");
   return `Could not launch ${appNames}. Install the app bundles in Applications, then try again.`;
+}
+
+async function recordPulseTimelineEvent(input: {
+  kind: string;
+  title: string;
+  detail: string;
+  metadata: Record<string, unknown>;
+}) {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  try {
+    await invoke<void>("append_suite_timeline", { input });
+  } catch {
+    // Suite timeline writes are best-effort and should not interrupt review.
+  }
+}
+
+function buildSuiteTimeline(
+  suiteStatus: SuiteAppStatus[],
+  events: SuiteTimelineEvent[],
+): SuiteTimelineItem[] {
+  const persistedItems = events.map((event) => ({
+    id: `event-${event.eventId}`,
+    kind: suiteTimelineItemKind(event.kind),
+    title: event.title,
+    detail: event.detail,
+    timestamp: event.createdAt,
+    source: event.sourceAppName,
+  }));
+  const presenceItems = suiteStatus
+    .filter((app) => app.updatedAt)
+    .map((app) => ({
+      id: `presence-${app.appId}-${app.updatedAt}`,
+      kind: "presence" as const,
+      title: app.activity ?? app.appName,
+      detail: app.activityDetail ?? app.detail,
+      timestamp: app.updatedAt ?? new Date().toISOString(),
+      source: app.appName,
+    }));
+
+  return [...persistedItems, ...presenceItems]
+    .sort((left, right) => suiteTimestampMs(right.timestamp) - suiteTimestampMs(left.timestamp))
+    .slice(0, 18);
+}
+
+function suiteTimelineItemKind(kind: string): SuiteTimelineItem["kind"] {
+  if (kind.includes("recording")) return "recording";
+  if (kind.includes("review") || kind.includes("pulse.session")) return "review";
+  if (kind.includes("presence") || kind.includes("session")) return "presence";
+  return "event";
+}
+
+function suiteTimestampMs(value: string): number {
+  if (/^\d+$/.test(value)) {
+    return Number(value) * 1000;
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function formatSuiteTimestamp(value: string): string {
+  const timestamp = suiteTimestampMs(value);
+  if (!timestamp) return value;
+  return new Date(timestamp).toLocaleTimeString();
+}
+
+function suiteStatusTone(app: SuiteAppStatus): string {
+  if (!app.installed) return "pending";
+  if (!app.running) return "pending";
+  if (app.stale || !app.reachable) return "in-progress";
+  return "reviewed";
+}
+
+function suiteStatusLabel(app: SuiteAppStatus): string {
+  if (!app.installed) return "Missing";
+  if (!app.running) return "Offline";
+  if (app.stale) return "Stale";
+  if (!app.reachable) return "Starting";
+  return "Ready";
+}
+
+function timelineTone(kind: SuiteTimelineItem["kind"]): string {
+  if (kind === "presence") return "reviewed";
+  if (kind === "recording") return "in-progress";
+  if (kind === "review") return "active-session";
+  return "pending";
 }
 
 function studioPulseSourceEventId(sessionId: string, candidateId: string): string {

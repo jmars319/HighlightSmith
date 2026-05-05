@@ -11,6 +11,7 @@ const targets = [
   ["scan-intake", "/?page=new-analysis"],
   ["review-workspace", "/?page=candidate-review"],
   ["backlog", "/?page=projects"],
+  ["suite", "/?page=suite"],
   ["settings", "/?window=settings"]
 ];
 
