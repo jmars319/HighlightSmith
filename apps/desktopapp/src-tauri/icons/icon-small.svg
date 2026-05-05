@@ -14,8 +14,9 @@
       <stop offset="0" stop-color="#ff36f7"/>
       <stop offset="1" stop-color="#8b5cff"/>
     </linearGradient>
-    <linearGradient id="clap" x1="318" y1="330" x2="710" y2="650" gradientUnits="userSpaceOnUse">
+    <linearGradient id="pulse" x1="282" y1="390" x2="742" y2="708" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#ff44f6"/>
+      <stop offset="0.48" stop-color="#27ddff"/>
       <stop offset="1" stop-color="#27ddff"/>
     </linearGradient>
     <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%">
@@ -29,12 +30,9 @@
   <rect width="1024" height="1024" fill="url(#bg)"/>
   <path d="M178 232 L512 816 L846 232" fill="none" stroke="url(#v-main)" stroke-width="58" stroke-linecap="round" stroke-linejoin="round" filter="url(#soft-glow)"/>
   <path d="M316 296 L512 714 L708 296" fill="none" stroke="url(#v-inner)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
-  <g filter="url(#soft-glow)">
-    <path d="M330 386 L654 330 L682 418 L358 474 Z" fill="#070914" stroke="url(#clap)" stroke-width="32" stroke-linejoin="round"/>
-    <path d="M356 470 H682 V622 H342 V470 Z" fill="#070914" stroke="url(#clap)" stroke-width="32" stroke-linejoin="round"/>
-    <path d="M420 364 L468 454 M534 344 L582 434" stroke="#ff5af8" stroke-width="26" stroke-linecap="round"/>
-    <path d="M480 506 L480 588 L560 548 Z" fill="#27ddff"/>
-  </g>
-  <path d="M330 678 H412 L450 628 L500 724 L548 648 L594 678 H694" fill="none" stroke="#26ddff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M370 742 H438 M482 742 H550 M594 742 H662" stroke="#ff38f4" stroke-width="18" stroke-linecap="round"/>
+  <path d="M282 552 H360 L418 424 L490 688 L558 442 L616 552 H742" fill="none" stroke="url(#pulse)" stroke-width="62" stroke-linecap="round" stroke-linejoin="round" filter="url(#soft-glow)"/>
+  <circle cx="512" cy="552" r="116" fill="none" stroke="#ff42f6" stroke-width="46" filter="url(#soft-glow)"/>
+  <circle cx="512" cy="552" r="42" fill="#27ddff" filter="url(#soft-glow)"/>
+  <path d="M312 724 H448 M500 724 H724" stroke="#ff38f4" stroke-width="30" stroke-linecap="round"/>
+  <path d="M382 780 H642" stroke="#27ddff" stroke-width="22" stroke-linecap="round" opacity="0.9"/>
 </svg>
