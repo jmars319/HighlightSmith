@@ -67,6 +67,31 @@ struct SuiteDiscoveryDocument {
     suite_session_id: Option<String>,
     activity: Option<String>,
     activity_detail: Option<String>,
+    local_runtime: Option<SuiteLocalRuntime>,
+}
+
+#[derive(Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SuiteLocalRuntime {
+    contract_version: u8,
+    mode: String,
+    state: String,
+    app_storage_dir: String,
+    suite_dir: String,
+    secure_storage: String,
+    secret_storage_state: String,
+    durable_storage: Vec<String>,
+    network_policy: String,
+    dependencies: Vec<SuiteLocalRuntimeDependency>,
+}
+
+#[derive(Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SuiteLocalRuntimeDependency {
+    name: String,
+    kind: String,
+    state: String,
+    detail: String,
 }
 
 #[derive(Clone, Serialize, serde::Deserialize)]
@@ -128,6 +153,7 @@ struct SuiteAppStatus {
     suite_session_id: Option<String>,
     activity: Option<String>,
     activity_detail: Option<String>,
+    local_runtime: Option<SuiteLocalRuntime>,
     detail: String,
 }
 
@@ -177,7 +203,10 @@ pub fn run() {
         .setup(|app| {
             let app_handle = app.handle().clone();
             thread::spawn(move || match ensure_local_services(&app_handle) {
-                Ok(()) => start_suite_discovery_heartbeat(),
+                Ok(()) => {
+                    let app_data_dir = app_handle.path().app_data_dir().ok();
+                    start_suite_discovery_heartbeat(app_data_dir);
+                }
                 Err(error) => {
                     eprintln!("Unable to start vaexcore pulse local services: {error}");
                 }
@@ -554,7 +583,7 @@ fn launch_macos_app(app_name: &str) -> SuiteLaunchResult {
     }
 }
 
-fn start_suite_discovery_heartbeat() {
+fn start_suite_discovery_heartbeat(app_data_dir: Option<PathBuf>) {
     let started_at = suite_timestamp();
 
     thread::spawn(move || loop {
@@ -587,6 +616,7 @@ fn start_suite_discovery_heartbeat() {
                 .as_ref()
                 .map(|session| format!("Reviewing within {}", session.title))
                 .or_else(|| Some("Ready for Studio review handoffs".to_string())),
+            local_runtime: Some(pulse_suite_local_runtime(app_data_dir.as_deref())),
         };
 
         if let Err(error) = write_suite_discovery_document(&document) {
@@ -595,6 +625,85 @@ fn start_suite_discovery_heartbeat() {
 
         thread::sleep(SUITE_DISCOVERY_HEARTBEAT_INTERVAL);
     });
+}
+
+fn pulse_suite_local_runtime(app_data_dir: Option<&Path>) -> SuiteLocalRuntime {
+    let api_ready = port_is_open(API_PORT);
+    let analyzer_ready = port_is_open(ANALYZER_PORT);
+    let ffmpeg_available = find_executable(
+        "ffmpeg",
+        &[
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/usr/bin/ffmpeg",
+        ],
+    )
+    .is_some();
+    let app_storage_dir = app_data_dir
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| {
+            env::var("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("Library")
+                .join("Application Support")
+                .join("vaexcore pulse")
+                .display()
+                .to_string()
+        });
+
+    SuiteLocalRuntime {
+        contract_version: SUITE_DISCOVERY_SCHEMA_VERSION,
+        mode: "local-first".to_string(),
+        state: if api_ready && analyzer_ready {
+            "degraded".to_string()
+        } else {
+            "blocked".to_string()
+        },
+        app_storage_dir,
+        suite_dir: suite_discovery_dir().display().to_string(),
+        secure_storage: "none-required".to_string(),
+        secret_storage_state: "not-applicable".to_string(),
+        durable_storage: vec![
+            "SQLite review and media library data".to_string(),
+            "local analyzer/API service logs".to_string(),
+            "Studio handoff manifests".to_string(),
+        ],
+        network_policy: "localhost-only".to_string(),
+        dependencies: vec![
+            SuiteLocalRuntimeDependency {
+                name: "pulse-api".to_string(),
+                kind: "local-http-service".to_string(),
+                state: if api_ready { "reachable" } else { "missing" }.to_string(),
+                detail: format!("Expected API bridge on 127.0.0.1:{API_PORT}."),
+            },
+            SuiteLocalRuntimeDependency {
+                name: "pulse-analyzer".to_string(),
+                kind: "local-http-service".to_string(),
+                state: if analyzer_ready { "reachable" } else { "missing" }.to_string(),
+                detail: format!("Expected analyzer on 127.0.0.1:{ANALYZER_PORT}."),
+            },
+            SuiteLocalRuntimeDependency {
+                name: "ffmpeg".to_string(),
+                kind: "local-binary".to_string(),
+                state: if ffmpeg_available {
+                    "available"
+                } else {
+                    "optional-missing"
+                }
+                .to_string(),
+                detail: "Used for local probing, thumbnails, and future offline analysis paths."
+                    .to_string(),
+            },
+            SuiteLocalRuntimeDependency {
+                name: "packaged-service-bundle".to_string(),
+                kind: "packaging".to_string(),
+                state: "degraded".to_string(),
+                detail: "Installed Pulse still starts analyzer/API helpers from the local repo; bundle these helpers next."
+                    .to_string(),
+            },
+        ],
+    }
 }
 
 fn write_suite_discovery_document(document: &SuiteDiscoveryDocument) -> std::io::Result<()> {
@@ -679,6 +788,9 @@ fn suite_app_status(definition: &SuiteAppDefinition) -> SuiteAppStatus {
         activity_detail: discovery
             .as_ref()
             .and_then(|document| document.activity_detail.clone()),
+        local_runtime: discovery
+            .as_ref()
+            .and_then(|document| document.local_runtime.clone()),
         detail,
     }
 }

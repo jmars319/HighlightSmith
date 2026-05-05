@@ -140,6 +140,25 @@ type SuiteAppStatus = {
   suiteSessionId: string | null;
   activity: string | null;
   activityDetail: string | null;
+  localRuntime: SuiteLocalRuntime | null;
+  detail: string;
+};
+type SuiteLocalRuntime = {
+  contractVersion: 1;
+  mode: "local-first";
+  state: "ready" | "degraded" | "blocked";
+  appStorageDir: string;
+  suiteDir: string;
+  secureStorage: string;
+  secretStorageState: string;
+  durableStorage: string[];
+  networkPolicy: "localhost-only";
+  dependencies: SuiteLocalRuntimeDependency[];
+};
+type SuiteLocalRuntimeDependency = {
+  name: string;
+  kind: string;
+  state: string;
   detail: string;
 };
 type SuiteSession = {

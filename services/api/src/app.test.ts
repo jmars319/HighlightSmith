@@ -28,14 +28,20 @@ describe("api smoke routes", () => {
         service: string;
         status: string;
         mode: string;
+        localRuntime: {
+          contractVersion: number;
+          mode: string;
+          networkPolicy: string;
+        };
       };
 
       assert.equal(healthResponse.statusCode, 200);
-      assert.deepEqual(healthPayload, {
-        service: "api",
-        status: "ok",
-        mode: "local-bridge",
-      });
+      assert.equal(healthPayload.service, "api");
+      assert.equal(healthPayload.status, "ok");
+      assert.equal(healthPayload.mode, "local-bridge");
+      assert.equal(healthPayload.localRuntime.contractVersion, 1);
+      assert.equal(healthPayload.localRuntime.mode, "local-first");
+      assert.equal(healthPayload.localRuntime.networkPolicy, "localhost-only");
     } finally {
       await app.close();
     }
