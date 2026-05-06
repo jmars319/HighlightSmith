@@ -80,7 +80,10 @@ void main().catch((error) => {
 });
 
 async function main() {
-  const latestRecording = await fetchLatestStudioRecording(discovery, mockFetch);
+  const latestRecording = await fetchLatestStudioRecording(
+    discovery,
+    mockFetch,
+  );
   assert.equal(latestRecording?.sessionId, "rec_latest");
 
   console.log("pulse studio integration smoke passed");

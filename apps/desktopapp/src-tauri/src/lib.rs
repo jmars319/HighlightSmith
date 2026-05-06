@@ -15,8 +15,8 @@ use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
 
 mod suite_protocol;
 use suite_protocol::{
-    PULSE_APP_ID, PULSE_RECORDING_INTAKE_FILE, STUDIO_APP_ID, SUITE_APP_DEFINITIONS,
-    SUITE_DISCOVERY_SCHEMA_VERSION, VAEXCORE_SUITE_APPS, SuiteAppDefinition,
+    SuiteAppDefinition, PULSE_APP_ID, PULSE_RECORDING_INTAKE_FILE, STUDIO_APP_ID,
+    SUITE_APP_DEFINITIONS, SUITE_DISCOVERY_SCHEMA_VERSION, VAEXCORE_SUITE_APPS,
 };
 
 const APP_NAME: &str = "vaexcore pulse";

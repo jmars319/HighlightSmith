@@ -11,8 +11,19 @@ export const healthRoutes: FastifyPluginAsync = async (fastify) => {
       contractVersion: 1,
       mode: "local-first",
       state: "ready",
-      appStorageDir: join(homedir(), "Library", "Application Support", "vaexcore pulse"),
-      suiteDir: join(homedir(), "Library", "Application Support", "vaexcore", "suite"),
+      appStorageDir: join(
+        homedir(),
+        "Library",
+        "Application Support",
+        "vaexcore pulse",
+      ),
+      suiteDir: join(
+        homedir(),
+        "Library",
+        "Application Support",
+        "vaexcore",
+        "suite",
+      ),
       secureStorage: "none-required",
       secretStorageState: "not-applicable",
       durableStorage: [
@@ -26,13 +37,15 @@ export const healthRoutes: FastifyPluginAsync = async (fastify) => {
           name: "pulse-analyzer",
           kind: "local-http-service",
           state: "managed-by-desktop-or-dev",
-          detail: "The API bridge calls the local analyzer service when analysis is requested.",
+          detail:
+            "The API bridge calls the local analyzer service when analysis is requested.",
         },
         {
           name: "ffmpeg",
           kind: "local-binary",
           state: "optional",
-          detail: "Used by local probing, thumbnail, and future offline analysis paths.",
+          detail:
+            "Used by local probing, thumbnail, and future offline analysis paths.",
         },
       ],
     },

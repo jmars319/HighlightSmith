@@ -226,7 +226,9 @@ type ThemeMode = "dark" | "light";
 type SettingsSectionId = "profile-setup" | "appearance" | "window-behavior";
 type PulseRuntimeStatus = "checking" | "starting" | "ready" | "slow";
 
-function isPulseRecordingHandoff(value: unknown): value is PulseRecordingHandoff {
+function isPulseRecordingHandoff(
+  value: unknown,
+): value is PulseRecordingHandoff {
   if (!value || typeof value !== "object") {
     return false;
   }
@@ -2346,7 +2348,9 @@ function DesktopApp() {
     }
 
     try {
-      const results = await invoke<SuiteLaunchResult[]>("launch_vaexcore_suite");
+      const results = await invoke<SuiteLaunchResult[]>(
+        "launch_vaexcore_suite",
+      );
       const failed = results.filter((result) => !result.ok);
 
       setSuiteLaunchStatus(
@@ -2431,7 +2435,9 @@ function DesktopApp() {
                       <span>{app.activityDetail ?? app.detail}</span>
                       <code>{app.healthUrl ?? app.discoveryFile}</code>
                     </div>
-                    <span className={`session-state-pill ${suiteStatusTone(app)}`}>
+                    <span
+                      className={`session-state-pill ${suiteStatusTone(app)}`}
+                    >
                       {suiteStatusLabel(app)}
                     </span>
                     <span className="session-state-pill active-session">
@@ -2460,7 +2466,9 @@ function DesktopApp() {
                       <strong>{item.title}</strong>
                       <span>{item.detail}</span>
                     </div>
-                    <span className={`session-state-pill ${timelineTone(item.kind)}`}>
+                    <span
+                      className={`session-state-pill ${timelineTone(item.kind)}`}
+                    >
                       {item.source}
                     </span>
                     <span className="session-state-pill">
@@ -2638,9 +2646,7 @@ function DesktopApp() {
               <div>
                 <span className="detail-label">Start</span>
                 <h2>Scan a video</h2>
-                <p>
-                  Choose a video, pick a profile, and start a review queue.
-                </p>
+                <p>Choose a video, pick a profile, and start a review queue.</p>
               </div>
               <div className="analysis-header-actions">
                 <button
@@ -2930,9 +2936,7 @@ function DesktopApp() {
               <ol className="plain-list ordered">
                 <li>Pulse scans the video on your Mac.</li>
                 <li>It builds a queue of moments worth checking.</li>
-                <li>
-                  You review each moment and choose what to keep or skip.
-                </li>
+                <li>You review each moment and choose what to keep or skip.</li>
               </ol>
               {projectSession ? (
                 <p>
@@ -3019,7 +3023,10 @@ function DesktopApp() {
               projectSession &&
               selectedCandidate &&
               studioExportedCandidateIds[
-                studioPulseSourceEventId(projectSession.id, selectedCandidate.id)
+                studioPulseSourceEventId(
+                  projectSession.id,
+                  selectedCandidate.id,
+                )
               ],
             )}
             onPreviewDetectedMoment={() =>
@@ -3075,9 +3082,7 @@ function DesktopApp() {
           <article className="utility-block">
             <span className="detail-label">Before you scan</span>
             <p>Choose one local video file.</p>
-            <p>
-              Pick the profile closest to what you want to keep.
-            </p>
+            <p>Pick the profile closest to what you want to keep.</p>
             <p>Give the session a name only if the file name is not enough.</p>
           </article>
           <article className="utility-block">
@@ -3086,9 +3091,7 @@ function DesktopApp() {
               A profile is a small set of examples. It helps Pulse find moments
               that feel like your previous keeps.
             </p>
-            <p>
-              Short clips and finished edits are both useful examples.
-            </p>
+            <p>Short clips and finished edits are both useful examples.</p>
           </article>
         </div>
       );
@@ -3448,7 +3451,9 @@ function SettingsWindowApp() {
                   </li>
                   <li>
                     <strong>Quit vaexcore pulse</strong>
-                    <span>Closes Pulse and stops scans or background work.</span>
+                    <span>
+                      Closes Pulse and stops scans or background work.
+                    </span>
                   </li>
                 </ul>
               </section>
@@ -3545,8 +3550,7 @@ function CompactProfileSetupSettingsSection() {
       : (selectedProfile?.exampleClips ?? []);
   const isClipFilePicker = sourceType === "LOCAL_FILE_UPLOAD";
   const isEditFilePicker = editSourceType === "LOCAL_FILE_UPLOAD";
-  const canPickClipFile =
-    sourceType === "LOCAL_FILE_PATH" || isClipFilePicker;
+  const canPickClipFile = sourceType === "LOCAL_FILE_PATH" || isClipFilePicker;
   const canPickEditFile =
     editSourceType === "LOCAL_FILE_PATH" || isEditFilePicker;
 
@@ -3828,8 +3832,7 @@ function CompactProfileSetupSettingsSection() {
             <span className="detail-label">Clip profiles</span>
             <h2>Profile Setup</h2>
             <p>
-              Create a profile and add examples that show what you like to
-              keep.
+              Create a profile and add examples that show what you like to keep.
             </p>
           </div>
           <span className="queue-count">
@@ -4153,9 +4156,7 @@ function CompactProfileSetupSettingsSection() {
               }}
               type="button"
             >
-              {isAddingEditedVideo
-                ? "Saving edit..."
-                : "Save finished edit"}
+              {isAddingEditedVideo ? "Saving edit..." : "Save finished edit"}
             </button>
           </div>
         </div>
@@ -5062,13 +5063,17 @@ function buildSuiteTimeline(
     }));
 
   return [...persistedItems, ...presenceItems]
-    .sort((left, right) => suiteTimestampMs(right.timestamp) - suiteTimestampMs(left.timestamp))
+    .sort(
+      (left, right) =>
+        suiteTimestampMs(right.timestamp) - suiteTimestampMs(left.timestamp),
+    )
     .slice(0, 18);
 }
 
 function suiteTimelineItemKind(kind: string): SuiteTimelineItem["kind"] {
   if (kind.includes("recording")) return "recording";
-  if (kind.includes("review") || kind.includes("pulse.session")) return "review";
+  if (kind.includes("review") || kind.includes("pulse.session"))
+    return "review";
   if (kind.includes("presence") || kind.includes("session")) return "presence";
   return "event";
 }
@@ -5109,7 +5114,10 @@ function timelineTone(kind: SuiteTimelineItem["kind"]): string {
   return "pending";
 }
 
-function studioPulseSourceEventId(sessionId: string, candidateId: string): string {
+function studioPulseSourceEventId(
+  sessionId: string,
+  candidateId: string,
+): string {
   return `vaexcore-pulse:session:${sessionId}:candidate:${candidateId}:accepted`;
 }
 

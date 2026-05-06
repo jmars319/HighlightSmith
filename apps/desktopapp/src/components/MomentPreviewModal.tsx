@@ -427,8 +427,8 @@ export function MomentPreviewModal({
             <div className="moment-preview-placeholder">
               <strong>Preview unavailable</strong>
               <p>
-                Pulse could not prepare a preview for this moment. Use
-                QuickTime to play the source video.
+                Pulse could not prepare a preview for this moment. Use QuickTime
+                to play the source video.
               </p>
             </div>
           )}
@@ -562,7 +562,9 @@ function formatFileSize(bytes: number): string {
 function buildPreparedPreviewSummary(preview: PreparedMediaPreview): string {
   const parts = [
     `Ready (${preview.durationSeconds.toFixed(1)}s)`,
-    typeof preview.fileSizeBytes === "number" ? formatFileSize(preview.fileSizeBytes) : null,
+    typeof preview.fileSizeBytes === "number"
+      ? formatFileSize(preview.fileSizeBytes)
+      : null,
   ].filter(Boolean);
 
   return parts.join(" • ");

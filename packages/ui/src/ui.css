@@ -31,7 +31,11 @@
   inset: 0 0 auto;
   height: 3px;
   content: "";
-  background: linear-gradient(90deg, var(--vxc-cyan, #39d9ff), var(--vxc-magenta, #ff3bf4));
+  background: linear-gradient(
+    90deg,
+    var(--vxc-cyan, #39d9ff),
+    var(--vxc-magenta, #ff3bf4)
+  );
 }
 
 .vcp-brand {

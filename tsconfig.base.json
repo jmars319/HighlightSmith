@@ -13,9 +13,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
-      "@vaexcore/pulse-shared-types": [
-        "./packages/shared-types/src/index.ts"
-      ],
+      "@vaexcore/pulse-shared-types": ["./packages/shared-types/src/index.ts"],
       "@vaexcore/pulse-domain": ["./packages/domain/src/index.ts"],
       "@vaexcore/pulse-ui": ["./packages/ui/src/index.ts"],
       "@vaexcore/pulse-storage": ["./packages/storage/src/index.ts"],

@@ -315,8 +315,9 @@ export function CandidateDetail({
             {profileMatchingSummary.usableLocalExampleCount} saved example
             {profileMatchingSummary.usableLocalExampleCount === 1
               ? ""
-              : "s"} ready • {profileMatchingSummary.referenceOnlyExampleCount}{" "}
-            link-only example
+              : "s"}{" "}
+            ready • {profileMatchingSummary.referenceOnlyExampleCount} link-only
+            example
             {profileMatchingSummary.referenceOnlyExampleCount === 1 ? "" : "s"}
           </p>
           {profileMatch.similarityScore !== undefined ? (

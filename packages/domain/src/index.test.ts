@@ -367,7 +367,10 @@ describe("domain helpers", () => {
       lowSignalDescription.summary,
       "Low confidence: low activity, unclear payoff",
     );
-    assert.equal(lowSignalDescription.detail, "Not enough signs to be confident.");
+    assert.equal(
+      lowSignalDescription.detail,
+      "Not enough signs to be confident.",
+    );
     assert.equal(
       describeReasonCodePlainly("STRUCTURE_RESOLUTION"),
       "event appears to resolve",

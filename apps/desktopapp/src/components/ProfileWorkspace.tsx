@@ -562,9 +562,7 @@ export function ProfileWorkspace({
                   <strong>
                     {selectedProfileUsableReferenceCount} ready examples
                   </strong>
-                  <p>
-                    Use clips or finished edits to improve future scans.
-                  </p>
+                  <p>Use clips or finished edits to improve future scans.</p>
                 </article>
                 <article className="analysis-summary-card">
                   <span className="detail-label">Last updated</span>
@@ -605,8 +603,8 @@ export function ProfileWorkspace({
                 more of.
               </li>
               <li>
-                Add one finished edit to show Pulse what usually makes the
-                final cut.
+                Add one finished edit to show Pulse what usually makes the final
+                cut.
               </li>
               <li>
                 Use the media library later only if you need to save more files.
@@ -626,9 +624,7 @@ export function ProfileWorkspace({
               <div>
                 <span className="detail-label">Add reusable clip</span>
                 <h2>Add reusable clips</h2>
-                <p>
-                  Use short clips that feel like moments you would keep.
-                </p>
+                <p>Use short clips that feel like moments you would keep.</p>
               </div>
             </div>
 
@@ -1020,9 +1016,7 @@ export function ProfileWorkspace({
                         key={item.job.id}
                       >
                         <div className="profile-example-top">
-                          <span className="detail-label">
-                            Video comparison
-                          </span>
+                          <span className="detail-label">Video comparison</span>
                           <span className="session-state-pill active-session">
                             {formatAlignmentJobStatus(item.job.status)}
                           </span>
@@ -1283,9 +1277,7 @@ export function ProfileWorkspace({
                       }}
                       type="button"
                     >
-                      {isCreatingMediaAsset
-                        ? "Saving media..."
-                        : "Save media"}
+                      {isCreatingMediaAsset ? "Saving media..." : "Save media"}
                     </button>
                   </div>
                 </div>
@@ -1303,9 +1295,7 @@ export function ProfileWorkspace({
                 </div>
 
                 {libraryAssets.length === 0 ? (
-                  <p className="queue-summary-copy">
-                    No saved media yet.
-                  </p>
+                  <p className="queue-summary-copy">No saved media yet.</p>
                 ) : null}
 
                 <div className="profile-example-list">
@@ -1530,8 +1520,8 @@ export function ProfileWorkspace({
                                             )}
                                           </strong>
                                           <span>
-                                            Saved pick {output.position + 1} • score{" "}
-                                            {formatRatio(output.score)}
+                                            Saved pick {output.position + 1} •
+                                            score {formatRatio(output.score)}
                                           </span>
                                           <button
                                             className="button-secondary thumbnail-suggestion-action"
@@ -1888,12 +1878,9 @@ export function ProfileWorkspace({
                             {formatPairStatus(pair.status)}
                           </span>
                         </div>
-                        <strong>
-                          {pair.title || "Untitled comparison"}
-                        </strong>
+                        <strong>{pair.title || "Untitled comparison"}</strong>
                         <p className="queue-summary-copy">
-                          Full video {pair.vodAssetId} • edit{" "}
-                          {pair.editAssetId}
+                          Full video {pair.vodAssetId} • edit {pair.editAssetId}
                         </p>
                         {pair.note ? <p>{pair.note}</p> : null}
                         <p className="queue-summary-copy">

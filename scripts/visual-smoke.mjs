@@ -12,17 +12,21 @@ const targets = [
   ["review-workspace", "/?page=candidate-review"],
   ["backlog", "/?page=projects"],
   ["suite", "/?page=suite"],
-  ["settings", "/?window=settings"]
+  ["settings", "/?window=settings"],
 ];
 
 const chrome = findChrome();
 mkdirSync(outputDir, { recursive: true });
 
-const server = spawn("pnpm", ["--filter", "@vaexcore/pulse-desktopapp", "dev:web"], {
-  cwd: root,
-  detached: true,
-  stdio: "ignore"
-});
+const server = spawn(
+  "pnpm",
+  ["--filter", "@vaexcore/pulse-desktopapp", "dev:web"],
+  {
+    cwd: root,
+    detached: true,
+    stdio: "ignore",
+  },
+);
 
 try {
   await waitFor(baseUrl);
@@ -40,11 +44,13 @@ function findChrome() {
   const candidates = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
   ];
   const found = candidates.find((candidate) => existsSync(candidate));
   if (!found) {
-    throw new Error("Visual smoke requires Google Chrome, Chromium, or Microsoft Edge in /Applications.");
+    throw new Error(
+      "Visual smoke requires Google Chrome, Chromium, or Microsoft Edge in /Applications.",
+    );
   }
   return found;
 }
@@ -65,19 +71,23 @@ async function waitFor(url) {
 async function capture(url, screenshot) {
   const userDataDir = join(tmpdir(), `vaexcore-pulse-smoke-${Date.now()}`);
   if (existsSync(screenshot)) unlinkSync(screenshot);
-  const child = spawn(chrome, [
-    "--headless=new",
-    "--disable-gpu",
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--hide-scrollbars",
-    "--run-all-compositor-stages-before-draw",
-    "--virtual-time-budget=2000",
-    "--window-size=1440,1000",
-    `--user-data-dir=${userDataDir}`,
-    `--screenshot=${screenshot}`,
-    url
-  ], { cwd: root, detached: true, stdio: "ignore" });
+  const child = spawn(
+    chrome,
+    [
+      "--headless=new",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--hide-scrollbars",
+      "--run-all-compositor-stages-before-draw",
+      "--virtual-time-budget=2000",
+      "--window-size=1440,1000",
+      `--user-data-dir=${userDataDir}`,
+      `--screenshot=${screenshot}`,
+      url,
+    ],
+    { cwd: root, detached: true, stdio: "ignore" },
+  );
 
   try {
     await Promise.race([
@@ -87,7 +97,7 @@ async function capture(url, screenshot) {
           throw new Error(`${chrome} exited with ${code}`);
         }
         return waitForScreenshot(screenshot, 1_000);
-      })
+      }),
     ]);
   } finally {
     stop(child);

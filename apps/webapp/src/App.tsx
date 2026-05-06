@@ -97,9 +97,7 @@ export default function App() {
         startTransition(() => {
           setProfiles([]);
           setProfileError(
-            error instanceof Error
-              ? error.message
-              : "Unable to load profiles",
+            error instanceof Error ? error.message : "Unable to load profiles",
           );
         });
       } finally {
@@ -153,9 +151,7 @@ export default function App() {
 
         startTransition(() => {
           setSummaryError(
-            error instanceof Error
-              ? error.message
-              : "Unable to load sessions",
+            error instanceof Error ? error.message : "Unable to load sessions",
           );
           setSessionSummaries([]);
         });
@@ -366,9 +362,7 @@ export default function App() {
           </article>
           <article className="web-panel">
             <span className="web-label">Profiles</span>
-            <p>
-              Review and setup still happen in the desktop app.
-            </p>
+            <p>Review and setup still happen in the desktop app.</p>
             <p>Saved profiles appear here when they are available.</p>
           </article>
         </section>

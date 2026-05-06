@@ -293,7 +293,9 @@ export default function App() {
             style={styles.logo}
           />
           <Text style={styles.kicker}>vaexcore pulse companion</Text>
-          <Text style={styles.title}>Review your queue away from the desk.</Text>
+          <Text style={styles.title}>
+            Review your queue away from the desk.
+          </Text>
           <Text style={styles.subtitle}>
             Keep an eye on projects, review status, and accepted clips. Use the
             desktop app when you are ready to scan or edit.

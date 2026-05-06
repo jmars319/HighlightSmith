@@ -140,7 +140,7 @@ export function describeCandidatePlainly(
     detail = "Needs surrounding context to confirm the outcome.";
   } else if (
     (candidate.confidenceBand === "LOW" ||
-    candidate.confidenceBand === "EXPERIMENTAL") &&
+      candidate.confidenceBand === "EXPERIMENTAL") &&
     topSignalPhrases.length > 0
   ) {
     detail = `Only a few signs showed up: ${joinReadableList(topSignalPhrases.slice(0, 2))}.`;
