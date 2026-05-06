@@ -28,6 +28,7 @@ const API_PORT: u16 = 4010;
 const VAEXCORE_SUITE_APPS: &[&str] = &["vaexcore studio", "vaexcore pulse", "vaexcore console"];
 const SUITE_DISCOVERY_SCHEMA_VERSION: u8 = 1;
 const SUITE_DISCOVERY_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
+const PULSE_HANDOFF_STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Default)]
 struct ManagedLocalServices {
@@ -489,6 +490,11 @@ fn consume_pulse_recording_handoff() -> Option<PulseRecordingHandoffDocument> {
     let path = suite_handoff_dir().join("pulse-recording-intake.json");
     let contents = fs::read(&path).ok()?;
     let handoff = serde_json::from_slice::<PulseRecordingHandoffDocument>(&contents).ok()?;
+    if let Err(error) = validate_pulse_recording_handoff(&handoff, &path) {
+        eprintln!("Ignoring invalid vaexcore pulse recording handoff: {error}");
+        let _ = fs::remove_file(path);
+        return None;
+    }
     let _ = fs::remove_file(path);
     if let Err(error) = append_suite_timeline_event(
         "recording.handoff",
@@ -506,6 +512,76 @@ fn consume_pulse_recording_handoff() -> Option<PulseRecordingHandoffDocument> {
         eprintln!("Unable to append vaexcore pulse suite timeline event: {error}");
     }
     Some(handoff)
+}
+
+fn validate_pulse_recording_handoff(
+    handoff: &PulseRecordingHandoffDocument,
+    path: &Path,
+) -> Result<(), String> {
+    if handoff.schema_version != SUITE_DISCOVERY_SCHEMA_VERSION {
+        return Err(format!(
+            "expected schema version {}, got {}",
+            SUITE_DISCOVERY_SCHEMA_VERSION, handoff.schema_version
+        ));
+    }
+    if handoff.source_app != "vaexcore-studio" {
+        return Err(format!("unexpected source app {}", handoff.source_app));
+    }
+    if handoff.target_app != "vaexcore-pulse" {
+        return Err(format!("unexpected target app {}", handoff.target_app));
+    }
+    if handoff.request_id.trim().is_empty() {
+        return Err("requestId is required".to_string());
+    }
+    if !looks_like_rfc3339_timestamp(&handoff.requested_at) {
+        return Err("requestedAt must be an RFC3339-like timestamp".to_string());
+    }
+    if handoff.recording.session_id.trim().is_empty() {
+        return Err("recording.sessionId is required".to_string());
+    }
+    if handoff.recording.output_path.trim().is_empty() {
+        return Err("recording.outputPath is required".to_string());
+    }
+    if !looks_like_rfc3339_timestamp(&handoff.recording.stopped_at) {
+        return Err("recording.stoppedAt must be an RFC3339-like timestamp".to_string());
+    }
+    if let Ok(modified) = fs::metadata(path).and_then(|metadata| metadata.modified()) {
+        if let Ok(age) = SystemTime::now().duration_since(modified) {
+            if age > PULSE_HANDOFF_STALE_AFTER {
+                return Err(format!("handoff file is stale: {}s old", age.as_secs()));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn looks_like_rfc3339_timestamp(value: &str) -> bool {
+    let trimmed = value.trim();
+    let Some((date, time)) = trimmed.split_once('T') else {
+        return false;
+    };
+    let date_bytes = date.as_bytes();
+    let time_bytes = time.as_bytes();
+    if date_bytes.len() != 10
+        || date_bytes[4] != b'-'
+        || date_bytes[7] != b'-'
+        || !date_bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
+    {
+        return false;
+    }
+    if time_bytes.len() < 9
+        || time_bytes[2] != b':'
+        || time_bytes[5] != b':'
+        || ![0, 1, 3, 4, 6, 7]
+            .iter()
+            .all(|index| time_bytes[*index].is_ascii_digit())
+    {
+        return false;
+    }
+    time.ends_with('Z') || time[8..].contains('+') || time[8..].contains('-')
 }
 
 #[tauri::command]
