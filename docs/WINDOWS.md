@@ -21,6 +21,12 @@ pnpm install
 pnpm app:build:windows
 ```
 
+The suite-level build kit can also call:
+
+```sh
+pnpm app:dist:windows
+```
+
 ## Local Paths
 
 - Suite discovery: `%APPDATA%\vaexcore\suite`
