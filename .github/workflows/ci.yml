@@ -21,9 +21,13 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
-      - run: pnpm --filter @vaexcore/pulse-desktopapp typecheck
+      - run: pnpm build:service-bundle
+      - run: pnpm run typecheck
+      - run: pnpm test
       - run: pnpm run smoke:studio
       - run: cargo fmt --all -- --check
+        working-directory: apps/desktopapp/src-tauri
+      - run: cargo clippy --all-targets -- -D warnings
         working-directory: apps/desktopapp/src-tauri
       - run: cargo test
         working-directory: apps/desktopapp/src-tauri

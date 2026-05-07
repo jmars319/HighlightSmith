@@ -17,6 +17,7 @@ coverage
 .envrc
 
 apps/desktopapp/dist
+apps/desktopapp/src-tauri/resources
 apps/desktopapp/src-tauri/target
 apps/desktopapp/src-tauri/gen
 apps/webapp/dist

@@ -46,6 +46,27 @@ struct SpawnedLocalService {
     log_path: PathBuf,
 }
 
+#[derive(Debug)]
+struct PulseHelperPaths {
+    analyzer_source_dir: PathBuf,
+    api_working_dir: PathBuf,
+    api_launch: ApiBridgeLaunch,
+    source: PulseHelperSource,
+}
+
+#[derive(Debug)]
+enum ApiBridgeLaunch {
+    BundledScript { script: PathBuf },
+    TsxSource { cli: PathBuf, script: PathBuf },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PulseHelperSource {
+    EnvRepo,
+    PackagedResources,
+    DevRepo,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SuiteLaunchResult {
@@ -493,9 +514,9 @@ fn consume_pulse_recording_handoff_file(
     path: &Path,
     append_timeline: bool,
 ) -> Option<PulseRecordingHandoffDocument> {
-    let contents = fs::read(&path).ok()?;
+    let contents = fs::read(path).ok()?;
     let handoff = serde_json::from_slice::<PulseRecordingHandoffDocument>(&contents).ok()?;
-    if let Err(error) = validate_pulse_recording_handoff(&handoff, &path) {
+    if let Err(error) = validate_pulse_recording_handoff(&handoff, path) {
         eprintln!("Ignoring invalid vaexcore pulse recording handoff: {error}");
         let _ = fs::remove_file(path);
         return None;
@@ -610,7 +631,7 @@ fn consume_suite_commands_from_dir(
     directory: &Path,
     append_timeline: bool,
 ) -> Vec<SuiteCommandDocument> {
-    let Ok(entries) = fs::read_dir(&directory) else {
+    let Ok(entries) = fs::read_dir(directory) else {
         return Vec::new();
     };
 
@@ -860,7 +881,12 @@ fn pulse_suite_local_runtime(app_data_dir: Option<&Path>) -> SuiteLocalRuntime {
             SuiteLocalRuntimeDependency {
                 name: "pulse-analyzer".to_string(),
                 kind: "local-http-service".to_string(),
-                state: if analyzer_ready { "reachable" } else { "missing" }.to_string(),
+                state: if analyzer_ready {
+                    "reachable"
+                } else {
+                    "missing"
+                }
+                .to_string(),
                 detail: format!("Expected analyzer on 127.0.0.1:{ANALYZER_PORT}."),
             },
             SuiteLocalRuntimeDependency {
@@ -878,9 +904,8 @@ fn pulse_suite_local_runtime(app_data_dir: Option<&Path>) -> SuiteLocalRuntime {
             SuiteLocalRuntimeDependency {
                 name: "packaged-service-bundle".to_string(),
                 kind: "packaging".to_string(),
-                state: "degraded".to_string(),
-                detail: "Installed Pulse still starts analyzer/API helpers from the local repo; bundle these helpers next."
-                    .to_string(),
+                state: helper_service_bundle_state().to_string(),
+                detail: helper_service_bundle_detail(),
             },
         ],
     }
@@ -1139,14 +1164,14 @@ fn app_data_dir_for(app_dir_name: &str) -> PathBuf {
 fn desktop_app_is_installed(app_name: &str) -> bool {
     #[cfg(target_os = "macos")]
     {
-        return Path::new("/Applications")
+        Path::new("/Applications")
             .join(format!("{app_name}.app"))
-            .exists();
+            .exists()
     }
 
     #[cfg(target_os = "windows")]
     {
-        return windows_app_executable_path(app_name).is_some();
+        windows_app_executable_path(app_name).is_some()
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -1361,10 +1386,10 @@ fn normalize_settings_section(section: Option<&str>) -> Option<&'static str> {
 }
 
 fn ensure_local_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
-    let repo_root = resolve_repo_root()?;
+    let helper_paths = resolve_pulse_helper_paths(app)?;
 
     if !port_is_open(ANALYZER_PORT) {
-        let mut analyzer = spawn_analyzer(&repo_root)?;
+        let mut analyzer = spawn_analyzer(&helper_paths)?;
         wait_for_port_or_child_exit(
             "Analyzer",
             ANALYZER_PORT,
@@ -1379,7 +1404,7 @@ fn ensure_local_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), St
     }
 
     if !port_is_open(API_PORT) {
-        let mut api = spawn_api_bridge(&repo_root)?;
+        let mut api = spawn_api_bridge(&helper_paths)?;
         wait_for_port_or_child_exit(
             "API bridge",
             API_PORT,
@@ -1425,7 +1450,7 @@ fn stop_local_services<R: Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
-fn spawn_analyzer(repo_root: &Path) -> Result<SpawnedLocalService, String> {
+fn spawn_analyzer(helper_paths: &PulseHelperPaths) -> Result<SpawnedLocalService, String> {
     let python = if cfg!(target_os = "windows") {
         find_executable("python", &[])
             .or_else(|| find_executable("python3", &[]))
@@ -1441,14 +1466,18 @@ fn spawn_analyzer(repo_root: &Path) -> Result<SpawnedLocalService, String> {
         )
     }
     .ok_or_else(|| "python3 is required to start the local analyzer.".to_string())?;
-    let python_path = repo_root.join("services/analyzer/src");
+    let analyzer_source_dir = &helper_paths.analyzer_source_dir;
+    let analyzer_working_dir = analyzer_source_dir
+        .parent()
+        .unwrap_or(analyzer_source_dir.as_path());
     let (log_path, stdout, stderr) = service_stdio("analyzer")?;
 
     let mut command = Command::new(&python);
     command
-        .current_dir(repo_root)
-        .env("PYTHONPATH", python_path)
-        .env("PATH", command_path());
+        .current_dir(analyzer_working_dir)
+        .env("PYTHONPATH", analyzer_source_dir)
+        .env("PATH", command_path())
+        .env("VAEXCORE_PULSE_HELPER_SOURCE", helper_paths.source.label());
     if cfg!(target_os = "windows")
         && python
             .file_stem()
@@ -1469,7 +1498,7 @@ fn spawn_analyzer(repo_root: &Path) -> Result<SpawnedLocalService, String> {
     Ok(SpawnedLocalService { child, log_path })
 }
 
-fn spawn_api_bridge(repo_root: &Path) -> Result<SpawnedLocalService, String> {
+fn spawn_api_bridge(helper_paths: &PulseHelperPaths) -> Result<SpawnedLocalService, String> {
     let node = find_executable(
         "node",
         &[
@@ -1482,27 +1511,27 @@ fn spawn_api_bridge(repo_root: &Path) -> Result<SpawnedLocalService, String> {
         ],
     )
     .ok_or_else(|| "node is required to start the local API bridge.".to_string())?;
-    let api_dir = repo_root.join("services/api");
-    let tsx_cli = api_dir.join("node_modules/tsx/dist/cli.mjs");
-
-    if !tsx_cli.exists() {
-        return Err(format!(
-            "Pulse API bridge dependencies are missing at {}. Run pnpm install in the Pulse repo.",
-            tsx_cli.display()
-        ));
-    }
-
     let (log_path, stdout, stderr) = service_stdio("api-bridge")?;
 
-    let child = Command::new(node)
-        .current_dir(api_dir)
+    let mut command = Command::new(node);
+    command
+        .current_dir(&helper_paths.api_working_dir)
         .env("PATH", command_path())
+        .env("VAEXCORE_PULSE_HELPER_SOURCE", helper_paths.source.label())
         .env(
             "VAEXCORE_PULSE_ANALYZER_URL",
             format!("http://127.0.0.1:{ANALYZER_PORT}"),
-        )
-        .arg(tsx_cli)
-        .arg("src/server.ts")
+        );
+    match &helper_paths.api_launch {
+        ApiBridgeLaunch::BundledScript { script } => {
+            command.arg(script);
+        }
+        ApiBridgeLaunch::TsxSource { cli, script } => {
+            command.arg(cli).arg(script);
+        }
+    }
+
+    let child = command
         .stdin(Stdio::null())
         .stdout(stdout)
         .stderr(stderr)
@@ -1512,29 +1541,203 @@ fn spawn_api_bridge(repo_root: &Path) -> Result<SpawnedLocalService, String> {
     Ok(SpawnedLocalService { child, log_path })
 }
 
-fn resolve_repo_root() -> Result<PathBuf, String> {
-    if let Ok(configured_root) = env::var("VAEXCORE_PULSE_REPO_ROOT") {
-        let path = PathBuf::from(configured_root);
-        if path.join("services/api/package.json").exists() {
-            return Ok(path);
+fn resolve_pulse_helper_paths<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<PulseHelperPaths, String> {
+    let configured_repo = env::var("VAEXCORE_PULSE_REPO_ROOT").ok().map(PathBuf::from);
+    let resource_dir = app.path().resource_dir().ok();
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    resolve_pulse_helper_paths_from_candidates(
+        configured_repo.as_deref(),
+        resource_dir.as_deref(),
+        &manifest_dir,
+        repo_helper_fallback_allowed(),
+    )
+}
+
+fn resolve_pulse_helper_paths_from_candidates(
+    configured_repo: Option<&Path>,
+    resource_dir: Option<&Path>,
+    manifest_dir: &Path,
+    allow_repo_fallback: bool,
+) -> Result<PulseHelperPaths, String> {
+    if let Some(configured_repo) = configured_repo {
+        return repo_helper_paths(configured_repo, PulseHelperSource::EnvRepo);
+    }
+
+    if let Some(resource_dir) = resource_dir {
+        if let Some(paths) = packaged_helper_paths(resource_dir) {
+            return Ok(paths);
         }
     }
 
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = manifest_dir
+    if allow_repo_fallback {
+        let repo_root = repo_root_from_manifest_dir(manifest_dir)?;
+        return repo_helper_paths(&repo_root, PulseHelperSource::DevRepo);
+    }
+
+    Err("Pulse packaged helper resources are missing; rebuild the app so pulse-api and pulse-analyzer are bundled.".to_string())
+}
+
+fn packaged_helper_paths(resource_dir: &Path) -> Option<PulseHelperPaths> {
+    let analyzer_source_dir = resource_dir.join("pulse-analyzer/src");
+    let api_script = resource_dir.join("pulse-api/server.mjs");
+    if analyzer_source_dir
+        .join("vaexcore_pulse_analyzer/server.py")
+        .exists()
+        && api_script.exists()
+    {
+        return Some(PulseHelperPaths {
+            analyzer_source_dir,
+            api_working_dir: api_script.parent().unwrap_or(resource_dir).to_path_buf(),
+            api_launch: ApiBridgeLaunch::BundledScript { script: api_script },
+            source: PulseHelperSource::PackagedResources,
+        });
+    }
+
+    None
+}
+
+fn repo_helper_paths(
+    repo_root: &Path,
+    source: PulseHelperSource,
+) -> Result<PulseHelperPaths, String> {
+    let api_dir = repo_root.join("services/api");
+    let api_script = api_dir.join("src/server.ts");
+    let tsx_cli = api_dir.join("node_modules/tsx/dist/cli.mjs");
+    let analyzer_source_dir = repo_root.join("services/analyzer/src");
+
+    if !api_script.exists() {
+        return Err(format!(
+            "Pulse API bridge source is missing at {}.",
+            api_script.display()
+        ));
+    }
+    if !tsx_cli.exists() {
+        return Err(format!(
+            "Pulse API bridge dependencies are missing at {}. Run pnpm install in the Pulse repo.",
+            tsx_cli.display()
+        ));
+    }
+    if !analyzer_source_dir
+        .join("vaexcore_pulse_analyzer/server.py")
+        .exists()
+    {
+        return Err(format!(
+            "Pulse analyzer source is missing at {}.",
+            analyzer_source_dir.display()
+        ));
+    }
+
+    Ok(PulseHelperPaths {
+        analyzer_source_dir,
+        api_working_dir: api_dir,
+        api_launch: ApiBridgeLaunch::TsxSource {
+            cli: tsx_cli,
+            script: api_script,
+        },
+        source,
+    })
+}
+
+fn repo_root_from_manifest_dir(manifest_dir: &Path) -> Result<PathBuf, String> {
+    manifest_dir
         .parent()
         .and_then(Path::parent)
         .and_then(Path::parent)
-        .ok_or_else(|| "Unable to locate the vaexcore pulse repository.".to_string())?
-        .to_path_buf();
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "Unable to locate the vaexcore pulse repository.".to_string())
+}
 
-    if repo_root.join("services/api/package.json").exists()
-        && repo_root.join("services/analyzer/src").exists()
-    {
-        return Ok(repo_root);
+fn repo_helper_fallback_allowed() -> bool {
+    cfg!(debug_assertions) || env_flag("VAEXCORE_PULSE_ALLOW_REPO_HELPERS")
+}
+
+fn env_flag(name: &str) -> bool {
+    env::var(name)
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn helper_service_bundle_state() -> &'static str {
+    match helper_service_source_for_status() {
+        Some(PulseHelperSource::PackagedResources) => "available",
+        Some(PulseHelperSource::EnvRepo) => "repo-override",
+        Some(PulseHelperSource::DevRepo) => "dev-fallback",
+        None => "missing",
+    }
+}
+
+fn helper_service_bundle_detail() -> String {
+    match helper_service_source_for_status() {
+        Some(PulseHelperSource::PackagedResources) => {
+            "Pulse will start analyzer/API helpers from bundled app resources.".to_string()
+        }
+        Some(PulseHelperSource::EnvRepo) => {
+            "Pulse will start analyzer/API helpers from VAEXCORE_PULSE_REPO_ROOT.".to_string()
+        }
+        Some(PulseHelperSource::DevRepo) => {
+            "Pulse will start analyzer/API helpers from the local repo only in development fallback mode.".to_string()
+        }
+        None => "Pulse could not find bundled helper resources or an allowed development helper fallback.".to_string(),
+    }
+}
+
+fn helper_service_source_for_status() -> Option<PulseHelperSource> {
+    if let Ok(configured_repo) = env::var("VAEXCORE_PULSE_REPO_ROOT") {
+        return repo_helper_paths(Path::new(&configured_repo), PulseHelperSource::EnvRepo)
+            .ok()
+            .map(|paths| paths.source);
     }
 
-    Err("Pulse could not find the helper files it needs to start.".to_string())
+    for resource_dir in candidate_resource_dirs_from_current_exe() {
+        if let Some(paths) = packaged_helper_paths(&resource_dir) {
+            return Some(paths.source);
+        }
+    }
+
+    if repo_helper_fallback_allowed() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        if let Ok(repo_root) = repo_root_from_manifest_dir(&manifest_dir) {
+            return repo_helper_paths(&repo_root, PulseHelperSource::DevRepo)
+                .ok()
+                .map(|paths| paths.source);
+        }
+    }
+
+    None
+}
+
+fn candidate_resource_dirs_from_current_exe() -> Vec<PathBuf> {
+    let Ok(executable) = env::current_exe() else {
+        return Vec::new();
+    };
+    let Some(executable_dir) = executable.parent() else {
+        return Vec::new();
+    };
+
+    let mut candidates = vec![executable_dir.to_path_buf()];
+    if let Some(contents_dir) = executable_dir.parent() {
+        candidates.push(contents_dir.join("Resources"));
+    }
+    candidates
+}
+
+impl PulseHelperSource {
+    fn label(self) -> &'static str {
+        match self {
+            PulseHelperSource::EnvRepo => "env-repo",
+            PulseHelperSource::PackagedResources => "packaged-resources",
+            PulseHelperSource::DevRepo => "dev-repo",
+        }
+    }
 }
 
 fn find_executable(name: &str, fallback_paths: &[&str]) -> Option<PathBuf> {
@@ -2460,6 +2663,74 @@ mod tests {
         let _ = fs::remove_dir_all(directory);
     }
 
+    #[test]
+    fn helper_resolution_prefers_packaged_resources_without_repo_fallback() {
+        let manifest_dir = temp_test_dir("helper-manifest");
+        let resources = temp_test_dir("helper-resources");
+        create_packaged_helpers(&resources);
+
+        let paths = resolve_pulse_helper_paths_from_candidates(
+            None,
+            Some(&resources),
+            &manifest_dir,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(paths.source, PulseHelperSource::PackagedResources);
+        assert!(paths.analyzer_source_dir.ends_with("pulse-analyzer/src"));
+        match paths.api_launch {
+            ApiBridgeLaunch::BundledScript { script } => {
+                assert!(script.ends_with("pulse-api/server.mjs"));
+            }
+            ApiBridgeLaunch::TsxSource { .. } => panic!("expected bundled API script"),
+        }
+
+        let _ = fs::remove_dir_all(manifest_dir);
+        let _ = fs::remove_dir_all(resources);
+    }
+
+    #[test]
+    fn helper_resolution_rejects_packaged_mode_without_resources() {
+        let manifest_dir = temp_test_dir("helper-missing-manifest");
+        let resources = temp_test_dir("helper-missing-resources");
+
+        let error = resolve_pulse_helper_paths_from_candidates(
+            None,
+            Some(&resources),
+            &manifest_dir,
+            false,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("packaged helper resources are missing"));
+        let _ = fs::remove_dir_all(manifest_dir);
+        let _ = fs::remove_dir_all(resources);
+    }
+
+    #[test]
+    fn helper_resolution_allows_explicit_repo_override() {
+        let repo = temp_test_dir("helper-repo");
+        let manifest_dir = temp_test_dir("helper-manifest");
+        create_repo_helpers(&repo);
+
+        let paths =
+            resolve_pulse_helper_paths_from_candidates(Some(&repo), None, &manifest_dir, false)
+                .unwrap();
+
+        assert_eq!(paths.source, PulseHelperSource::EnvRepo);
+        match paths.api_launch {
+            ApiBridgeLaunch::TsxSource { cli, script } => {
+                assert!(cli.ends_with("node_modules/tsx/dist/cli.mjs"));
+                assert!(script.ends_with("services/api/src/server.ts"));
+            }
+            ApiBridgeLaunch::BundledScript { .. } => panic!("expected repo API source"),
+        }
+
+        let _ = fs::remove_dir_all(repo);
+        let _ = fs::remove_dir_all(manifest_dir);
+    }
+
     fn valid_handoff() -> PulseRecordingHandoffDocument {
         PulseRecordingHandoffDocument {
             schema_version: SUITE_DISCOVERY_SCHEMA_VERSION,
@@ -2499,6 +2770,27 @@ mod tests {
         let directory = std::env::temp_dir().join(format!("vaexcore-pulse-{name}-{nanos}"));
         fs::create_dir_all(&directory).unwrap();
         directory
+    }
+
+    fn create_packaged_helpers(resources: &Path) {
+        let analyzer_package = resources.join("pulse-analyzer/src/vaexcore_pulse_analyzer");
+        fs::create_dir_all(&analyzer_package).unwrap();
+        fs::write(analyzer_package.join("server.py"), "").unwrap();
+        let api_dir = resources.join("pulse-api");
+        fs::create_dir_all(&api_dir).unwrap();
+        fs::write(api_dir.join("server.mjs"), "").unwrap();
+    }
+
+    fn create_repo_helpers(repo: &Path) {
+        let analyzer_package = repo.join("services/analyzer/src/vaexcore_pulse_analyzer");
+        fs::create_dir_all(&analyzer_package).unwrap();
+        fs::write(analyzer_package.join("server.py"), "").unwrap();
+        let api_dir = repo.join("services/api");
+        fs::create_dir_all(api_dir.join("src")).unwrap();
+        fs::write(api_dir.join("src/server.ts"), "").unwrap();
+        let tsx_dir = api_dir.join("node_modules/tsx/dist");
+        fs::create_dir_all(&tsx_dir).unwrap();
+        fs::write(tsx_dir.join("cli.mjs"), "").unwrap();
     }
 
     fn valid_discovery() -> SuiteDiscoveryDocument {
