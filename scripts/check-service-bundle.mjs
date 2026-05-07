@@ -1,6 +1,14 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { spawn } from "node:child_process";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -62,6 +70,10 @@ if (existsSync(apiBundlePath)) {
       );
     }
   }
+  const runtimeError = await smokeApiBundle(apiBundlePath);
+  if (runtimeError) {
+    errors.push(runtimeError);
+  }
 }
 
 if (errors.length > 0) {
@@ -70,3 +82,56 @@ if (errors.length > 0) {
 }
 
 console.log("Pulse service bundle resources are complete.");
+
+async function smokeApiBundle(apiBundlePath) {
+  const homeDir = mkdtempSync(resolve(tmpdir(), "vaexcore-pulse-api-bundle-"));
+  let settled = false;
+  let output = "";
+  const child = spawn(process.execPath, [apiBundlePath], {
+    env: {
+      ...process.env,
+      HOME: homeDir,
+      VAEXCORE_PULSE_API_HOST: "127.0.0.1",
+      VAEXCORE_PULSE_API_PORT: "0",
+      VAEXCORE_PULSE_ANALYZER_URL: "http://127.0.0.1:1",
+      VAEXCORE_PULSE_ANALYZER_TIMEOUT_MS: "50",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const result = await new Promise((resolveSmoke) => {
+    const finish = (message) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolveSmoke(message);
+    };
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      finish(null);
+    }, 1_500);
+
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.on("error", (error) =>
+      finish(`API bundle could not start: ${error.message}`),
+    );
+    child.on("exit", (code, signal) => {
+      if (settled) {
+        return;
+      }
+      finish(
+        `API bundle exited during startup smoke (code ${code}, signal ${signal ?? "none"}): ${output.trim()}`,
+      );
+    });
+  });
+
+  rmSync(homeDir, { recursive: true, force: true });
+  return result;
+}

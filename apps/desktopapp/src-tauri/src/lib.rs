@@ -857,6 +857,8 @@ fn pulse_suite_local_runtime(app_data_dir: Option<&Path>) -> SuiteLocalRuntime {
         contract_version: SUITE_DISCOVERY_SCHEMA_VERSION,
         mode: "local-first".to_string(),
         state: if api_ready && analyzer_ready {
+            "ready".to_string()
+        } else if api_ready || analyzer_ready {
             "degraded".to_string()
         } else {
             "blocked".to_string()
