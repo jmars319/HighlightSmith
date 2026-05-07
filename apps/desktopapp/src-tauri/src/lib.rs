@@ -5,6 +5,8 @@ use std::fs::{self, File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -31,6 +33,10 @@ const MENU_QUIT_APP: &str = "quit-app";
 const MENU_LAUNCH_SUITE: &str = "launch-suite";
 const ANALYZER_PORT: u16 = 9010;
 const API_PORT: u16 = 4010;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+#[cfg(target_os = "windows")]
+const DETACHED_PROCESS: u32 = 0x00000008;
 const SUITE_DISCOVERY_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 const PULSE_HANDOFF_STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 const SUITE_COMMAND_STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
@@ -44,6 +50,13 @@ struct ManagedLocalServices {
 struct SpawnedLocalService {
     child: Child,
     log_path: PathBuf,
+}
+
+fn suppress_windows_console(_command: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        _command.creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS);
+    }
 }
 
 #[derive(Debug)]
@@ -750,7 +763,9 @@ fn launch_desktop_app(app_name: &str) -> SuiteLaunchResult {
     #[cfg(target_os = "windows")]
     {
         if let Some(executable_path) = windows_app_executable_path(app_name) {
-            return match Command::new(&executable_path).spawn() {
+            let mut command = Command::new(&executable_path);
+            suppress_windows_console(&mut command);
+            return match command.spawn() {
                 Ok(_) => SuiteLaunchResult {
                     app_name: app_name.to_string(),
                     ok: true,
@@ -764,10 +779,10 @@ fn launch_desktop_app(app_name: &str) -> SuiteLaunchResult {
             };
         }
 
-        match Command::new("cmd")
-            .args(["/C", "start", "", app_name])
-            .spawn()
-        {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", "", app_name]);
+        suppress_windows_console(&mut command);
+        match command.spawn() {
             Ok(_) => SuiteLaunchResult {
                 app_name: app_name.to_string(),
                 ok: true,
@@ -1293,7 +1308,9 @@ fn process_is_running(pid: u32) -> bool {
     {
         let pid_arg = pid.to_string();
         let filter = format!("PID eq {pid_arg}");
-        return Command::new("tasklist")
+        let mut command = Command::new("tasklist");
+        suppress_windows_console(&mut command);
+        return command
             .args(["/FI", filter.as_str(), "/NH"])
             .output()
             .map(|output| {
@@ -1488,6 +1505,7 @@ fn spawn_analyzer(helper_paths: &PulseHelperPaths) -> Result<SpawnedLocalService
     {
         command.arg("-3");
     }
+    suppress_windows_console(&mut command);
     let child = command
         .arg("-m")
         .arg("vaexcore_pulse_analyzer.server")
@@ -1501,18 +1519,20 @@ fn spawn_analyzer(helper_paths: &PulseHelperPaths) -> Result<SpawnedLocalService
 }
 
 fn spawn_api_bridge(helper_paths: &PulseHelperPaths) -> Result<SpawnedLocalService, String> {
-    let node = find_executable(
-        "node",
-        &[
-            "C:\\Program Files\\nodejs\\node.exe",
-            "/opt/homebrew/opt/node@22/bin/node",
-            "/opt/homebrew/opt/node/bin/node",
-            "/opt/homebrew/bin/node",
-            "/usr/local/bin/node",
-            "/usr/bin/node",
-        ],
-    )
-    .ok_or_else(|| "node is required to start the local API bridge.".to_string())?;
+    let node = normalize_node_executable(
+        find_executable(
+            "node",
+            &[
+                "C:\\Program Files\\nodejs\\node.exe",
+                "/opt/homebrew/opt/node@22/bin/node",
+                "/opt/homebrew/opt/node/bin/node",
+                "/opt/homebrew/bin/node",
+                "/usr/local/bin/node",
+                "/usr/bin/node",
+            ],
+        )
+        .ok_or_else(|| "node is required to start the local API bridge.".to_string())?,
+    );
     let (log_path, stdout, stderr) = service_stdio("api-bridge")?;
 
     let mut command = Command::new(node);
@@ -1526,13 +1546,22 @@ fn spawn_api_bridge(helper_paths: &PulseHelperPaths) -> Result<SpawnedLocalServi
         );
     match &helper_paths.api_launch {
         ApiBridgeLaunch::BundledScript { script } => {
-            command.arg(script);
+            command.arg(command_arg_relative_to(
+                script,
+                &helper_paths.api_working_dir,
+            ));
         }
         ApiBridgeLaunch::TsxSource { cli, script } => {
-            command.arg(cli).arg(script);
+            command
+                .arg(command_arg_relative_to(cli, &helper_paths.api_working_dir))
+                .arg(command_arg_relative_to(
+                    script,
+                    &helper_paths.api_working_dir,
+                ));
         }
     }
 
+    suppress_windows_console(&mut command);
     let child = command
         .stdin(Stdio::null())
         .stdout(stdout)
@@ -1541,6 +1570,36 @@ fn spawn_api_bridge(helper_paths: &PulseHelperPaths) -> Result<SpawnedLocalServi
         .map_err(|error| format!("Failed to start the local API bridge: {error}"))?;
 
     Ok(SpawnedLocalService { child, log_path })
+}
+
+fn command_arg_relative_to(path: &Path, working_dir: &Path) -> PathBuf {
+    path.strip_prefix(working_dir)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|_| path.to_path_buf())
+}
+
+#[cfg(target_os = "windows")]
+fn normalize_node_executable(node: PathBuf) -> PathBuf {
+    if !node.to_string_lossy().contains(' ') {
+        return node;
+    }
+
+    for candidate in [
+        "C:\\Progra~1\\nodejs\\node.exe",
+        "C:\\Progra~2\\nodejs\\node.exe",
+    ] {
+        let path = PathBuf::from(candidate);
+        if path.exists() {
+            return path;
+        }
+    }
+
+    node
+}
+
+#[cfg(not(target_os = "windows"))]
+fn normalize_node_executable(node: PathBuf) -> PathBuf {
+    node
 }
 
 fn resolve_pulse_helper_paths<R: Runtime>(
@@ -1755,9 +1814,13 @@ fn find_executable(name: &str, fallback_paths: &[&str]) -> Option<PathBuf> {
         }
     }
 
-    fallback_paths
-        .iter()
-        .map(PathBuf::from)
+    let mut fallback_candidates = fallback_paths.iter().map(PathBuf::from).collect::<Vec<_>>();
+    if cfg!(target_os = "windows") && is_ffmpeg_tool(name) {
+        fallback_candidates.extend(windows_ffmpeg_tool_candidates(name));
+    }
+
+    fallback_candidates
+        .into_iter()
         .find(|candidate| candidate.exists())
 }
 
@@ -1769,10 +1832,76 @@ fn executable_names(name: &str) -> Vec<String> {
     }
 }
 
+fn is_ffmpeg_tool(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().trim_end_matches(".exe"),
+        "ffmpeg" | "ffprobe"
+    )
+}
+
+fn windows_ffmpeg_tool_candidates(name: &str) -> Vec<PathBuf> {
+    let names = executable_names(name);
+    let mut candidates = Vec::new();
+    for directory in windows_ffmpeg_tool_directories() {
+        for executable_name in &names {
+            candidates.push(directory.join(executable_name));
+        }
+    }
+    candidates
+}
+
+fn windows_ffmpeg_tool_directories() -> Vec<PathBuf> {
+    let mut directories = vec![
+        PathBuf::from("C:\\ffmpeg\\bin"),
+        PathBuf::from("C:\\Program Files\\ffmpeg\\bin"),
+        PathBuf::from("C:\\ProgramData\\chocolatey\\bin"),
+    ];
+
+    if let Some(user_profile) = env::var_os("USERPROFILE") {
+        directories.push(PathBuf::from(user_profile).join("scoop\\shims"));
+    }
+
+    if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+        let winget_root = PathBuf::from(local_app_data).join("Microsoft\\WinGet");
+        directories.push(winget_root.join("Links"));
+        let packages_root = winget_root.join("Packages");
+        let Ok(packages) = fs::read_dir(packages_root) else {
+            return directories;
+        };
+
+        for package in packages.flatten() {
+            let package_name = package.file_name().to_string_lossy().to_string();
+            if !package_name.starts_with("Gyan.FFmpeg_") {
+                continue;
+            }
+
+            let Ok(package_children) = fs::read_dir(package.path()) else {
+                continue;
+            };
+            for package_child in package_children.flatten() {
+                directories.push(package_child.path().join("bin"));
+            }
+        }
+    }
+
+    directories
+}
+
 fn command_path() -> String {
     let current_path = env::var("PATH").unwrap_or_default();
     if cfg!(target_os = "windows") {
-        format!("C:\\Program Files\\nodejs;C:\\Python312;C:\\Python311;{current_path}")
+        let mut entries = vec![
+            "C:\\Program Files\\nodejs".to_string(),
+            "C:\\Python312".to_string(),
+            "C:\\Python311".to_string(),
+        ];
+        entries.extend(
+            windows_ffmpeg_tool_directories()
+                .into_iter()
+                .map(|path| path.to_string_lossy().to_string()),
+        );
+        entries.push(current_path);
+        entries.join(";")
     } else {
         format!(
             "/opt/homebrew/opt/node@22/bin:/opt/homebrew/opt/node/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:{current_path}"
@@ -1788,7 +1917,9 @@ fn port_is_open(port: u16) -> bool {
 fn stop_port_listener(port: u16) {
     #[cfg(target_os = "windows")]
     {
-        let Ok(output) = Command::new("netstat").args(["-ano", "-p", "tcp"]).output() else {
+        let mut netstat = Command::new("netstat");
+        suppress_windows_console(&mut netstat);
+        let Ok(output) = netstat.args(["-ano", "-p", "tcp"]).output() else {
             return;
         };
         if !output.status.success() {
@@ -1804,9 +1935,9 @@ fn stop_port_listener(port: u16) {
             .collect::<Vec<_>>();
 
         for pid in pids {
-            let _ = Command::new("taskkill")
-                .args(["/PID", &pid, "/T", "/F"])
-                .output();
+            let mut taskkill = Command::new("taskkill");
+            suppress_windows_console(&mut taskkill);
+            let _ = taskkill.args(["/PID", &pid, "/T", "/F"]).output();
         }
         return;
     }
@@ -2107,7 +2238,33 @@ fn inspect_media_playback(media_path: String) -> Result<MediaPlaybackInspection,
         });
     }
 
-    let ffprobe_output = Command::new("ffprobe")
+    let Some(ffprobe) = find_executable(
+        "ffprobe",
+        &[
+            "C:\\ffmpeg\\bin\\ffprobe.exe",
+            "C:\\Program Files\\ffmpeg\\bin\\ffprobe.exe",
+            "/opt/homebrew/bin/ffprobe",
+            "/usr/local/bin/ffprobe",
+            "/usr/bin/ffprobe",
+        ],
+    ) else {
+        return Ok(MediaPlaybackInspection {
+            path_exists: true,
+            readable,
+            file_size_bytes: Some(metadata.len()),
+            ffprobe_available: false,
+            probe_succeeded: false,
+            format_name: None,
+            video_codec: None,
+            audio_codec: None,
+            detail: "The file is available, but Pulse could not find ffprobe to inspect it."
+                .to_string(),
+        });
+    };
+
+    let mut ffprobe_command = Command::new(ffprobe);
+    suppress_windows_console(&mut ffprobe_command);
+    let ffprobe_output = ffprobe_command
         .args([
             "-v",
             "error",
@@ -2234,7 +2391,21 @@ fn prepare_media_preview_clip(
         ));
     }
 
-    match Command::new("ffmpeg").arg("-version").output() {
+    let ffmpeg = find_executable(
+        "ffmpeg",
+        &[
+            "C:\\ffmpeg\\bin\\ffmpeg.exe",
+            "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/usr/bin/ffmpeg",
+        ],
+    )
+    .ok_or_else(|| "Pulse could not prepare a video preview.".to_string())?;
+
+    let mut ffmpeg_version = Command::new(&ffmpeg);
+    suppress_windows_console(&mut ffmpeg_version);
+    match ffmpeg_version.arg("-version").output() {
         Ok(output) if output.status.success() => {}
         Ok(_) => return Err("Pulse could not prepare a video preview.".to_string()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -2296,7 +2467,9 @@ fn prepare_media_preview_clip(
         let _ = fs::remove_file(&preview_path);
     }
 
-    let ffmpeg_output = Command::new("ffmpeg")
+    let mut ffmpeg_command = Command::new(ffmpeg);
+    suppress_windows_console(&mut ffmpeg_command);
+    let ffmpeg_output = ffmpeg_command
         .args([
             "-v",
             "error",
@@ -2374,8 +2547,10 @@ fn open_media_in_quicktime(
 
     #[cfg(target_os = "windows")]
     {
-        let status = Command::new("cmd")
-            .args(["/C", "start", "", &media_path])
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", "", &media_path]);
+        suppress_windows_console(&mut command);
+        let status = command
             .status()
             .map_err(|error| format!("Could not open this file with the Windows shell: {error}"))?;
         return if status.success() {
