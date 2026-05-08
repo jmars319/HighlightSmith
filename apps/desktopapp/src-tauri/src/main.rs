@@ -4,5 +4,5 @@
 )]
 
 fn main() {
-    vaexcore_pulse_desktop_lib::run();
+    vaexcore_pulse::run();
 }

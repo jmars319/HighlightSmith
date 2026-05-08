@@ -732,6 +732,14 @@ fn validate_suite_command_document(
 }
 
 fn launch_desktop_app(app_name: &str) -> SuiteLaunchResult {
+    if app_name == APP_NAME {
+        return SuiteLaunchResult {
+            app_name: app_name.to_string(),
+            ok: true,
+            detail: format!("{APP_NAME} is already running."),
+        };
+    }
+
     #[cfg(target_os = "macos")]
     {
         match Command::new("open").args(["-a", app_name]).output() {
@@ -779,20 +787,12 @@ fn launch_desktop_app(app_name: &str) -> SuiteLaunchResult {
             };
         }
 
-        let mut command = Command::new("cmd");
-        command.args(["/C", "start", "", app_name]);
-        suppress_windows_console(&mut command);
-        match command.spawn() {
-            Ok(_) => SuiteLaunchResult {
-                app_name: app_name.to_string(),
-                ok: true,
-                detail: "Launch requested through Windows shell.".to_string(),
-            },
-            Err(error) => SuiteLaunchResult {
-                app_name: app_name.to_string(),
-                ok: false,
-                detail: format!("Could not find or launch the Windows app: {error}"),
-            },
+        SuiteLaunchResult {
+            app_name: app_name.to_string(),
+            ok: false,
+            detail: format!(
+                "Could not find {app_name}. Install it with the Windows installer or place it in a standard vaexcore install folder."
+            ),
         }
     }
 
@@ -1217,20 +1217,51 @@ fn windows_app_executable_path(app_name: &str) -> Option<PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn windows_app_executable_candidates(app_name: &str) -> Vec<PathBuf> {
-    let executable = format!("{app_name}.exe");
+    let executable_names = windows_app_executable_names(app_name);
     let mut candidates = Vec::new();
+    for root in windows_local_app_data_roots() {
+        for executable in &executable_names {
+            candidates.push(root.join(app_name).join(executable));
+            candidates.push(root.join("Programs").join(app_name).join(executable));
+        }
+    }
     for root in [
-        env::var_os("LOCALAPPDATA").map(PathBuf::from),
         env::var_os("ProgramFiles").map(PathBuf::from),
         env::var_os("ProgramFiles(x86)").map(PathBuf::from),
     ]
     .into_iter()
     .flatten()
     {
-        candidates.push(root.join("Programs").join(app_name).join(&executable));
-        candidates.push(root.join(app_name).join(&executable));
+        for executable in &executable_names {
+            candidates.push(root.join(app_name).join(executable));
+        }
     }
     candidates
+}
+
+#[cfg(target_os = "windows")]
+fn windows_app_executable_names(app_name: &str) -> Vec<String> {
+    match app_name {
+        "vaexcore studio" => vec!["vaexcore-studio.exe".to_string()],
+        "vaexcore pulse" => vec!["vaexcore-pulse.exe".to_string()],
+        "vaexcore console" => vec!["vaexcore-console.exe".to_string()],
+        _ => vec![format!("{app_name}.exe")],
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_local_app_data_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(root) = env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+        roots.push(root);
+    }
+    if let Some(root) = env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .map(|path| path.join("AppData").join("Local"))
+    {
+        roots.push(root);
+    }
+    roots
 }
 
 fn suite_handoff_dir() -> PathBuf {

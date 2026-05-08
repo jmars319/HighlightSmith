@@ -3986,7 +3986,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vaexcore-pulse-desktop"
+name = "vaexcore-pulse"
 version = "0.2.0"
 dependencies = [
  "chrono",

@@ -1,12 +1,12 @@
 [package]
-name = "vaexcore-pulse-desktop"
+name = "vaexcore-pulse"
 version = "0.2.0"
 description = "Local-first highlight scouting shell for vaexcore pulse"
 authors = ["Jason Marshall"]
 edition = "2021"
 
 [lib]
-name = "vaexcore_pulse_desktop_lib"
+name = "vaexcore_pulse"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
