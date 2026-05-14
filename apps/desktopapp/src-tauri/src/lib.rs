@@ -216,6 +216,8 @@ struct PulseRecordingHandoffDocument {
     target_app: String,
     requested_at: String,
     recording: PulseRecordingHandoffRecording,
+    #[serde(default)]
+    output_ready: Option<PulseRecordingHandoffOutputReady>,
 }
 
 #[derive(Clone, Serialize, serde::Deserialize)]
@@ -226,6 +228,24 @@ struct PulseRecordingHandoffRecording {
     profile_id: Option<String>,
     profile_name: Option<String>,
     stopped_at: String,
+}
+
+#[derive(Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PulseRecordingHandoffOutputReady {
+    ready: bool,
+    state: String,
+    detail: String,
+    active_scene_id: Option<String>,
+    active_scene_name: Option<String>,
+    program_preview_frame_ready: Option<bool>,
+    compositor_render_plan_ready: Option<bool>,
+    output_preflight_ready: Option<bool>,
+    media_pipeline_ready: Option<bool>,
+    #[serde(default)]
+    blockers: Vec<String>,
+    #[serde(default)]
+    warnings: Vec<String>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -547,6 +567,7 @@ fn consume_pulse_recording_handoff_file(
                 "requestId": handoff.request_id,
                 "sessionId": handoff.recording.session_id,
                 "outputPath": handoff.recording.output_path,
+                "outputReady": handoff.output_ready,
             }),
         ) {
             eprintln!("Unable to append vaexcore pulse suite timeline event: {error}");
@@ -597,10 +618,43 @@ fn validate_pulse_recording_handoff_document(
     if !looks_like_rfc3339_timestamp(&handoff.recording.stopped_at) {
         return Err("recording.stoppedAt must be an RFC3339-like timestamp".to_string());
     }
+    if let Some(output_ready) = &handoff.output_ready {
+        validate_pulse_recording_handoff_output_ready(output_ready)?;
+    }
     if let Some(age) = file_age {
         if age > PULSE_HANDOFF_STALE_AFTER {
             return Err(format!("handoff file is stale: {}s old", age.as_secs()));
         }
+    }
+    Ok(())
+}
+
+fn validate_pulse_recording_handoff_output_ready(
+    output_ready: &PulseRecordingHandoffOutputReady,
+) -> Result<(), String> {
+    let state = output_ready.state.trim();
+    if !matches!(state, "ready" | "degraded" | "blocked" | "not_applicable") {
+        return Err("outputReady.state is invalid".to_string());
+    }
+    if output_ready.detail.trim().is_empty() {
+        return Err("outputReady.detail is required".to_string());
+    }
+    if output_ready.ready && state != "ready" {
+        return Err("outputReady.ready requires state ready".to_string());
+    }
+    if !output_ready.ready && state == "ready" {
+        return Err("outputReady.state ready requires ready true".to_string());
+    }
+    if output_ready.ready && !output_ready.blockers.is_empty() {
+        return Err("outputReady.ready cannot include blockers".to_string());
+    }
+    if output_ready
+        .blockers
+        .iter()
+        .chain(output_ready.warnings.iter())
+        .any(|item| item.trim().is_empty())
+    {
+        return Err("outputReady blockers and warnings cannot be empty".to_string());
     }
     Ok(())
 }
@@ -2771,6 +2825,27 @@ mod tests {
     }
 
     #[test]
+    fn pulse_handoff_validation_accepts_output_ready_contract() {
+        let mut handoff = valid_handoff();
+        handoff.output_ready = Some(valid_output_ready());
+
+        assert!(validate_pulse_recording_handoff_document(&handoff, None).is_ok());
+    }
+
+    #[test]
+    fn pulse_handoff_validation_rejects_invalid_output_ready_contract() {
+        let mut handoff = valid_handoff();
+        let mut output_ready = valid_output_ready();
+        output_ready.ready = true;
+        output_ready.state = "blocked".to_string();
+        handoff.output_ready = Some(output_ready);
+
+        assert!(validate_pulse_recording_handoff_document(&handoff, None)
+            .unwrap_err()
+            .contains("outputReady.ready"));
+    }
+
+    #[test]
     fn suite_discovery_validation_rejects_epoch_timestamps() {
         let mut discovery = valid_discovery();
         discovery.started_at = "1778025273".to_string();
@@ -2829,6 +2904,8 @@ mod tests {
         let commands = consume_suite_commands_from_dir(&directory, false);
 
         assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].command, "open-review");
+        assert_eq!(commands[0].payload["recordingSessionId"], "rec_smoke");
         assert!(!valid_path.exists());
         assert!(!invalid_path.exists());
         let _ = fs::remove_dir_all(directory);
@@ -2954,6 +3031,23 @@ mod tests {
                 profile_name: Some("1080p".to_string()),
                 stopped_at: "2026-05-06T12:05:00Z".to_string(),
             },
+            output_ready: None,
+        }
+    }
+
+    fn valid_output_ready() -> PulseRecordingHandoffOutputReady {
+        PulseRecordingHandoffOutputReady {
+            ready: true,
+            state: "ready".to_string(),
+            detail: "Scene output handoff is ready for Pulse intake.".to_string(),
+            active_scene_id: Some("scene-main".to_string()),
+            active_scene_name: Some("Main scene".to_string()),
+            program_preview_frame_ready: Some(true),
+            compositor_render_plan_ready: Some(true),
+            output_preflight_ready: Some(true),
+            media_pipeline_ready: Some(true),
+            blockers: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 

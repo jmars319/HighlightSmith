@@ -906,6 +906,19 @@ h3 {
   color: var(--text-strong);
 }
 
+.studio-output-readiness {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface-card-border);
+}
+
+.studio-output-readiness p {
+  margin: 0;
+  color: var(--muted);
+}
+
 .analysis-summary-card p,
 .session-overview-card p,
 .session-overview-alert p {
@@ -2151,6 +2164,28 @@ summary {
   display: grid;
   grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.2fr);
   gap: 22px;
+}
+
+.review-queue-state-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--surface-recessed);
+  border: 1px solid var(--surface-card-border);
+}
+
+.review-queue-state-strip strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-strong);
+}
+
+.review-queue-state-strip p {
+  margin: 6px 0 0;
+  color: var(--muted);
 }
 
 .desktop-review-stack,

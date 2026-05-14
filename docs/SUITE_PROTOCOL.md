@@ -44,6 +44,41 @@ Studio, Pulse, and Console remain independent apps. This protocol is the local c
 - `focus-ops`: Console focuses Live Ops.
 - `open-review`: Pulse consumes a Studio recording handoff payload.
 
+## Pulse Recording Handoff
+
+Studio writes `handoffs/pulse-recording-intake.json` when a stopped recording should open in Pulse. Pulse consumes valid handoffs, removes stale or invalid handoffs, and preserves malformed JSON files for troubleshooting. The base recording fields are still backward-compatible with older Studio builds; `outputReady` is optional and carries the current Studio scene output diagnostic when available.
+
+```ts
+export interface PulseRecordingHandoffDocument {
+  schemaVersion: 1;
+  requestId: string;
+  sourceApp: "vaexcore-studio";
+  sourceAppName: string;
+  targetApp: "vaexcore-pulse";
+  requestedAt: string;
+  recording: {
+    sessionId: string;
+    outputPath: string;
+    profileId: string | null;
+    profileName: string | null;
+    stoppedAt: string;
+  };
+  outputReady?: {
+    ready: boolean;
+    state: "ready" | "degraded" | "blocked" | "not_applicable";
+    detail: string;
+    activeSceneId?: string | null;
+    activeSceneName?: string | null;
+    programPreviewFrameReady?: boolean | null;
+    compositorRenderPlanReady?: boolean | null;
+    outputPreflightReady?: boolean | null;
+    mediaPipelineReady?: boolean | null;
+    blockers: string[];
+    warnings: string[];
+  } | null;
+}
+```
+
 ## Timeline Shape
 
 Every timeline line is JSON with `schemaVersion`, `eventId`, `sourceApp`, `sourceAppName`, `kind`, `title`, `detail`, `createdAt`, and `metadata`.

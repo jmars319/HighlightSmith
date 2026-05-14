@@ -24,6 +24,7 @@ import {
   reviewedCandidateCount,
   resolveCandidateProfileMatch,
   resolveCandidateLabel,
+  summarizeReviewQueueState,
   summarizeSessionQuality,
 } from "./index";
 
@@ -277,6 +278,44 @@ describe("domain helpers", () => {
         defaultReviewQueueMode(session),
       ).map((candidate) => candidate.id),
       session.candidates.map((candidate) => candidate.id),
+    );
+  });
+
+  it("summarizes review queue state for pending and complete fixtures", () => {
+    const session = createMockProjectSession();
+    session.reviewDecisions = [
+      {
+        id: "accept_candidate_001",
+        projectSessionId: session.id,
+        candidateId: session.candidates[0].id,
+        action: "ACCEPT",
+        createdAt: "2026-03-25T18:20:00.000Z",
+      },
+    ];
+
+    assert.deepEqual(summarizeReviewQueueState(session, "ONLY_PENDING"), {
+      mode: "ONLY_PENDING",
+      totalCount: session.candidates.length,
+      pendingCount: session.candidates.length - 1,
+      reviewedCount: 1,
+      visibleCount: session.candidates.length - 1,
+      hiddenReviewedCount: 1,
+      state: "pending",
+      detail: `${session.candidates.length - 1} undecided moments remain; 1 already decided.`,
+    });
+
+    session.reviewDecisions = session.candidates.map((candidate, index) => ({
+      id: `decision_${candidate.id}`,
+      projectSessionId: session.id,
+      candidateId: candidate.id,
+      action: index % 2 === 0 ? ("ACCEPT" as const) : ("REJECT" as const),
+      createdAt: "2026-03-25T18:25:00.000Z",
+    }));
+
+    assert.equal(summarizeReviewQueueState(session, "ALL").state, "complete");
+    assert.equal(
+      summarizeReviewQueueState(session, "ALL").visibleCount,
+      session.candidates.length,
     );
   });
 

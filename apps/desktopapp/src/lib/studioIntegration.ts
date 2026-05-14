@@ -16,6 +16,21 @@ export type StudioRecordingCandidate = {
   outputPath: string;
   profileId: string | null;
   stoppedAt: string;
+  outputReadiness?: StudioOutputReadiness | null;
+};
+
+export type StudioOutputReadiness = {
+  ready: boolean;
+  state: "ready" | "degraded" | "blocked" | "not_applicable" | string;
+  detail: string;
+  activeSceneId?: string | null;
+  activeSceneName?: string | null;
+  programPreviewFrameReady?: boolean | null;
+  compositorRenderPlanReady?: boolean | null;
+  outputPreflightReady?: boolean | null;
+  mediaPipelineReady?: boolean | null;
+  blockers: string[];
+  warnings: string[];
 };
 
 export type StudioIntakeState = {

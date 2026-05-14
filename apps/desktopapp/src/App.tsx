@@ -22,6 +22,7 @@ import {
   hasStrongCandidateProfileMatch,
   isCandidatePending,
   reviewedCandidateCount,
+  summarizeReviewQueueState,
   type ReviewQueueMode,
 } from "@vaexcore/pulse-domain";
 import {
@@ -105,6 +106,7 @@ import {
   studioRequestHeaders,
   type StudioDiscovery,
   type StudioIntakeState,
+  type StudioOutputReadiness,
   type StudioRecordingCandidate,
 } from "./lib/studioIntegration";
 
@@ -203,6 +205,7 @@ type PulseRecordingHandoff = {
     profileName: string | null;
     stoppedAt: string;
   };
+  outputReady?: StudioOutputReadiness | null;
 };
 type SuiteCommand = {
   schemaVersion: number;
@@ -237,6 +240,28 @@ function isPulseRecordingHandoff(
     return false;
   }
   return typeof (recording as { outputPath?: unknown }).outputPath === "string";
+}
+
+function outputReadinessLabel(readiness: StudioOutputReadiness): string {
+  if (readiness.ready) {
+    return "Output ready";
+  }
+
+  if (readiness.state === "degraded") {
+    return "Output degraded";
+  }
+
+  if (readiness.state === "not_applicable") {
+    return "Output pending";
+  }
+
+  return "Output blocked";
+}
+
+function outputReadinessTone(
+  readiness: StudioOutputReadiness,
+): "ready" | "blocked" {
+  return readiness.ready ? "ready" : "blocked";
 }
 type DesktopNavItem = { id: DesktopPage; label: string };
 type ProfileLibraryChangedPayload = {
@@ -561,6 +586,13 @@ function DesktopApp() {
   const pendingReviewCount = Math.max(
     sessionCandidates.length - reviewedCount,
     0,
+  );
+  const reviewQueueState = useMemo(
+    () =>
+      projectSession
+        ? summarizeReviewQueueState(projectSession, reviewQueueMode)
+        : null,
+    [projectSession, reviewQueueMode],
   );
   const activeSessionSummary = projectSession
     ? buildProjectSummary(projectSession)
@@ -1576,12 +1608,16 @@ function DesktopApp() {
       outputPath: handoff.recording.outputPath,
       profileId: handoff.recording.profileId,
       stoppedAt: handoff.recording.stoppedAt,
+      outputReadiness: handoff.outputReady ?? null,
     };
+    const readinessDetail = handoff.outputReady
+      ? ` ${outputReadinessLabel(handoff.outputReady)}.`
+      : "";
 
     setStudioIntake((current) => ({
       ...current,
       connection: "connected",
-      detail: `${handoff.sourceAppName} sent ${extractSourceName(recording.outputPath)} for review.`,
+      detail: `${handoff.sourceAppName} sent ${extractSourceName(recording.outputPath)} for review.${readinessDetail}`,
       latestRecording: recording,
     }));
     setSelectedMediaPath(recording.outputPath);
@@ -2855,6 +2891,31 @@ function DesktopApp() {
                   <p className="analysis-summary-path">
                     {studioIntake.latestRecording.outputPath}
                   </p>
+                  {studioIntake.latestRecording.outputReadiness ? (
+                    <div className="studio-output-readiness">
+                      <span
+                        className={`analysis-readiness-pill ${outputReadinessTone(
+                          studioIntake.latestRecording.outputReadiness,
+                        )}`}
+                      >
+                        {outputReadinessLabel(
+                          studioIntake.latestRecording.outputReadiness,
+                        )}
+                      </span>
+                      <p>
+                        {studioIntake.latestRecording.outputReadiness.detail}
+                      </p>
+                      {studioIntake.latestRecording.outputReadiness.blockers
+                        .length > 0 ? (
+                        <p>
+                          Blocked by{" "}
+                          {studioIntake.latestRecording.outputReadiness.blockers.join(
+                            ", ",
+                          )}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="action-row">
                     <button
                       className="button-secondary"
@@ -2967,6 +3028,20 @@ function DesktopApp() {
             selectedCandidateIndex={selectedCandidateIndex}
             session={projectSession}
           />
+        ) : null}
+        {reviewQueueState ? (
+          <div className="review-queue-state-strip">
+            <div>
+              <span className="detail-label">Review queue</span>
+              <strong>{reviewQueueState.visibleCount} visible moments</strong>
+              <p>{reviewQueueState.detail}</p>
+            </div>
+            <span className="queue-count">
+              {reviewQueueState.mode === "ONLY_PENDING"
+                ? `${reviewQueueState.hiddenReviewedCount} hidden`
+                : `${reviewQueueState.totalCount} total`}
+            </span>
+          </div>
         ) : null}
         <details className="utility-block internal-details review-timeline-details">
           <summary className="internal-details-summary">
